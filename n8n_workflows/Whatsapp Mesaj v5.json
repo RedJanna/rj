@@ -1,0 +1,328 @@
+{
+  "name": "Whatsapp Mesaj v5",
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "EVENT_RECEIVED",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        224,
+        176
+      ],
+      "id": "0a5e6aba-bb59-4a19-8eb3-9437f6959aac",
+      "name": "200 OK"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "kassandra-bot-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        176
+      ],
+      "id": "47ef845e-97a8-4c46-91a4-d2987af69be9",
+      "name": "WhatsApp Webhook",
+      "webhookId": "0bb56008-1dd4-4823-bd67-fb8764fa42ec"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e91dff3c-4e33-451c-bf88-dcce27e81894",
+              "leftValue": "={{ $json.query['hub.mode'] }}",
+              "rightValue": "subscribe",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "f3c78770-a286-44ee-a535-b41d0468ffce",
+              "leftValue": "={{ $json.query['hub.verify_token'] }}",
+              "rightValue": "Mimar1453",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        176
+      ],
+      "id": "41ecbb72-d639-4a17-9d4e-a6b4b2525b76",
+      "name": "GET/POST Kontrol"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b104caba-e2bd-41a1-8e4f-d56b3881a461",
+      "name": "Verification OK"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg-text",
+              "name": "message",
+              "value": "={{$json.body.entry[0].changes[0].value.messages[0].text.body}}",
+              "type": "string"
+            },
+            {
+              "id": "phone-num",
+              "name": "phone",
+              "value": "={{$json.body.entry[0].changes[0].value.messages[0].from}}",
+              "type": "string"
+            },
+            {
+              "id": "msg-id",
+              "name": "messageId",
+              "value": "={{$json.body.entry[0].changes[0].value.messages[0].id}}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ Date.now() }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        176
+      ],
+      "id": "3fbc435d-a594-4898-aec0-73e6907cb987",
+      "name": "Mesajı Sakla"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================\n// SIMPLE DEDUP - Sadece WhatsApp duplicate webhook'larını filtrele\n// Coalescing YOK - Backend hallediyor\n// =====================================================\n\nconst items = $input.all();\nconst results = [];\n\nconst data = $getWorkflowStaticData('global');\ndata.seenMessageIds = data.seenMessageIds || {};\n\nconst now = Date.now();\nconst DEDUP_WINDOW_MS = 60 * 1000; // 1 dakika\n\n// Eski kayıtları temizle\nfor (const id in data.seenMessageIds) {\n  if (data.seenMessageIds[id] < now - DEDUP_WINDOW_MS) {\n    delete data.seenMessageIds[id];\n  }\n}\n\nfor (const item of items) {\n  const phone = String(item.json.phone || '').replace(/[^0-9]/g, '');\n  const message = String(item.json.message || '').trim();\n  const messageId = item.json.messageId || '';\n\n  if (!phone || !message) continue;\n\n  // Sadece messageId bazlı dedup (WhatsApp bazen aynı webhook'u 2 kez gönderir)\n  if (messageId && data.seenMessageIds[messageId]) {\n    console.log('DEDUP: Skipping duplicate messageId:', messageId);\n    continue;\n  }\n\n  if (messageId) {\n    data.seenMessageIds[messageId] = now;\n  }\n\n  results.push({\n    json: {\n      phone: phone,\n      message: message,\n      messageId: messageId,\n      timestamp: now\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        176
+      ],
+      "id": "b21a01fc-a262-4c11-9aee-3d1907b13502",
+      "name": "Simple Dedup",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $json.phone }}\",\n  \"message\": \"{{ ($json.message || '').replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"').replace(/\\n/g, '\\\\n').replace(/\\r/g, '') }}\",\n  \"message_id\": \"{{ $json.messageId || '' }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        752,
+        176
+      ],
+      "id": "9de60b15-6a14-4774-bac8-1b837fe36c76",
+      "name": "Bot API",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================\n// RESPONSE CHECK - Boş response filtrele\n// =====================================================\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const reply = item.json.reply || item.json.response || '';\n  const status = item.json.status || '';\n  const phone = item.json.phone || '';\n\n  // Boş veya 'empty' status varsa WhatsApp'a gönderme\n  if (!reply || reply.trim() === '' || status === 'empty' || status === 'duplicate') {\n    console.log('SKIP: Empty or duplicate response for', phone);\n    continue;\n  }\n\n  // Phone bilgisi yoksa önceki node'dan al\n  let finalPhone = phone;\n  if (!finalPhone) {\n    try {\n      const dedupData = $('Simple Dedup').first();\n      finalPhone = dedupData?.json?.phone || '';\n    } catch(e) {}\n  }\n\n  if (!finalPhone) {\n    console.log('SKIP: No phone number');\n    continue;\n  }\n\n  results.push({\n    json: {\n      phone: finalPhone,\n      reply: reply,\n      status: status\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        176
+      ],
+      "id": "b88bc911-38d6-4d58-a974-0488c6101f28",
+      "name": "Response Check",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v22.0/94283707890627/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify(($json.reply || '').slice(0, 4096)) }}\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1296,
+        176
+      ],
+      "id": "a52ffed1-3054-4adf-b904-89425dfd60b2",
+      "name": "WhatsApp Gönder",
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "5QEjWhiXeVVDGbSR",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "200 OK": {
+      "main": [
+        [
+          {
+            "node": "Simple Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Webhook": {
+      "main": [
+        [],
+        [
+          {
+            "node": "GET/POST Kontrol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET/POST Kontrol": {
+      "main": [
+        [
+          {
+            "node": "Verification OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mesajı Sakla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mesajı Sakla": {
+      "main": [
+        [
+          {
+            "node": "200 OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Dedup": {
+      "main": [
+        [
+          {
+            "node": "Bot API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bot API": {
+      "main": [
+        [
+          {
+            "node": "Response Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Check": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "7df35eeb-b017-4f58-b7c2-971b381c85fa",
+  "meta": {
+    "instanceId": "5707c47ab8521f883ad1aa720d535acaa792d285a004a123a1f1dc4c63382650"
+  },
+  "id": "rKmyLDDiFw1ktGcX",
+  "tags": []
+}

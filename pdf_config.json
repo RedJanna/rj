@@ -1,0 +1,77 @@
+{
+    "description": "PDF Rezervasyon Koordinat ve Stil Ayarları",
+    "instructions": "Bu dosyayı düzenleyip test_pdf.py çalıştırın. Koordinatları ayarlayın.",
+    
+    "pdf_settings": {
+        "template_path": "C:/KassandraOpenAI/templates/reservation_template.pdf",
+        "output_dir": "C:/KassandraOpenAI/reservation_pdfs"
+    },
+    
+    "font_settings": {
+        "font_path": "C:/Windows/Fonts/Gabriola.ttf",
+        "size_normal": 25,
+        "size_small": 11,
+        "color_r": 0.36,
+        "color_g": 0.31,
+        "color_b": 0.22
+    },
+    
+    "coordinates": {
+        "_comment": "x = soldan mesafe (pt), y = alttan mesafe (pt). Artır = sağa/yukarı, Azalt = sola/aşağı",
+        
+        "reservation_no": {
+            "x": 925,
+            "y": 1295,
+            "align": "right",
+            "description": "Rezervasyon No (sağ üst)"
+        },
+        "created_date": {
+            "x": 800,
+            "y": 1262,
+            "align": "right", 
+            "description": "Oluşturulma tarihi (sağ üst)"
+        },
+        "customer_name": {
+            "x": 217,
+            "y": 930,
+            "align": "left",
+            "description": "Müşteri adı"
+        },
+        "phone": {
+            "x": 242,
+            "y": 887,
+            "align": "left",
+            "description": "Telefon"
+        },
+        "guests": {
+            "x": 362,
+            "y": 836,
+            "align": "left",
+            "description": "Kişi sayısı"
+        },
+        "special_request": {
+            "x": 335,
+            "y": 785,
+            "align": "left",
+            "description": "Özel istek"
+        },
+        "meal_type": {
+            "x": 219,
+            "y": 673,
+            "align": "left",
+            "description": "Öğün tipi"
+        },
+        "date": {
+            "x": 210,
+            "y": 630,
+            "align": "left",
+            "description": "Tarih"
+        },
+        "time": {
+            "x": 205,
+            "y": 585,
+            "align": "left",
+            "description": "Saat"
+        }
+    }
+}

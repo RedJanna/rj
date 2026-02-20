@@ -1,0 +1,10 @@
+#!/bin/sh
+ROOT="$(git rev-parse --show-toplevel)"
+if [ -z "$ROOT" ]; then exit 0; fi
+
+if command -v py >/dev/null 2>&1; then
+  py -3.10 "$ROOT/tools/generate_project_snapshot.py" --root "$ROOT" >/dev/null 2>&1 || true
+else
+  python "$ROOT/tools/generate_project_snapshot.py" --root "$ROOT" >/dev/null 2>&1 || true
+fi
+exit 0

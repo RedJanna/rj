@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🗺️ Restoran Masa Planı</title>
+  <style>
+    :root{--bg1:#0f172a;--bg2:#111827;--card:rgba(255,255,255,.06);--text:#e5e7eb;--muted:#9ca3af;--accent:#00d4ff;--ok:#2ed573;--bad:#ff4757}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;font-family:"Segoe UI",system-ui;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--text);padding:12px}
+    .top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:var(--card);border:1px solid rgba(255,255,255,.08);padding:12px;border-radius:14px}
+    .btn{border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.22);color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;text-decoration:none;display:inline-flex;gap:8px;align-items:center;white-space:nowrap}
+    .btn.primary{background:rgba(0,212,255,.14);border-color:rgba(0,212,255,.35)}
+    .btn.good{background:rgba(46,213,115,.14);border-color:rgba(46,213,115,.35)}
+    .btn.danger{background:rgba(255,71,87,.14);border-color:rgba(255,71,87,.35)}
+    .field{display:flex;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.10)}
+    .field label{font-size:12px;color:var(--muted)}
+    .field input,.field select{background:transparent;border:none;color:var(--text);outline:none;font-size:13px}
+    .title{flex:1;min-width:220px;text-align:center}
+    .title h1{margin:0;font-family:Georgia,serif;font-size:18px}
+    .title .sub{font-size:12px;color:var(--muted)}
+
+    .grid{margin-top:12px;display:grid;grid-template-columns:360px 1fr 340px;gap:12px}
+    @media (max-width:1200px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden}
+    .card header{padding:12px 14px;background:rgba(0,0,0,.18);border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .card header h2{margin:0;font-size:14px}
+    .meta{font-size:12px;color:var(--muted)}
+    .card .content{padding:12px 14px}
+
+    .chips{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto}
+    @media(max-width:600px){.chips{max-height:none}}
+    .chip{border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);border-radius:14px;padding:12px;cursor:grab;user-select:none}
+    .chip:active{cursor:grabbing}
+    .chip .top{display:flex;justify-content:space-between;gap:10px}
+    .chip .name{font-weight:700;font-size:13px}
+    .chip .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;color:var(--muted);font-size:12px}
+
+    .planWrap{min-height:520px;display:flex;flex-direction:column}
+    @media(max-width:600px){.planWrap{min-height:420px}}
+    .plan{position:relative;flex:1;border-radius:0 0 14px 14px;overflow:hidden;touch-action:none;background:
+      var(--plan-url) center/contain no-repeat,
+      repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 32px);
+      background-color:rgba(0,0,0,.22);
+    }
+    .layer{position:absolute;inset:0;transform-origin:0 0}
+    .table{position:absolute;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);user-select:none}
+    .table.empty{outline:2px dashed rgba(255,255,255,.16);outline-offset:3px}
+    .table.reserved{background:rgba(46,213,115,.14);border-color:rgba(46,213,115,.35)}
+    .table.hover{outline:3px solid rgba(0,212,255,.45);outline-offset:3px}
+    .mini{position:absolute;bottom:-18px;font-size:10px;color:var(--muted);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.10);padding:2px 6px;border-radius:999px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .toast{position:fixed;left:14px;bottom:14px;z-index:9999;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.14);padding:10px 12px;border-radius:12px;max-width:420px}
+    .hidden{display:none}
+  /* KASSANDRA_PLAN_PREMIUM_V1: blur cover + net contain + shadow */
+.plan, #plan, .plan-area{
+  position:relative;
+  overflow:hidden;
+
+  /* grid hissi (premium) */
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.06), rgba(255,255,255,.06) 1px, transparent 1px, transparent 48px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.06) 1px, transparent 1px, transparent 48px);
+  background-color: rgba(0,0,0,.22);
+}
+
+.plan::before, #plan::before, .plan-area::before{
+  content:"";
+  position:absolute; inset:0;
+  background: var(--plan-url) center/cover no-repeat;
+  filter: blur(18px) brightness(.55);
+  opacity:.55;
+  transform: scale(1.06);
+  z-index:1;
+  pointer-events:none;
+}
+
+.plan::after, #plan::after, .plan-area::after{
+  content:"";
+  position:absolute; inset:0;
+  background: var(--plan-url) center/contain no-repeat;
+  filter: drop-shadow(0 18px 38px rgba(0,0,0,.55));
+  z-index:2;
+  pointer-events:none;
+}
+
+/* masalar/reservasyonlar her zaman ustte */
+.layer, .tables-layer, #layer{
+  position:absolute;
+  inset:0;
+  z-index:5;
+}
+.drawSvg{position:absolute;inset:0;z-index:4;width:100%;height:100%;pointer-events:none}
+.drawOn .drawSvg{pointer-events:auto}
+.drawOn #layer{pointer-events:none}
+.toolBar{display:flex;gap:8px;flex-wrap:wrap}
+.toolBar .btn{padding:8px 10px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn" href="/admin">� Admin</a>
+      <a class="btn" href="/admin/reservations-page">??? Liste</a>
+      <button id="reload" class="btn primary">? Yenile</button>
+    </div>
+    <div class="title">
+      <h1>Restoran Masa Plan�</h1>
+      <div class="sub">S�r�kle-b�rak ile masaya ata � D�zenle modunda masa ekle/ta��</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+      <div class="field"><label>Tarih</label><input id="datePick" type="date"></div>
+      <div class="field"><label>Zoom</label><input id="zoom" type="range" min="0.65" max="1.6" step="0.05" value="1"></div>
+      <button id="edit" class="btn">?? D�zenle</button>
+
+      <div id="seatBox" class="field hidden">
+        <label>Masa</label>
+        <select id="seatSelect">
+          <option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="8">8</option>
+          <option value="10">10</option><option value="12">12</option><option value="16">16</option>
+        </select>
+      </div>
+
+      <button id="add" class="btn good hidden">+ Masa</button>
+      <button id="save" class="btn good hidden">?? Kaydet</button>
+      <button id="saveMain" class="btn good hidden">�ablona Kaydet</button>
+
+      <button id="reset" class="btn danger hidden">? S�f�rla</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <aside class="card">
+      <header><div><h2>Atanmam�� Rezervasyonlar</h2><div class="meta">Masaya s�r�kle-b�rak</div></div><div class="meta" id="uMeta">�</div></header>
+      <div class="content"><div class="chips" id="uList"></div></div>
+    </aside>
+
+    <main class="card planWrap">
+      <header><div><h2>Plan</h2><div class="meta">PDF arka plan + masa layer</div></div></header>
+      <div id="plan" class="plan"><svg id="drawSvg" class="drawSvg" viewBox="0 0 1738 975" preserveAspectRatio="xMidYMid meet"></svg><div id="layer" class="layer"></div></div>
+    </main>
+
+    <section class="card">
+      <header><div><h2 id="dTitle">Masa</h2><div class="meta" id="dMeta">�</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="unassign" class="btn danger hidden">Masay� Bo�alt</button>
+      </div></header>
+      <div class="content">
+        <div class="meta" id="dInfo">Bir masaya t�kla.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+          <select id="dSeats" class="field" style="flex:1;min-width:160px">
+            <option value="2">Masa 2</option><option value="4" selected>Masa 4</option><option value="6">Masa 6</option><option value="8">Masa 8</option>
+            <option value="10">Masa 10</option><option value="12">Masa 12</option><option value="16">Masa 16</option>
+          </select>
+          <input id="dEnds" class="field" style="flex:1;min-width:160px" placeholder="Biti� (�rn 21:30)">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+          <button id="saveSeats" class="btn good">?? Masa Boyutu</button>
+          <button id="saveEnds" class="btn primary">?? Biti� Kaydet</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+<script>
+(() => {
+  const PLAN_W_CM=1738, PLAN_H_CM=975;
+  const SIZE_BY_SEATS_CM={2:70,4:85,6:100,8:115,10:130,12:145,16:165};
+  const OPTS=[2,4,6,8,10,12,16];
+
+  let state={date:"",zoom:1,edit:false,layout:{plan_width_cm:PLAN_W_CM,plan_height_cm:PLAN_H_CM,tables:[]},assign:{},res:[],sel:null};
+
+  const $=id=>document.getElementById(id);
+  const toast=(m)=>{const t=$("toast");t.textContent=m;t.classList.remove("hidden");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add("hidden"),2600);}
+  const pad=n=>String(n).padStart(2,"0");
+  const today=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+
+  const planScale=()=>{
+    const r=$("plan").getBoundingClientRect();
+    const w=r.width*state.zoom,h=r.height*state.zoom;
+    return {sx:w/(state.layout.plan_width_cm||PLAN_W_CM), sy:h/(state.layout.plan_height_cm||PLAN_H_CM), bw:r.width, bh:r.height};
+  };
+  const cmToPx=(cm)=>{const s=planScale(); return cm*((s.sx+s.sy)/2);}
+  const cmX=(cm)=>cm*planScale().sx, cmY=(cm)=>cm*planScale().sy;
+  const pxToCmX=(px)=>px/planScale().sx, pxToCmY=(px)=>px/planScale().sy;
+
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+  async function loadLayout(){
+    const r=await fetch(`/admin/restaurant/layout?date=${encodeURIComponent(state.date)}`,{cache:"no-store"});
+    const j=await r.json();
+    if(j&&j.tables) state.layout=j;
+    state.layout.tables.forEach(t=>{ if(!t.seats) t.seats=4; if(!t.size_cm) t.size_cm=SIZE_BY_SEATS_CM[t.seats]||85; });
+  }
+  async function saveLayout(scope="date"){
+    const r=await fetch(`/admin/restaurant/layout?date=${encodeURIComponent(state.date)}&scope=${encodeURIComponent(scope)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state.layout)});
+    const j=await r.json(); toast(j.status==="ok"?"? Kaydedildi":"? Kaydetme hatas�");
+  }
+  async function loadAssign(){
+    const r=await fetch(`/admin/restaurant/assignments?date=${encodeURIComponent(state.date)}`,{cache:"no-store"});
+    const j=await r.json(); state.assign=(j&&j.assignments)||{};
+  }
+  async function loadRes(){
+    const r=await fetch(`/admin/reservations?days=365&date=${encodeURIComponent(state.date)}`,{cache:"no-store"});
+    const j=await r.json(); state.res=j.reservations||[];
+  }
+  async function assign(tableId,resId,ends){
+    const r=await fetch("/admin/restaurant/assign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:state.date,table_id:tableId,reservation_id:resId,ends_at:ends||null})});
+    const j=await r.json(); if(j.status!=="ok") throw new Error(j.message||"assign failed");
+    await loadAssign();
+  }
+  async function unassign(resId){
+    const r=await fetch("/admin/restaurant/unassign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({date:state.date,reservation_id:resId})});
+    const j=await r.json(); if(j.status!=="ok") throw new Error(j.message||"unassign failed");
+    await loadAssign();
+  }
+
+  const assignedIds=()=>{const s=new Set(); Object.values(state.assign||{}).forEach(a=>a?.reservation_id!=null&&s.add(String(a.reservation_id))); return s;}
+
+  function renderUnassigned(){
+    const as=assignedIds();
+    const list=state.res.filter(r=>["pending","confirmed"].includes(String(r.status||"").toLowerCase()) && !as.has(String(r.id)))
+      .sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+    $("uMeta").textContent=`${list.length} adet`;
+    $("uList").innerHTML = list.length ? list.map(r=>`
+      <div class="chip" data-id="${r.id}">
+        <div class="top"><div class="name">${esc(r.customer_name||"�")}</div><div class="meta">#${r.id}</div></div>
+        <div class="row"><span>?? ${esc(r.date||"�")}</span><span>?? ${esc(r.time||"�")}</span><span>?? ${esc(r.guest_count||"�")}</span></div>
+        <div class="row"><span>?? ${esc(r.customer_phone||"�")}</span><span>??? ${(r.meal_type||"").toUpperCase()}</span></div>
+      </div>`).join("") : `<div class="meta">Atanmam�� rezervasyon yok.</div>`;
+
+    document.querySelectorAll(".chip").forEach(ch=>{
+      ch.addEventListener("pointerdown",(ev)=>{
+        ev.preventDefault();
+        const id=ch.dataset.id;
+        const res=state.res.find(x=>String(x.id)===String(id)); if(!res) return;
+        const ghost=ch.cloneNode(true); ghost.style.position="fixed"; ghost.style.zIndex="9999"; ghost.style.pointerEvents="none"; ghost.style.width="260px"; ghost.style.transform="translate(-50%,-60%)"; document.body.appendChild(ghost);
+
+        const move=(x,y)=>{ghost.style.left=x+"px"; ghost.style.top=y+"px";}
+        move(ev.clientX,ev.clientY);
+
+        const onMove=(mv)=>{
+          move(mv.clientX,mv.clientY);
+          document.querySelectorAll(".table.hover").forEach(x=>x.classList.remove("hover"));
+          const t=document.elementFromPoint(mv.clientX,mv.clientY)?.closest?.(".table");
+          if(t) t.classList.add("hover");
+        };
+
+        const onUp=async(up)=>{
+          document.removeEventListener("pointermove",onMove);
+          document.removeEventListener("pointerup",onUp);
+          document.querySelectorAll(".table.hover").forEach(x=>x.classList.remove("hover"));
+          ghost.remove();
+
+          const tEl=document.elementFromPoint(up.clientX,up.clientY)?.closest?.(".table");
+          if(!tEl) return;
+          const tableId=tEl.dataset.tid;
+
+          try{
+            await assign(tableId, res.id, null);
+
+            // ki�i say�s�na g�re otomatik masa b�y�t
+            const guest=parseInt(res.guest_count||"0",10);
+            const t=state.layout.tables.find(x=>x.table_id===tableId);
+            if(t && guest>0){
+              const best=OPTS.find(x=>x>=guest)||16;
+              t.seats=best; t.size_cm=SIZE_BY_SEATS_CM[best]||t.size_cm||85;
+              toast(`?? Otomatik masa: ${best} ki�i (Kaydet ile kal�c�)`);
+            }else{
+              toast(`? #${res.id} � ${tableId}`);
+            }
+
+            await refresh();
+            openDrawer(tableId);
+          }catch(e){ toast("? Atama hatas�: "+e.message); }
+        };
+
+        document.addEventListener("pointermove",onMove);
+        document.addEventListener("pointerup",onUp);
+      });
+    });
+  }
+
+  function renderTables(){
+    const layer=$("layer");
+    layer.innerHTML="";
+    layer.style.transform=`scale(${state.zoom})`;
+
+    const {bw,bh}=planScale();
+
+    state.layout.tables.forEach(t=>{
+      const a=state.assign[t.table_id];
+      const reserved=!!a;
+      const seats=parseInt(t.seats||4,10);
+      const sizeCm=parseInt(t.size_cm||SIZE_BY_SEATS_CM[seats]||85,10);
+      const sizePx=Math.max(52, cmToPx(sizeCm));
+
+      const el=document.createElement("div");
+      el.className="table "+(reserved?"reserved":"empty");
+      el.dataset.tid=t.table_id;
+      el.style.width=sizePx+"px";
+      el.style.height=sizePx+"px";
+      el.style.left=cmX(t.x_cm)+"px";
+      el.style.top=cmY(t.y_cm)+"px";
+      el.innerHTML=`<div>${esc(t.table_id)}<div style="font-size:10px;color:var(--muted);margin-top:2px">${seats}p</div></div>` + (reserved?`<div class="mini">#${a.reservation_id}${a.ends_at?" � "+esc(a.ends_at):""}</div>`:"");
+      layer.appendChild(el);
+
+      el.addEventListener("click",(ev)=>{ev.stopPropagation(); openDrawer(t.table_id);});
+
+      el.addEventListener("pointerdown",(ev)=>{
+        if(!state.edit) return;
+        ev.preventDefault(); ev.stopPropagation();
+        el.setPointerCapture(ev.pointerId);
+
+        const startL=parseFloat(el.style.left||"0"), startT=parseFloat(el.style.top||"0");
+        const sx=ev.clientX, sy=ev.clientY;
+
+        const onMove=(mv)=>{
+          const nl=clamp(startL+(mv.clientX-sx),0,bw*state.zoom-sizePx-10);
+          const nt=clamp(startT+(mv.clientY-sy),0,bh*state.zoom-sizePx-10);
+          el.style.left=nl+"px"; el.style.top=nt+"px";
+          t.x_cm=pxToCmX(nl); t.y_cm=pxToCmY(nt);
+        };
+        const onUp=()=>{
+          el.removeEventListener("pointermove",onMove);
+          el.removeEventListener("pointerup",onUp);
+          el.removeEventListener("pointercancel",onUp);
+        };
+        el.addEventListener("pointermove",onMove);
+        el.addEventListener("pointerup",onUp);
+        el.addEventListener("pointercancel",onUp);
+      });
+    });
+  }
+
+  function openDrawer(tableId){
+    state.sel=tableId;
+    const t=state.layout.tables.find(x=>x.table_id===tableId);
+    const a=state.assign[tableId];
+    $("dTitle").textContent=`Masa ${tableId}`;
+    $("dMeta").textContent=state.date;
+    $("dSeats").value=String(parseInt(t?.seats||4,10));
+    $("dEnds").value=a?.ends_at||"";
+    $("unassign").classList.toggle("hidden", !a);
+    $("dInfo").innerHTML = a ? `Rezerve: <b>#${a.reservation_id}</b>` : `Bo�`;
+  }
+
+  function setEdit(on){
+    state.edit=on;
+    $("edit").classList.toggle("primary",on);
+    $("add").classList.toggle("hidden",!on);
+    $("save").classList.toggle("hidden",!on);
+    $("saveMain").classList.toggle("hidden",!on);
+    $("reset").classList.toggle("hidden",!on);
+    $("seatBox").classList.toggle("hidden",!on);
+  }
+
+  function addTable(){
+    const ids=new Set(state.layout.tables.map(t=>t.table_id));
+    let n=1; while(ids.has("T"+n)) n++;
+    const id="T"+n;
+
+    const seats=parseInt($("seatSelect").value,10)||4;
+    const size_cm=SIZE_BY_SEATS_CM[seats]||85;
+    const s=planScale();
+    const xPx=(s.bw*0.5)*state.zoom, yPx=(s.bh*0.5)*state.zoom;
+    state.layout.tables.push({table_id:id,x_cm:pxToCmX(xPx),y_cm:pxToCmY(yPx),seats,size_cm});
+    renderTables(); renderUnassigned(); toast("+ Masa eklendi: "+id);
+  }
+
+  function setPlanUrl(){
+  const u = `/admin/restaurant/plan-image?date=${encodeURIComponent(state.date || "")}&t=${Date.now()}`;
+  document.documentElement.style.setProperty('--plan-url', `url("${u}")`);
+}
+
+async function refresh(){ setPlanUrl(); await loadLayout(); await loadAssign(); await loadRes(); renderTables(); renderUnassigned(); }
+  async function init(){
+    state.date=today();
+  setPlanUrl(); $("datePick").value=state.date;
+
+    $("datePick").addEventListener("change", async e=>{state.date=e.target.value||today();
+  setPlanUrl(); await refresh();});
+    $("zoom").addEventListener("input", e=>{state.zoom=parseFloat(e.target.value||"1"); renderTables();});
+    $("reload").addEventListener("click", refresh);
+
+    
+  // --- PLAN DRAW MODE ---
+  let draw=false, tool="line", strokeW=6, activeEl=null, startPt=null;
+
+  function setDraw(on){
+    draw=on;
+    document.body.classList.toggle("drawOn",on);
+    $("drawBtn").classList.toggle("primary",on);
+    $("drawTools").classList.toggle("hidden",!on);
+    $("planSaveDay").classList.toggle("hidden",!on);
+    $("planSaveMain").classList.toggle("hidden",!on);
+    $("planDelDay").classList.toggle("hidden",!on);
+  }
+
+  $("drawBtn").addEventListener("click",()=>setDraw(!draw));
+  $("tool").addEventListener("change",()=>tool=$("tool").value);
+  $("strokeW").addEventListener("change",()=>strokeW=parseInt($("strokeW").value||"6",10));
+
+  $("planSaveDay").addEventListener("click",()=>savePlan("date"));
+  $("planSaveMain").addEventListener("click",()=>{ if(confirm("Ana şablonu güncellemek istiyor musun?")) savePlan("main"); });
+  $("planDelDay").addEventListener("click",()=>{ if(confirm("Bu tarih için planı silmek istiyor musun?")) deletePlanDay(); });
+
+  function svgPoint(evt){
+    const svg=$("drawSvg");
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  const NS="http://www.w3.org/2000/svg";
+  $("drawSvg").addEventListener("pointerdown",(ev)=>{
+    if(!draw) return;
+    ev.preventDefault();
+    const p = svgPoint(ev);
+
+    if(tool==="erase"){
+      const t = ev.target;
+      if(t && t.ownerSVGElement && t.tagName!=="svg"){
+        t.remove();
+      }
+      return;
+    }
+
+    if(tool==="text"){
+      const txt = prompt("Metin:");
+      if(!txt) return;
+      const el=document.createElementNS(NS,"text");
+      el.setAttribute("x",p.x); el.setAttribute("y",p.y);
+      el.setAttribute("fill","#111827");
+      el.setAttribute("font-size","32");
+      el.textContent=txt;
+      $("drawSvg").appendChild(el);
+      return;
+    }
+
+    // line
+    startPt=p;
+    const line=document.createElementNS(NS,"line");
+    line.setAttribute("x1",p.x); line.setAttribute("y1",p.y);
+    line.setAttribute("x2",p.x); line.setAttribute("y2",p.y);
+    line.setAttribute("stroke","#111827");
+    line.setAttribute("stroke-width",String(strokeW));
+    line.setAttribute("stroke-linecap","round");
+    line.setAttribute("stroke-linejoin","round");
+    $("drawSvg").appendChild(line);
+    activeEl=line;
+  });
+
+  $("drawSvg").addEventListener("pointermove",(ev)=>{
+    if(!draw) return;
+    if(!activeEl) return;
+    ev.preventDefault();
+    const p = svgPoint(ev);
+    activeEl.setAttribute("x2",p.x);
+    activeEl.setAttribute("y2",p.y);
+  });
+
+  window.addEventListener("pointerup",(ev)=>{
+    if(!draw) return;
+    if(activeEl){
+      activeEl=null; startPt=null;
+    }
+  });
+$("edit").addEventListener("click", ()=>setEdit(!state.edit));
+    $("add").addEventListener("click", addTable);
+    $("save").addEventListener("click", async ()=>{await saveLayout();});
+    $("reset").addEventListener("click", ()=>{ if(confirm("T�m masalar� sil?")) {state.layout.tables=[]; renderTables();} });
+
+    $("saveSeats").addEventListener("click", ()=>{
+      if(!state.sel) return;
+      const t=state.layout.tables.find(x=>x.table_id===state.sel);
+      const seats=parseInt($("dSeats").value,10);
+      t.seats=seats; t.size_cm=SIZE_BY_SEATS_CM[seats]||t.size_cm||85;
+      renderTables(); toast("?? Masa boyutu g�ncellendi (Kaydet ile kal�c�)");
+      openDrawer(state.sel);
+    });
+
+    $("saveEnds").addEventListener("click", async ()=>{
+      if(!state.sel) return;
+      const a=state.assign[state.sel];
+      if(!a) return toast("Bu masa bo�.");
+      try{ await assign(state.sel, a.reservation_id, $("dEnds").value.trim()||null); toast("?? Biti� kaydedildi"); await refresh(); openDrawer(state.sel); }
+      catch(e){ toast("? "+e.message); }
+    });
+
+    $("unassign").addEventListener("click", async ()=>{
+      if(!state.sel) return;
+      const a=state.assign[state.sel];
+      if(!a) return;
+      if(!confirm("Masay� bo�alt?")) return;
+      try{ await unassign(a.reservation_id); toast("? Bo�alt�ld�"); await refresh(); openDrawer(state.sel); }
+      catch(e){ toast("? "+e.message); }
+    });
+
+    await refresh();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
+
+
+
+

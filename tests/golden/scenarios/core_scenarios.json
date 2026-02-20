@@ -1,0 +1,114 @@
+{
+  "scenarios": [
+    {
+      "id": "selamlama",
+      "category": "selamlama",
+      "question": "Merhaba",
+      "expected_keywords": ["Kassandra"],
+      "forbidden_keywords": [],
+      "description": "Karşılama mesajı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "kahvalti_saat",
+      "category": "bilgi",
+      "question": "Kahvaltı saat kaçta?",
+      "expected_keywords": ["08:00", "10:30"],
+      "forbidden_keywords": ["07:00", "11:00"],
+      "description": "Kahvaltı saati 08:00-10:30",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "breakfast_included",
+      "category": "bilgi",
+      "question": "Kahvaltı dahil mi?",
+      "expected_keywords": ["dahil"],
+      "forbidden_keywords": ["hariç", "ekstra"],
+      "description": "Kahvaltı fiyata dahil",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "checkin_time",
+      "category": "bilgi",
+      "question": "Check-in saat kaçta?",
+      "expected_keywords": ["14:00"],
+      "forbidden_keywords": ["15:00", "13:00"],
+      "description": "Check-in 14:00 olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "checkout_time",
+      "category": "bilgi",
+      "question": "Check-out saati?",
+      "expected_keywords": ["12:00"],
+      "forbidden_keywords": ["11:00", "10:00"],
+      "description": "Check-out 12:00 olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "pool_exists",
+      "category": "bilgi",
+      "question": "Havuz var mı?",
+      "expected_keywords": ["havuz", "var"],
+      "forbidden_keywords": ["yok"],
+      "description": "Havuz mevcut olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "wifi_free",
+      "category": "bilgi",
+      "question": "WiFi var mı?",
+      "expected_keywords": ["var", "ücretsiz"],
+      "forbidden_keywords": ["yok", "ücretli"],
+      "description": "Ücretsiz WiFi olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "transfer_price",
+      "category": "bilgi",
+      "question": "Transfer ücreti?",
+      "expected_keywords": ["75", "€"],
+      "forbidden_keywords": ["50", "100"],
+      "description": "Transfer ücreti 75€ olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "location",
+      "category": "bilgi",
+      "question": "Otel nerede?",
+      "expected_keywords": ["Fethiye"],
+      "forbidden_keywords": ["Bodrum", "Antalya merkez"],
+      "description": "Konum Ölüdeniz/Fethiye olmalı",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "season_dates",
+      "category": "bilgi",
+      "question": "Otel ne zaman açık?",
+      "expected_keywords": ["Nisan", "Kasım"],
+      "forbidden_keywords": ["yıl boyunca"],
+      "description": "Sezon 10 Nisan - 10 Kasım",
+      "is_core": true,
+      "language": "tr"
+    },
+    {
+      "id": "english_greeting",
+      "category": "selamlama",
+      "question": "Hello",
+      "expected_keywords": ["Kassandra"],
+      "forbidden_keywords": [],
+      "description": "English greeting",
+      "is_core": true,
+      "language": "en"
+    }
+  ]
+}
