@@ -8,6 +8,7 @@
       "forbidden_keywords": [],
       "description": "Karşılama mesajı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -18,6 +19,7 @@
       "forbidden_keywords": ["07:00", "11:00"],
       "description": "Kahvaltı saati 08:00-10:30",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -28,6 +30,7 @@
       "forbidden_keywords": ["hariç", "ekstra"],
       "description": "Kahvaltı fiyata dahil",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -38,6 +41,7 @@
       "forbidden_keywords": ["15:00", "13:00"],
       "description": "Check-in 14:00 olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -48,6 +52,7 @@
       "forbidden_keywords": ["11:00", "10:00"],
       "description": "Check-out 12:00 olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -58,6 +63,7 @@
       "forbidden_keywords": ["yok"],
       "description": "Havuz mevcut olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -68,16 +74,18 @@
       "forbidden_keywords": ["yok", "ücretli"],
       "description": "Ücretsiz WiFi olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
       "id": "transfer_price",
       "category": "bilgi",
-      "question": "Transfer ücreti?",
+      "question": "Dalaman havalimanı transfer ücreti kaç euro?",
       "expected_keywords": ["75", "€"],
       "forbidden_keywords": ["50", "100"],
       "description": "Transfer ücreti 75€ olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -88,6 +96,7 @@
       "forbidden_keywords": ["Bodrum", "Antalya merkez"],
       "description": "Konum Ölüdeniz/Fethiye olmalı",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -98,6 +107,7 @@
       "forbidden_keywords": ["yıl boyunca"],
       "description": "Sezon 10 Nisan - 10 Kasım",
       "is_core": true,
+      "smoke": true,
       "language": "tr"
     },
     {
@@ -108,6 +118,7 @@
       "forbidden_keywords": [],
       "description": "English greeting",
       "is_core": true,
+      "smoke": false,
       "language": "en"
     }
   ]

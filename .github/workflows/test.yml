@@ -18,6 +18,7 @@ on:
           - all
           - unit
           - integration
+          - smoke
           - golden
           - e2e
 
@@ -69,7 +70,7 @@ jobs:
   golden-tests:
     name: Golden Tests
     runs-on: ubuntu-latest
-    needs: integration-tests
+    needs: smoke-tests
     if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'golden' || github.event.inputs.test_type == '' }}
     steps:
       - name: Checkout code
@@ -87,6 +88,28 @@ jobs:
         env:
           KASSANDRA_ENV: test
         run: pytest tests/golden/ -v -m golden --tb=short -ra
+
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'smoke' || github.event.inputs.test_type == '' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run smoke tests
+        env:
+          KASSANDRA_ENV: test
+        run: pytest tests/golden/test_golden_scenarios.py -v --smoke -m "golden and smoke" --tb=short -ra
 
   e2e-tests:
     name: E2E Tests
@@ -118,7 +141,7 @@ jobs:
     name: Summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [unit-tests, integration-tests, golden-tests, e2e-tests]
+    needs: [unit-tests, integration-tests, smoke-tests, golden-tests, e2e-tests]
     steps:
       - name: Publish summary
         run: |
@@ -127,5 +150,6 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Unit | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke | ${{ needs.smoke-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Golden | ${{ needs.golden-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| E2E | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY

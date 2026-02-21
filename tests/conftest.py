@@ -30,6 +30,31 @@ os.environ.setdefault("KASSANDRA_ENV", "test")
 
 
 # ======================================================
+# PYTEST HOOKS
+# ======================================================
+
+def pytest_addoption(parser):
+    """Pytest CLI opsiyonları"""
+    parser.addoption(
+        "--smoke",
+        action="store_true",
+        default=False,
+        help="Sadece smoke işaretli testleri çalıştır"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """--smoke verildiğinde smoke dışı testleri atla"""
+    if not config.getoption("--smoke"):
+        return
+
+    skip_non_smoke = pytest.mark.skip(reason="Skipped by --smoke")
+    for item in items:
+        if "smoke" not in item.keywords:
+            item.add_marker(skip_non_smoke)
+
+
+# ======================================================
 # DOSYA YOLLARI
 # ======================================================
 

@@ -8,11 +8,13 @@ Bot cevaplarının beklenen anahtar kelimeleri içerip içermediğini test eder.
 Çalıştırma:
     pytest tests/golden/test_golden_scenarios.py -v
     pytest tests/golden/test_golden_scenarios.py -v -k "breakfast"
+    pytest tests/golden/test_golden_scenarios.py -v --smoke
 """
 
 import pytest
 import sys
 import json
+import re
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
 
@@ -20,6 +22,29 @@ from unittest.mock import Mock, patch, AsyncMock
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from tests.golden.evaluator import GoldenEvaluator, load_scenarios, save_results
+
+
+# Smoke senaryoları (core_scenarios.json içindeki smoke=true kayıtları)
+def load_smoke_scenarios():
+    scenarios = load_scenarios()
+    smoke = [s for s in scenarios if s.get("smoke", False)]
+    if smoke:
+        return smoke
+    # Fallback: smoke etiketi yoksa ilk 10 core senaryo
+    core = [s for s in scenarios if s.get("is_core", True)]
+    return core[:10]
+
+
+SMOKE_SCENARIOS = load_smoke_scenarios()
+
+
+def build_test_phone(seed: str) -> str:
+    """Senaryo id'sinden stabil, 12 haneli test telefonu üretir."""
+    digits = re.sub(r"\D", "", seed)
+    if not digits:
+        digits = "".join(str(ord(ch) % 10) for ch in seed)
+    digits = (digits + "0" * 7)[:7]
+    return f"90555{digits}"
 
 
 # ======================================================
@@ -121,17 +146,23 @@ def get_default_scenarios():
 # YARDIMCI FONKSİYONLAR
 # ======================================================
 
-def get_bot_response(client, question: str, phone: str = "905551234567") -> str:
+def get_bot_response(
+    client,
+    question: str,
+    phone: str = "905551234567",
+    reset_state: bool = True,
+) -> str:
     """Bot'tan cevap al"""
-    try:
-        # Önce konuşmayı temizle
-        import kassandra_openai_bot as bot
-        if hasattr(bot, 'clear_conversation'):
-            bot.clear_conversation(phone)
-        if hasattr(bot, 'clear_reservation_flow'):
-            bot.clear_reservation_flow(phone)
-    except:
-        pass
+    if reset_state:
+        try:
+            # Önce konuşmayı temizle
+            import kassandra_openai_bot as bot
+            if hasattr(bot, 'clear_conversation'):
+                bot.clear_conversation(phone)
+            if hasattr(bot, 'clear_reservation_flow'):
+                bot.clear_reservation_flow(phone)
+        except:
+            pass
     
     response = client.post("/chat", json={
         "phone": phone,
@@ -327,6 +358,55 @@ class TestAllCoreScenarios:
         # Bu test OpenAI'a bağlı olduğu için esnek tutulmalı
         assert report["pass_rate"] >= 45, \
             f"Genel başarı oranı %45'in altında: %{report['pass_rate']}"
+
+
+# ======================================================
+# SMOKE SENARYOLARI
+# ======================================================
+
+class TestSmokeScenarios:
+    """Kritik smoke senaryoları"""
+
+    @pytest.mark.golden
+    @pytest.mark.smoke
+    @pytest.mark.parametrize(
+        "scenario",
+        SMOKE_SCENARIOS,
+        ids=[s.get("id", "unknown") for s in SMOKE_SCENARIOS],
+    )
+    def test_smoke_core_scenarios(self, bot_client, evaluator, scenario):
+        """Smoke etiketli kritik senaryolar"""
+        phone = build_test_phone(scenario["id"])
+        menu_prompt = "Size nasıl yardımcı olabilirim?"
+
+        if scenario.get("id") == "transfer_price":
+            # transfer smoke: ilk mesajda menü dönmesi zorunlu, sonra 2 ile transfer akışı
+            first_response = get_bot_response(bot_client, scenario["question"], phone=phone, reset_state=True)
+            assert menu_prompt in first_response, f"İlk mesajda menü bekleniyordu. Cevap: {first_response[:280]}"
+            assert "2. Transfer" in first_response or "2) Transfer" in first_response, \
+                f"İlk menüde transfer seçeneği bekleniyordu. Cevap: {first_response[:280]}"
+
+            get_bot_response(bot_client, "2", phone=phone, reset_state=False)
+            response = get_bot_response(bot_client, scenario["question"], phone=phone, reset_state=False)
+
+            # Bazı akışlarda tekrar menü gelebilir; bir kez daha 2 seçip soruyu yineleriz.
+            if menu_prompt in response or "Doğru yönlendirme yapabilmem için lütfen seçin" in response:
+                get_bot_response(bot_client, "2", phone=phone, reset_state=False)
+                response = get_bot_response(bot_client, "transfer fiyat", phone=phone, reset_state=False)
+        elif scenario.get("category") != "selamlama":
+            get_bot_response(bot_client, "Merhaba", phone=phone, reset_state=True)
+            response = get_bot_response(bot_client, scenario["question"], phone=phone, reset_state=False)
+        else:
+            response = get_bot_response(bot_client, scenario["question"], phone=phone, reset_state=True)
+
+        result = evaluator.evaluate(response, scenario)
+
+        assert result["decision"] in ["PASS", "REVIEW"], \
+            (
+                f"Smoke scenario başarısız: {scenario['id']}. "
+                f"Eksik: {result['missing_expected']}. "
+                f"Cevap: {response[:280]}"
+            )
 
 
 # ======================================================
