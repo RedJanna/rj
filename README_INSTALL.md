@@ -18,3 +18,7 @@ CMD:
    chmod +x .git/hooks/post-commit
 
 Artık her commit'te docs/AI_BRIEF.md içindeki AUTOGEN bölümü ve docs/_generated çıktıları güncellenir.
+
+# auto-commit test
+
+# auto-commit test
