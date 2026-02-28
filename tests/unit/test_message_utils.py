@@ -24,10 +24,12 @@ from app.utils.message_utils import (
     is_greeting,
     is_conversation_ending,
     detect_language,
+    detect_price_request,
     is_menu_selection,
     get_welcome_message,
     get_closing_message,
     get_menu_response,
+    looks_like_transfer_message,
 )
 
 
@@ -192,10 +194,9 @@ class TestDetectLanguage:
     
     @pytest.mark.unit
     def test_mixed_language_turkish_chars_priority(self):
-        """Türkçe karakter varsa Türkçe olmalı"""
-        # Türkçe karakterler İngilizce kelimelerden öncelikli
+        """EN > TR önceliği: karışık mesajda EN seçilmeli"""
         result = detect_language("Hello, günaydın")
-        assert result == "tr"
+        assert result == "en"
     
     
     @pytest.mark.unit
@@ -207,10 +208,60 @@ class TestDetectLanguage:
     
     
     @pytest.mark.unit
-    def test_default_is_turkish(self):
-        """Belirsiz durumlarda varsayılan Türkçe"""
+    def test_default_is_english(self):
+        """Belirsiz/kapsam dışı durumlarda varsayılan İngilizce"""
         result = detect_language("12345")
-        assert result == "tr"
+        assert result == "en"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "input_text,expected",
+        [
+            ("hallo, ich möchte reservieren", "de"),
+            ("hola, quiero reservar", "es"),
+            ("bonjour, je veux réserver", "fr"),
+            ("مرحبا اريد الحجز", "ar"),
+            ("你好，我要预订", "zh"),
+            ("नमस्ते मुझे बुकिंग चाहिए", "hi"),
+            ("olá, quero reservar", "pt"),
+            ("ქართული ტექსტი", "en"),
+        ],
+    )
+    def test_multilanguage_priority_and_fallback(self, input_text: str, expected: str):
+        result = detect_language(input_text)
+        assert result == expected
+
+
+class TestLooksLikeTransferMessage:
+    @pytest.mark.unit
+    @pytest.mark.parametrize("input_text", [
+        "Dalaman Havalimanı 13 Haziran 17:00 iniş",
+        "2 kişi, 1 bagaj ve 1 adet bebek koltuğu",
+        "TK1234 uçuşu için transfer istiyorum",
+    ])
+    def test_detects_transfer_payload(self, input_text: str):
+        assert looks_like_transfer_message(input_text) is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("input_text", [
+        "2 yetişkin, 1 çocuk için oda fiyatı",
+        "Kahvaltı saat kaçta başlıyor?",
+        "Deluxe oda müsait mi?",
+    ])
+    def test_does_not_flag_non_transfer_messages(self, input_text: str):
+        assert looks_like_transfer_message(input_text) is False
+
+
+class TestDetectPriceRequest:
+    @pytest.mark.unit
+    def test_detects_room_suitability_with_guest_mix_without_dates(self):
+        msg = "Do you have a room suitable for 2 adults + 1 child (7 years old)?"
+        assert detect_price_request(msg, history=[]) is True
+
+    @pytest.mark.unit
+    def test_does_not_trigger_for_non_booking_suitability_sentence(self):
+        msg = "Is August suitable for swimming?"
+        assert detect_price_request(msg, history=[]) is False
 
 
 class TestMenuSelection:

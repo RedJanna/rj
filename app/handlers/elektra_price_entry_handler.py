@@ -27,6 +27,58 @@ LANG_MESSAGES = {
     },
 }
 
+def _is_policy_or_info_question(text: str) -> bool:
+    """
+    Oda fiyat sorgusu olmayan politika/bilgi sorularinda Elektra girisini atla.
+    Bu guard, tarih/kişi içeren eski history ile alakasız "Missing: ..." yanıtlarını önler.
+    """
+    low = (text or "").lower()
+    if not low:
+        return False
+
+    breakfast_policy = (
+        ("kahvaltı" in low or "kahvalti" in low or "breakfast" in low)
+        and any(
+            k in low
+            for k in (
+                "dahil mi", "dahil", "included",
+                "ek ücret", "ek ucret", "extra charge", "additional charge",
+                "kişi başı", "kisi basi", "per person",
+            )
+        )
+    )
+    if breakfast_policy:
+        return True
+
+    policy_markers = (
+        # child policy / ek yatak / check-in-out / payment-policy
+        "child policy", "kids policy", "infant policy",
+        "çocuk politika", "cocuk politika", "çocuk kural", "cocuk kural",
+        "does the child pay", "discounted rate", "full price",
+        "extra bed", "ek yatak", "nightly fee", "gecelik ucret", "gecelik ücret",
+        "check-in", "check in", "check-out", "check out",
+        "erken giriş", "erken giris", "geç çıkış", "gec cikis",
+        "payment method", "ödeme yöntemi", "odeme yontemi",
+        "deposit", "depozito", "kapora",
+        "reservation code", "rezervasyon kodu", "teyit mesaji", "teyit mesajı",
+    )
+    return any(k in low for k in policy_markers)
+
+
+def _is_room_suitability_query_without_explicit_date(text: str, natural_date_keywords: list) -> bool:
+    low = (text or "").lower()
+    if not low:
+        return False
+    has_room = any(k in low for k in ("room", "oda"))
+    has_suitability = any(k in low for k in ("suitable", "uygun", "room for"))
+    has_guest_mix = bool(
+        re.search(r"\d+\s*(adult|adults|yeti[şs]kin|child|children|kids?|çocuk|cocuk|kişi|kisi)", low)
+    )
+    has_explicit_date = bool(re.search(r"\b\d{4}-\d{2}-\d{2}\b", low)) or any(
+        kw in low for kw in (natural_date_keywords or [])
+    )
+    return has_room and has_suitability and has_guest_mix and not has_explicit_date
+
 
 async def try_handle_elektra_price_entry(
     *,
@@ -51,8 +103,22 @@ async def try_handle_elektra_price_entry(
     def _lang_pack(lang_code: str) -> dict:
         return LANG_MESSAGES.get((lang_code or "tr").lower(), LANG_MESSAGES["tr"])
 
+    # ÖNEMLİ: Aktif transfer konuşması varsa price flow tetiklenmemeli
+    from app.utils.message_utils import _is_transfer_conversation_active, looks_like_transfer_message
+    if _is_transfer_conversation_active(history):
+        print("🚫 elektra_price_entry: Aktif transfer konuşması tespit edildi, price flow atlanıyor")
+        return None
+    if looks_like_transfer_message(user_message):
+        print("🚫 elektra_price_entry: Transfer detay mesajı tespit edildi, price flow atlanıyor")
+        return None
+
     iso_dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", user_message or "")
     low_um = (user_message or "").lower()
+
+    if _is_policy_or_info_question(user_message):
+        print("🚫 elektra_price_entry: politika/bilgi sorusu tespit edildi, Elektra sorgusu atlanıyor")
+        return None
+
     has_natural_date = any(kw in low_um for kw in natural_date_keywords)
     is_price_inquiry = any(kw in low_um for kw in price_inquiry_keywords)
     has_guest_info = any(kw in low_um for kw in guest_keywords)
@@ -68,17 +134,21 @@ async def try_handle_elektra_price_entry(
                 print(f"👥 History'den misafir bilgisi bulundu: {msg.get('content', '')[:50]}...")
                 break
 
+    force_fresh_date_prompt = _is_room_suitability_query_without_explicit_date(user_message, natural_date_keywords)
     if has_guest_info and not has_natural_date and len(iso_dates) < 2:
-        for msg in reversed(history[-10:]):
-            msg_content = (msg.get("content") or "").lower()
-            for kw in natural_date_keywords:
-                if kw in msg_content:
-                    user_message_with_dates = msg.get("content", "") + " " + user_message
-                    has_natural_date = True
-                    print(f"📅 History'den tarih bulundu: {msg.get('content', '')[:50]}...")
+        if force_fresh_date_prompt:
+            print("ℹ️ Elektra price entry: suitability query detected, asking date explicitly.")
+        else:
+            for msg in reversed(history[-10:]):
+                msg_content = (msg.get("content") or "").lower()
+                for kw in natural_date_keywords:
+                    if kw in msg_content:
+                        user_message_with_dates = msg.get("content", "") + " " + user_message
+                        has_natural_date = True
+                        print(f"📅 History'den tarih bulundu: {msg.get('content', '')[:50]}...")
+                        break
+                if has_natural_date:
                     break
-            if has_natural_date:
-                break
 
     looks_like_price_payload = ((len(iso_dates) >= 2 or has_natural_date) and (has_guest_info or is_price_inquiry))
     natural_price_request = has_natural_date and is_price_inquiry
@@ -101,13 +171,30 @@ async def try_handle_elektra_price_entry(
             hotel_id=hotel_id,
             lang=customer_lang,
         )
+        # Basarili fiyat sorgusunda ham offer'lari booking flow icin cache'le.
+        if _raw_offers:
+            try:
+                from app.services.booking_flow_service import save_price_offers
+                save_price_offers(phone, _raw_offers, {
+                    "hotel_id": hotel_id,
+                    "lang": customer_lang,
+                })
+            except Exception as cache_err:
+                print(f"[BOOKING] Offer cache error (elektra entry): {cache_err}")
         if reply.startswith("HANDOFF:"):
             error_type = reply.replace("HANDOFF:", "")
             await notify_admin_handoff_fn(
-                "fiyat_sistemi_hatasi",
-                "high",
-                phone,
-                f"Fiyat sistemi hatasi: {error_type}\nMesaj: {user_message[:200]}",
+                category="fiyat_sistemi_hatasi",
+                priority="high",
+                customer_phone=phone,
+                customer_message=f"Fiyat sistemi hatasi: {error_type}\nMesaj: {user_message[:200]}",
+                source="elektra_price_entry_handler",
+                detected_intent="PRICE_QUERY",
+                confidence=0.9,
+                conversation_summary=f"Elektra HANDOFF error_type={error_type}",
+                attempted_actions=["handle_elektra_price_request"],
+                suggested_reply=msg["handoff"],
+                tags=["price_flow", "elektra_error", "handoff"],
             )
             reply = msg["handoff"]
             add_to_history_fn(phone, "user", user_message)

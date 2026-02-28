@@ -129,21 +129,21 @@ def get_menu_response(selection: int, lang: str = "tr") -> str:
     """Menü seçimi cevabı - dil destekli"""
     responses_tr = {
         1: "Rezervasyon veya oda bilgisi için size yardımcı olabilirim. Hangi tarihler için ve kaç kişilik konaklama düşünüyorsunuz?",
-        2: "Transfer hizmetimiz hakkında bilgi almak istiyorsunuz. Dalaman ve Antalya havalimanlarından transfer hizmetimiz mevcuttur. Tek yön transfer ücreti 75€'dur. Hangi havalimanından ve ne zaman geleceksiniz?",
+        2: "Transfer hizmetimiz hakkında bilgi almak istiyorsunuz. Dalaman Havalimanı'ndan otelimize tek yön transfer ücreti 75€'dur (nakit ödeme). Antalya Havalimanı'ndan da transfer hizmetimiz mevcuttur; detaylı bilgi için müşteri temsilcimize bağlanabilirsiniz. Hangi havalimanından ve ne zaman geleceksiniz?",
         3: "Restoran ve kahvaltı hakkında bilgi vermek isterim:\n\n☕ Kahvaltı: 08:00 - 10:30 (dahil)\n🍽️ Restoran: 11:00 - 22:00\n\nMenümüzü incelemek için: https://www.kassandrarestaurant.com/menuler",
         4: "Özel isteklerinizi memnuniyetle karşılarız! Lütfen sürpriz, kutlama veya başka taleplerinizi detaylandırabilir misiniz?"
     }
     
     responses_en = {
         1: "I can help you with reservation or room information. What dates are you considering and for how many guests?",
-        2: "You want information about our transfer service. We provide transfers from Dalaman and Antalya airports. One-way transfer is 75€. Which airport and when will you arrive?",
+        2: "You want information about our transfer service. Transfer from Dalaman Airport to our hotel is 75€ one way (cash payment). We also provide transfers from Antalya Airport; for detailed information, you can be connected to our representative. Which airport and when will you arrive?",
         3: "Let me tell you about our restaurant and breakfast:\n\n☕ Breakfast: 08:00 - 10:30 (included)\n🍽️ Restaurant: 11:00 - 22:00\n\nView our menu: https://www.kassandrarestaurant.com/menuler",
         4: "We would be happy to accommodate your special requests! Please provide details about your surprise, celebration, or other requests."
     }
 
     responses_ru = {
         1: "Я могу помочь вам с бронированием или информацией о номерах. На какие даты и на сколько гостей вы планируете проживание?",
-        2: "Мы предоставляем трансфер из аэропортов Даламан и Анталья. Стоимость трансфера в одну сторону — 75€. Из какого аэропорта и когда вы прибываете?",
+        2: "Трансфер из аэропорта Даламан до нашего отеля — 75€ в одну сторону (оплата наличными). Мы также предоставляем трансфер из аэропорта Анталья; для подробной информации вас могут соединить с нашим представителем. Из какого аэропорта и когда вы прибываете?",
         3: "Расскажу о нашем ресторане и завтраке:\n\n☕ Завтрак: 08:00 - 10:30 (включён в стоимость)\n🍽️ Ресторан: 11:00 - 22:00\n\nНаше меню: https://www.kassandrarestaurant.com/menuler",
         4: "Мы будем рады выполнить ваши особые пожелания! Пожалуйста, расскажите подробнее о вашем сюрпризе, празднике или других просьбах."
     }
@@ -172,99 +172,57 @@ def detect_language(text: str) -> str:
     """
     Mesaj dilini algıla.
 
-    MANTIK:
-    1. Rusça (Kiril) karakter varsa → RUSÇA
-    2. İngilizce cümle yapısı varsa → İNGİLİZCE (klavye hatası tolere edilir)
-    3. Türkçe karakter varsa VE İngilizce değilse → TÜRKÇE
-    4. İngilizce kelime sayısı > 0 → İNGİLİZCE
-    5. Türkçe kelime varsa → TÜRKÇE
-    6. Varsayılan → TÜRKÇE
+    Öncelik:
+    EN > TR > RU > DE > AR > ES > FR > ZH > HI > PT
+    Bu kapsam dışı/kararsız durumlarda varsayılan EN.
     """
-    t = text.lower().strip()
-    original_text = text.lower().strip()
+    t = (text or "").lower().strip()
+    if not t:
+        return "en"
 
-    # 0. RUSÇA KONTROLÜ (Kiril alfabesi varsa → Rusça)
-    # Kiril harfleri: а-яёА-ЯЁ
-    russian_char_count = len(re.findall(r'[а-яёА-ЯЁ]', t))
-    if russian_char_count >= 2:
+    # Script tabanlı diller (yüksek güven)
+    if re.search(r"[а-яёА-ЯЁ]", t):
         return "ru"
-
-    # Kısa Rusça selamlamalar (tek kelime bile olsa)
-    russian_short_words = [
-        "привет", "здравствуйте", "добрый", "доброе", "добрая",
-        "спасибо", "да", "нет", "хорошо", "пожалуйста",
-    ]
-    if t in russian_short_words:
-        return "ru"
+    if re.search(r"[\u4e00-\u9fff]", text or ""):
+        return "zh"
+    if re.search(r"[\u0600-\u06FF]", text or ""):
+        return "ar"
+    if re.search(r"[\u0900-\u097F]", text or ""):
+        return "hi"
 
     # "ı" harfini "i" ile değiştir (klavye hatası düzeltmesi)
-    # Bu sayede "can ı book" → "can i book" olarak algılanır
     t_normalized = t.replace("ı", "i")
 
-    # 1. İngilizce cümle yapısı kontrolü (ÖNCELİKLİ - normalleştirilmiş metin üzerinde)
+    # EN yapısal kalıplar (öncelikli)
     english_patterns = [
-        r'^good\s+(?:morning|afternoon|evening|night)\b',  # "good morning..."
-        r'^can\s+i\b',           # "can i book..."
-        r'^can\s+you\b',         # "can you help..."
-        r'^could\s+i\b',         # "could i..."
-        r'^could\s+you\b',       # "could you..."
-        r'^i\s+want\b',          # "i want to..."
-        r'^i\s+need\b',          # "i need..."
-        r'^i\s+would\b',         # "i would like..."
-        r'^i\'d\s+like\b',       # "i'd like..."
-        r'^i\'m\b',              # "i'm looking..."
-        r'^do\s+you\b',          # "do you have..."
-        r'^is\s+there\b',        # "is there..."
-        r'^are\s+there\b',       # "are there..."
-        r'^how\s+much\b',        # "how much..."
-        r'^how\s+many\b',        # "how many..."
-        r'^what\s+is\b',         # "what is..."
-        r'^what\s+are\b',        # "what are..."
-        r'^when\s+is\b',         # "when is..."
-        r'^where\s+is\b',        # "where is..."
-        r'\bfor\s+\d+\s+person',  # "for 2 person"
-        r'\bfor\s+\d+\s+people',  # "for 2 people"
-        r'\bbook\s+a\s+table\b', # "book a table"
-        r'\breserve\s+a\s+table\b', # "reserve a table"
-        r'\btable\s+for\s+\d+\b', # "table for 4"
-        r'\bas\s+i\s+said\b',    # "as i said"
+        r'^good\s+(?:morning|afternoon|evening|night)\b',
+        r'^can\s+i\b', r'^can\s+you\b', r'^could\s+i\b', r'^could\s+you\b',
+        r'^i\s+want\b', r'^i\s+need\b', r'^i\s+would\b', r"^i\'d\s+like\b", r"^i\'m\b",
+        r'^do\s+you\b', r'^is\s+there\b', r'^are\s+there\b',
+        r'^how\s+much\b', r'^how\s+many\b', r'^what\s+is\b', r'^what\s+are\b',
+        r'^when\s+is\b', r'^where\s+is\b',
+        r'\bbook\s+a\s+table\b', r'\breserve\s+a\s+table\b', r'\btable\s+for\s+\d+\b',
     ]
-
-    # Hem orijinal hem normalize edilmiş metni kontrol et
     for pattern in english_patterns:
         if re.search(pattern, t_normalized) or re.search(pattern, t):
             return "en"
 
-    # 2. Türkçe karakterler - AMA İngilizce kelimelerle birlikte değilse
-    turkish_chars = ["ş", "ğ", "ç", "ö", "ü"]  # "ı" çıkarıldı - klavye hatası olabilir
-    has_strong_turkish = any(char in t for char in turkish_chars)
-
-    # "ı" harfi varsa ama İngilizce kelimeler de varsa, İngilizce olabilir
-    has_i_nodot = "ı" in t
-
-    # 3. İngilizce kelimeler (SADECE İNGİLİZCE OLANLAR)
+    # EN/TR/DE/ES/FR/PT sözlük sinyalleri
     english_only_words = [
-        # Zamirler
+        "hello", "hi", "hey", "good morning", "good evening",
         " i ", "i'm", "i'd", "i've", "i'll", " me ", " my ", " you ", " your ",
         " we ", " our ", " he ", " she ", " they ", " their ",
-        # Yardımcı fiiller
         "can ", "could ", "would ", "should ", "will ",
         "don't", "didn't", "doesn't", "won't", "wouldn't", "couldn't",
-        # Soru kelimeleri
         "what ", "where ", "when ", "how ", "why ", "which ",
-        # Fiiller
         " book ", " reserve ", " want ", " need ", " like ",
         " said ", " told ",
-        # Otel kelimeleri (İNGİLİZCE ÖZGÜ)
         " table ", " room ", " person ", " people ", " guest ",
         " night ", " stay ", " breakfast ", " dinner ", " lunch ",
-        # Kibarlık
         "please", "thank", "thanks",
-        # Article'lar (Türkçe'de yok)
         " the ", " a ", " an ",
     ]
 
-    # Türkçe kelimeler (SADECE TÜRKÇE OLANLAR - "restaurant" YOK!)
     turkish_only_words = [
         "merhaba", "selam", "evet", "hayir", "tamam", "peki",
         "tesekkur", "lutfen", "rica",
@@ -279,32 +237,43 @@ def detect_language(text: str) -> str:
         "ben", "biz", "siz", "bu",
     ]
 
-    # Sayım (normalize edilmiş metin üzerinde)
+    german_words = ["hallo", "guten", "danke", "bitte", "zimmer", "preis", "reservierung", "buchung"]
+    spanish_words = ["hola", "gracias", "precio", "reserva", "habitacion", "habitación", "cuanto", "cuánto"]
+    french_words = ["bonjour", "merci", "prix", "reservation", "réservation", "chambre", "s'il", "svp"]
+    portuguese_words = ["olá", "ola", "obrigado", "obrigada", "preço", "preco", "reserva", "quarto"]
+
     english_count = sum(1 for word in english_only_words if word in t_normalized)
     turkish_count = sum(1 for word in turkish_only_words if word in t)
+    german_count = sum(1 for word in german_words if word in t_normalized)
+    spanish_count = sum(1 for word in spanish_words if word in t_normalized)
+    french_count = sum(1 for word in french_words if word in t_normalized)
+    portuguese_count = sum(1 for word in portuguese_words if word in t_normalized)
 
-    # Karar
-    # Eğer İngilizce kelime varsa ve güçlü Türkçe karakter yoksa → İngilizce
-    if english_count > 0 and not has_strong_turkish:
+    # Öncelik: EN > TR > RU > DE > AR > ES > FR > ZH > HI > PT
+    if english_count > 0:
         return "en"
-
-    # Güçlü Türkçe karakter varsa → Türkçe
+    turkish_chars = ["ş", "ğ", "ı", "ç"]
+    has_strong_turkish = any(char in t for char in turkish_chars)
     if has_strong_turkish:
         return "tr"
-
-    # Sadece "ı" varsa ama İngilizce kelimeler de varsa → İngilizce (klavye hatası)
-    if has_i_nodot and english_count > 0:
-        return "en"
-
     if turkish_count > 0:
         return "tr"
+    latin_scores = {
+        "de": german_count,
+        "es": spanish_count,
+        "fr": french_count,
+        "pt": portuguese_count,
+    }
+    top_lang = max(latin_scores, key=latin_scores.get)
+    if latin_scores[top_lang] > 0:
+        return top_lang
 
-    # Kısa ASCII mesajlar - selamlama kontrolü
+    # Kısa ASCII mesajlar -> EN
     if t in ["hello", "hi", "hey", "yes", "no", "ok", "okay"]:
         return "en"
 
-    # Varsayılan
-    return "tr"
+    # Kapsam dışı/kararsız -> EN
+    return "en"
 
 def detect_hotel(text: str) -> str:
     t = text.lower()
@@ -312,28 +281,103 @@ def detect_hotel(text: str) -> str:
         return "heritage"
     return "boutique"
 
+def _is_transfer_conversation_active(history: list) -> bool:
+    """Son mesajlarda aktif bir transfer konuşması olup olmadığını kontrol et.
+
+    Eğer bot son birkaç mesajda transfer bilgi toplama yapıyorsa (uçuş no,
+    kişi sayısı, bagaj vb. soruyorsa) → True döndür.
+    """
+    if not history:
+        return False
+    transfer_context_keywords = [
+        # Bot'un transfer bilgi toplama cümlelerinde geçen ifadeler
+        "transfer", "dalaman", "havalimanı", "airport", "трансфер", "аэропорт",
+        "uçuş", "uçuş numarası", "flight", "рейс",
+        "bagaj", "bavul", "valiz", "luggage", "baggage", "багаж",
+        "bebek koltuğu", "baby seat", "child seat", "детское кресло",
+        "şoförümüz", "driver", "водитель",
+        "iniş saati", "landing time", "время прилёта",
+        "75€", "75 €", "75 euro",
+    ]
+    # Son 6 mesajı (bot + kullanıcı) kontrol et
+    recent_messages = history[-6:]
+    recent_text = " ".join([m.get("content", "").lower() for m in recent_messages])
+    # En az 2 transfer anahtar kelimesi bulunmalı (tek "transfer" kelimesi yetmez)
+    match_count = sum(1 for kw in transfer_context_keywords if kw in recent_text)
+    return match_count >= 2
+
+
+def looks_like_transfer_message(text: str) -> bool:
+    """Mesaj transfer detaylarına benziyorsa True döndür."""
+    low_msg = (text or "").lower().strip()
+    if not low_msg:
+        return False
+
+    normalized = low_msg.replace("ı", "i")
+    transfer_core_keywords = [
+        "transfer", "havaliman", "havaalani", "airport", "dalaman", "antalya",
+        "ucus", "uçuş", "flight",
+    ]
+    transfer_detail_keywords = [
+        "bagaj", "bavul", "valiz", "luggage", "baggage", "багаж",
+        "bebek koltu", "baby seat", "child seat", "детское кресло",
+        "inis", "iniş", "varis", "varış", "landing",
+    ]
+
+    has_core = any(k in normalized for k in transfer_core_keywords)
+    detail_score = sum(1 for k in transfer_detail_keywords if k in normalized)
+    has_date_or_time = bool(
+        re.search(
+            r"\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s*(ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik)\b",
+            normalized,
+        )
+    )
+    has_flight_code = bool(re.search(r"\b[a-z]{2}\s*\d{3,4}\b", normalized))
+
+    # "2 kişi, 1 bagaj, 1 bebek koltuğu" gibi doğrudan transfer detay formatları
+    structured_transfer_payload = detail_score >= 2
+    return (has_core and (detail_score >= 1 or has_date_or_time or has_flight_code)) or structured_transfer_payload
+
+
 def detect_price_request(text: str, history: List[dict] = None) -> bool:
     t = text.lower().strip()
-    
+
+    # ÖNEMLİ: Aktif transfer konuşması varsa price flow tetiklenmemeli
+    if history and _is_transfer_conversation_active(history):
+        print("🚫 detect_price_request: Aktif transfer konuşması tespit edildi, price flow atlanıyor")
+        return False
+    if looks_like_transfer_message(t):
+        print("🚫 detect_price_request: Transfer detay mesajı tespit edildi, price flow atlanıyor")
+        return False
+
     short_price_questions = ["fiyat", "fiyat?", "fiyatı?", "fiyatı ne", "ne kadar", "kaç para", "price", "price?", "how much", "цена", "цена?", "сколько стоит", "стоимость"]
-    
+
     if any(t == q or t == q + "?" for q in short_price_questions):
         if history:
             recent_text = " ".join([m.get("content", "").lower() for m in history[-4:]])
             if any(kw in recent_text for kw in ["transfer", "dalaman", "antalya", "havalimanı", "airport"]):
                 return False
-    
+
     price_words = ["fiyat", "ücret", "gecelik", "price", "how much", "rate", "цена", "стоимость", "сколько", "тариф"]
     date_words = MONTHS_TR + MONTHS_EN + MONTHS_RU
     guest_words = ["yetişkin", "çocuk", "kişi", "adult", "kid", "person", "взрослый", "взрослых", "ребёнок", "детей", "человек"]
+    availability_words = ["müsait", "musait", "uygun", "available", "availability", "suitable"]
+    room_words = ["oda", "room"]
+    has_guest_signal = any(w in t for w in guest_words) or bool(
+        re.search(r"\d+\s*(kişi|yetişkin|çocuk|adult|adults|kid|kids|child|children|person)", t)
+    )
 
     score = 0
     if any(w in t for w in price_words):
         score += 1
     if any(w in t for w in date_words):
         score += 1
-    if any(w in t for w in guest_words) or re.search(r"\d+\s*(kişi|yetişkin|çocuk|adult|kid|person)", t):
+    if has_guest_signal:
         score += 1
+    # "Do you have a room suitable for 2 adults + 1 child?" gibi tarih içermeyen
+    # oda uygunluk sorularını fiyat/müsaitlik niyeti olarak yakala.
+    if has_guest_signal and any(w in t for w in availability_words) and any(w in t for w in room_words):
+        score = max(score, 2)
 
     return score >= 2
 
