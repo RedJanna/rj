@@ -1,0 +1,102 @@
+📋 Senaryo: S027 - Restoran Rezervasyon İptal V1
+Senaryo Kodu ve Adı: S027 - Restoran Rezervasyon İptal V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin restoran rezervasyon iptal talebini e-posta üzerinden almak, kaydı doğru şekilde eşleştirip iptali gerçekleştirmek ve misafire iptal onayı göndermek. Eşleşme bulunamazsa, iptal bildirimi yapılarak süreç canlı desteğe devredilir.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Bu akşamın masa rezervasyonunu iptal etmek istiyorum."
+
+"Rezervasyonumu iptal edebilir misiniz?"
+
+"Bu akşam için yaptığım rezervasyonu iptal edeceğim."
+
+"Restoran rezervasyonumu iptal etmek istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon Kodu / İsim: (Rezervasyon kodu varsa öncelikli; yoksa ad-soyad)
+
+Tarih: (GG/AA/YYYY formatında)
+
+Saat: (Örn: 20:30)
+
+Telefon: (İletişim numarası)
+
+İptal Nedeni (Opsiyonel): (Kısa açıklama)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin iptal talebi (intent), e-posta içeriğinin ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+İptal talebi net ise kayıt eşleştirme süreci başlatılır.
+
+Kayıt bulmak için aşağıdaki eşleştirme bilgileri kontrol edilir:
+- Rezervasyon kodu (varsa)
+- Alternatif olarak: isim + telefon
+- Destekleyici olarak: tarih + saat
+
+Eğer kayıt bulunduysa:
+- Rezervasyon iptal edilir.
+- Misafire iptal onayı e-postası gönderilir.
+
+Eğer eşleşme bulunamazsa:
+- Misafire, kaydı bulmak için ek bilgi istenir.
+- Yine de iptal bildirimi oluşturulur ve süreç canlı desteğe devredilir (misafirin talebi kayda alınmış olur).
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon: Kritik olmayan iptallerde ve eşleşme bulunduğunda iptal işlemi otomatik tamamlanır, onay mesajı gönderilir.
+
+Canlı Desteğe Aktarma: Eşleşme bulunamazsa veya bilgiler tutarsızsa, iptal bildirimi açılarak canlı destek ekibine devredilir.
+
+Fallback:
+- Misafir kodu bilmiyorsa, isim + telefon üzerinden devam edilir.
+- Tarih/saat eksikse, misafirden tek e-postada topluca istenir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İptal Talebi Alındı + Kayıt Bulma İçin Bilgi İsteme:
+
+"İptal talebinizi aldım. Kaydınızı bulup işlemi tamamlayabilmem için rezervasyon kodunuzu paylaşır mısınız? Kod yoksa ad-soyadınız ve telefon numaranızı iletebilir misiniz?"
+
+2. İptal Onayı (Kayıt Bulunduysa):
+
+"Teşekkür ederim. Rezervasyon kaydınız bulunmuş olup iptal işleminiz tamamlanmıştır.
+🗓️ Tarih: [Tarih]
+🕒 Saat: [Saat]
+👤 İsim: [İsim]
+Herhangi bir konuda tekrar yardımcı olmamı isterseniz bu e-postaya yanıt verebilirsiniz."
+
+3. Eşleşme Bulunamadı (Ek Bilgi Talebi + Bildirim):
+
+"Teşekkür ederim. Paylaştığınız bilgilerle rezervasyon kaydınızı şu an eşleştiremedim. Kontrol edebilmem için lütfen aşağıdakileri paylaşır mısınız?
+- Rezervasyon kodu (varsa)
+- Ad-soyad
+- Telefon
+- Tarih ve saat
+
+Bu arada iptal talebiniz kayda alınmıştır; ekibimiz gerekli kontrolü sağlayıp size dönüş yapacaktır."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Cancellation Received + Request Details to Locate Record:
+
+"I received your cancellation request. To locate your record and complete the cancellation, please share your booking code. If you don’t have it, please share your full name and phone number."
+
+2. Cancellation Confirmation (If Record Is Found):
+
+"Thank you. We have located your reservation and your cancellation has been completed.
+🗓️ Date: [Date]
+🕒 Time: [Time]
+👤 Name: [Name]
+If you need any further assistance, you may reply to this email."
+
+3. No Match Found (Request More Details + Notice):
+
+"Thank you. We couldn’t match your reservation with the details provided. Please share:
+- Booking code (if available)
+- Full name
+- Phone number
+- Date and time
+
+Meanwhile, your cancellation request has been recorded, and our team will review and get back to you."

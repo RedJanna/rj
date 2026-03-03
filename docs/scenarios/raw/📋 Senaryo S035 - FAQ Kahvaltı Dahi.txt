@@ -1,0 +1,63 @@
+📋 Senaryo: S035 - FAQ Kahvaltı Dahil V1
+Senaryo Kodu ve Adı: S035 - FAQ Kahvaltı Dahil V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin kahvaltının dahil olup olmadığı ve saat aralığıyla ilgili sorusuna telefon görüşmesi sırasında hızlı, net ve standart bilgi vermek; gerekirse konaklama bağlamını netleştirerek doğru yönlendirme yapmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Kahvaltı dahil mi, saat kaça kadar?"
+
+"Kahvaltı fiyata dahil mi?"
+
+"Kahvaltı saatleri nedir?"
+
+"Kahvaltı ne zaman başlıyor, ne zaman bitiyor?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+FAQ Konusu: (Kahvaltı dahil mi? / Kahvaltı saatleri)
+
+Dil: (TR/EN vb. - misafirin ifadesinin anlamından algılanır)
+
+Konaklama Bağlamı: (Misafirin mevcut rezervasyonu / konaklama planı varsa not edilir)
+
+Takip Sorusu: (Misafirin başka bir konuda desteğe ihtiyacı olup olmadığını soran kısa soru)
+
+Kayıt: (Görüşme kaydı/etiketi - ilgili FAQ konusu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin kahvaltı dahil mi ve saatleri nedir sorusuna yönelik niyeti (intent), ifadenin ANLAMINDAN (semantik) algılanır; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+FAQ konusu “kahvaltı” ise sabit bilgi verilir:
+- Kahvaltı 08:00 - 10:30 arasında servis edilir.
+- Kahvaltı fiyata dahildir.
+
+Misafir ek detay sorarsa (örn: “hangi alanda?”, “erken çıkış yapacağım”), konu kapsamında bilgi verilir; ihtiyaç halinde ilgili birime yönlendirilir.
+
+Yanıt sonrası kısa bir takip sorusu ile görüşme sürdürülür.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir aynı soruyu farklı şekilde tekrar ederse aynı sabit bilgi tekrar edilir ve takip sorusu korunur.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Kahvaltı 08:00-10:30 arasında servis edilir ve fiyata dahildir."
+
+2. Takip Sorusu:
+
+"Başka yardımcı olabileceğim bir konu var mı?"
+
+💬 Standart Yanıt Mesajları (EN)
+1. Information Reply:
+
+"Breakfast is served between 08:00-10:30 and is included in the price."
+
+2. Follow-up Question:
+
+"Is there anything else I can help you with?"

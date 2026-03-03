@@ -1,0 +1,51 @@
+📋 Senaryo: S019 - Acil Bugün Giriş V1
+Senaryo Kodu ve Adı: S019 - Acil Bugün Giriş V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Acil olarak aynı gün içinde veya gece geç saatte (sabaha karşı) otele giriş yapacağını bildiren misafirden gerekli varış bilgilerini almak, standart check-in saati kuralını net bir şekilde hatırlatmak ve durumu "acil" koduyla doğrudan resepsiyon/operasyon ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Bugün gece 01:30 gibi giriş yapacağım, acil teyit eder misiniz?"
+
+"Bu gece yarısı otele varıyorum, odam hazır olur mu?"
+
+"Sabaha karşı geleceğim, hemen check-in yapabilir miyim?"
+
+"Uçağım gece geç iniyor, otele geç saatte giriş yapacağım."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş Tarihi: (GG/AA/YYYY formatında konaklama başlangıç tarihi)
+
+Tahmini Varış Saati: (Gece geç veya sabaha karşı planlanan net geliş saati - resepsiyonun hazırlığı için)
+
+Rez ID / İsim: (Sistemde rezervasyonu bulmak ve doğrulamak için zorunludur)
+
+Telefon: (Acil durumlarda misafire hızlıca ulaşabilmek veya konum teyidi için)
+
+Özel Not: (Varsa uçuş gecikmesi veya ekstra taleplerin not alınması)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin acil giriş veya gece geç varış bildirme niyeti (intent), ilettiği mesajın genel anlamından (semantik) algılandığında sistem tetiklenir. "Bugün", "gece", "01:30" veya "acil" gibi spesifik kelime ya da saat eşleştirmeleri kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl varış bildirim niyeti bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) toplanır ve kontrol edilir.
+
+Eğer misafirden "gece yarısı/sabaha karşı erken giriş" talebi gelirse, sistem kural olarak otel check-in saatinin 14:00'dan sonra olduğunu misafire net bir şekilde belirtir. Bu aşamada misafiri yanıltmamak adına kesinlikle erken giriş için "müsaitlik" ifadesi kullanılmaz veya garanti verilmez.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Hard Devir): Acil giriş veya standart dışı saatte varış talebi, resepsiyon operasyonu için aciliyet (Acil_durum) taşıdığından, bot ön bilgilendirmeyi yaptıktan sonra işlemi kendi başına sonlandırmaz. Sohbet, tüm detaylarla birlikte doğrudan resepsiyon veya gece müdürü ekibine "Hard Devir" (kesin aktarım) yapılarak atanır.
+
+SLA Süresi: Aktarılan bu acil duruma operasyon ekibi tarafından en geç 10 dakika (SLA hedefi) içerisinde müdahale edilmesi ve teyit dönülmesi zorunludur.
+
+💬 Standart Yanıt Mesajları
+
+1. Bilgilendirme ve Acil Aktarım (TR):
+
+"Otele giriş 14:00'dan sonradır; giriş gününüzde 14:00 sonrası istediğiniz saatte gelebilirsiniz. Talebinizi acil olarak ekibe iletiyorum."
+
+2. Bilgilendirme ve Acil Aktarım (EN):
+
+"Check-in starts after 14:00; you may arrive at any time after 14:00 on your check-in day. I am escalating this as urgent."

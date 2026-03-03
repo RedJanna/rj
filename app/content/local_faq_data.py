@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from typing import Dict, Tuple
 
 
@@ -48,17 +50,43 @@ LOCAL_FAQ: Dict[str, Dict[str, object]] = {
         "answer_en": "Yes, free parking is available.",
         "answer_ru": "Да, бесплатная парковка доступна.",
     },
+    "plaj_tipi": {
+        "keywords": [
+            "kumlu", "kum mu", "kumlu mu", "taşlı", "tasli", "taş mı", "tas mi",
+            "çakıllı", "cakilli", "çakıl", "cakil", "plaj tipi", "kumsal tipi",
+            "kumlu bir plaj", "plaj kumlu mu",
+        ],
+        "answer_tr": "Ölüdeniz bölgesindeki plaj yapısı karma karakterdedir; sahilde kum ve yer yer çakıllı/taşlı alanlar bulunabilir. En konforlu kullanım için deniz ayakkabısı önerilir.",
+        "answer_en": "Beach structure in the Ölüdeniz area is mixed; you may find sandy parts as well as pebbly/rocky sections. We recommend sea shoes for comfort.",
+        "answer_ru": "Пляжи в районе Олюдениза смешанного типа: есть песчаные участки, а также местами галька/камни. Для комфорта рекомендуем акваобувь.",
+    },
     "plaj": {
-        "keywords": ["plaj", "deniz", "beach", "sea", "kumsal", "denize uzaklık", "пляж", "море", "до моря", "до пляжа"],
+        "keywords": ["plaj", "beach", "kumsal", "denize uzaklık", "пляж", "до моря", "до пляжа"],
         "answer_tr": "Plaj otelimize yaklaşık 300 metre uzaklıktadır.",
         "answer_en": "The beach is approximately 300 meters from our hotel.",
         "answer_ru": "Пляж находится примерно в 300 метрах от нашего отеля.",
     },
     "transfer": {
-        "keywords": ["transfer fiyat", "transfer ücret", "transfer kaç", "havalimanı transfer", "airport transfer", "трансфер", "трансфер из аэропорта"],
-        "answer_tr": "Dalaman veya Antalya havalimanından transfer ücreti tek yön 75€'dur (nakit ödeme).",
-        "answer_en": "Airport transfer from Dalaman or Antalya is 75€ one way (cash payment).",
-        "answer_ru": "Трансфер из аэропорта Даламан или Анталья — 75€ в одну сторону (оплата наличными).",
+        "keywords": [
+            "transfer fiyat",
+            "transfer ücret",
+            "transfer ucret",
+            "transfer kaç",
+            "transfer kac",
+            "havalimanı transfer",
+            "havalimani transfer",
+            "havalimani transferi",
+            "airport transfer",
+            "tek yön",
+            "tek yon",
+            "gidiş-dönüş",
+            "gidis-donus",
+            "трансфер",
+            "трансфер из аэропорта",
+        ],
+        "answer_tr": "Dalaman Havalimanı'ndan otelimize transfer ücreti tek yön 75€'dur (nakit ödeme). Gidiş-dönüş toplam 150€ olarak hesaplanır. Antalya Havalimanı'ndan da transfer hizmetimiz mevcuttur; detaylı bilgi için sizi müşteri temsilcimize bağlıyoruz.",
+        "answer_en": "Transfer from Dalaman Airport to our hotel is 75€ one way (cash payment). Round-trip is 150€ in total. We also provide transfers from Antalya Airport; we are connecting you to our representative for detailed information.",
+        "answer_ru": "Трансфер из аэропорта Даламан до нашего отеля — 75€ в одну сторону (оплата наличными). Туда-обратно — 150€ в сумме. Мы также предоставляем трансфер из аэропорта Анталья; для подробной информации мы соединяем вас с нашим представителем.",
     },
     "sezon": {
         "keywords": ["sezon", "açık mısınız", "kapalı mısınız", "ne zaman açık", "açılış", "kapanış", "open", "closed", "сезон", "когда открыт", "когда закрыт"],
@@ -67,7 +95,11 @@ LOCAL_FAQ: Dict[str, Dict[str, object]] = {
         "answer_ru": "Наш отель обычно работает с середины апреля до середины ноября. Для уточнения дат открытия и закрытия, пожалуйста, позвоните нам: +90 533 250 32 77",
     },
     "telefon": {
-        "keywords": ["telefon", "numara", "iletişim", "arayabilir", "contact", "phone", "call", "телефон", "позвонить", "контакт", "связаться"],
+        "keywords": [
+            "telefon", "numara", "iletişim", "iletişime", "iletisim", "iletisime",
+            "resepsiyon", "ressepsiyon", "reception", "whatsapp",
+            "arayabilir", "contact", "phone", "call", "телефон", "позвонить", "контакт", "связаться",
+        ],
         "answer_tr": "Bize +90 533 250 32 77 numaralı telefondan veya WhatsApp'tan ulaşabilirsiniz.",
         "answer_en": "You can reach us at +90 533 250 32 77 by phone or WhatsApp.",
         "answer_ru": "Вы можете связаться с нами по телефону +90 533 250 32 77 или через WhatsApp.",
@@ -120,10 +152,27 @@ LOCAL_FAQ: Dict[str, Dict[str, object]] = {
         "answer_en": "To change or cancel your reservation, please provide us with:\n\n📋 Your reservation number (if available)\n📅 New date/time (for changes)\n👤 Your name\n\nWe will process your request as soon as possible. Thank you! 😊",
         "answer_ru": "Для изменения или отмены бронирования, пожалуйста, сообщите нам:\n\n📋 Номер бронирования (если есть)\n📅 Новая дата/время (для изменения)\n👤 Ваше имя\n\nМы обработаем ваш запрос в кратчайшие сроки. Спасибо! 😊",
     },
+    "rez_id_bilgisi": {
+        "keywords": ["rez id", "rezid", "rez no", "rez numarası", "rezervasyon id", "rezervasyon no", "rez id nedir", "rezervasyon numarası nedir"],
+        "answer_tr": "Rezervasyon numarası, konfirmasyon formunda yer alan kimlik bilgisidir. Elektra ekranında aynı bilgi Voucher No olarak da görünebilir.",
+        "answer_en": "Your reservation number is shown on your confirmation form. In Elektra, the same reference may appear as Voucher No.",
+        "answer_ru": "Номер бронирования указан в форме подтверждения. В системе Elektra этот же номер может отображаться как Voucher No.",
+    },
 }
 
 
-LOCAL_MAX_WORDS = 0  # DEVRE DISI - Tum sorular OpenAI'a gidecek
+def _read_local_max_words() -> int:
+    raw = (os.getenv("LOCAL_MAX_WORDS") or "").strip()
+    if not raw:
+        return 8
+    try:
+        value = int(raw)
+    except Exception:
+        return 8
+    return max(3, min(10, value))
+
+
+LOCAL_MAX_WORDS = _read_local_max_words()
 
 
 CANONICAL_LOCAL_REPLIES_TR: Dict[str, str] = {
@@ -135,7 +184,7 @@ CANONICAL_LOCAL_REPLIES_TR: Dict[str, str] = {
     "kanonik_check": "Check-in saatimiz 14:00, check-out saatimiz 12:00'dir.",
     "kanonik_sezon": "Otelimiz 10 Nisan - 10 Kasım tarihleri arasında açıktır.",
     "kanonik_konum": "Otelimiz Fethiye / Ölüdeniz merkezinde yer almaktadır.",
-    "kanonik_transfer": "Dalaman veya Antalya havalimanından transfer ücreti tek yön 75€ (75 euro)'dur (nakit ödeme).",
+    "kanonik_transfer": "Dalaman Havalimanı'ndan otelimize transfer ücreti tek yön 75€ (75 euro)'dur (nakit ödeme). Gidiş-dönüş toplam 150€ olarak hesaplanır. Antalya Havalimanı'ndan da transfer hizmetimiz mevcuttur; detaylı bilgi için sizi müşteri temsilcimize bağlıyoruz.",
     "kanonik_havuz": "Evet, açık havuzumuz var. Havuz ısıtmasızdır.",
     "local_otel_rezervasyon": "Elbette oda rezervasyonunuz için yardımcı olabilirim. 🏨\n\nLütfen şu bilgileri paylaşın: giriş-çıkış tarih(leri), kaç kişi (yetişkin/çocuk), varış saati (saat) ve oda tipi.\nNot: Check-in saatimiz 14:00, check-out saatimiz 12:00'dir.",
     "local_olanak_spa": "Otelimizde spa ve masaj hizmeti mevcut değildir. Dilerseniz size yakın öneriler için yardımcı olabilirim.",
@@ -162,14 +211,140 @@ def normalize_local_faq_reply(reply: str, category: str, lang: str) -> str:
     return reply
 
 
+def _looks_like_multi_intent_booking_query(text_lower: str) -> bool:
+    if not text_lower:
+        return False
+
+    has_date = bool(
+        re.search(r"\b\d{1,2}\s*[-–—]\s*\d{1,2}\b", text_lower)
+        or re.search(r"\b20\d{2}\b", text_lower)
+        or re.search(r"\d{4}\s*年\s*\d{1,2}\s*月", text_lower)
+        or any(month in text_lower for month in ("august", "ağustos", "август", "agosto", "août", "agosto", "8月"))
+    )
+    has_guest = bool(
+        re.search(
+            r"\b\d+\s*(adult|adults|guest|guests|yeti[şs]kin|ki[şs]i|child|children|cocuk|çocuk|взросл|дет|человек|位|成人)\b",
+            text_lower,
+        )
+    )
+    has_room_or_price = any(
+        marker in text_lower
+        for marker in (
+            "room",
+            "oda",
+            "standard room",
+            "sea view",
+            "deniz manzara",
+            "price",
+            "total",
+            "fiyat",
+            "ücret",
+            "ucret",
+            "стоимость",
+            "цена",
+            "precio",
+            "prix",
+            "preço",
+            "价格",
+        )
+    )
+    has_booking_action = any(
+        marker in text_lower
+        for marker in (
+            "book",
+            "booking",
+            "reservation",
+            "reserve",
+            "rezervasyon",
+            "rezerv",
+            "брони",
+            "бронь",
+            "оформить",
+            "подтверждение",
+        )
+    )
+    has_operational_detail = any(
+        marker in text_lower
+        for marker in (
+            "check-in",
+            "check out",
+            "check-out",
+            "late check",
+            "заезд",
+            "выезд",
+            "transfer",
+            "трансфер",
+            "payment",
+            "оплат",
+            "deposit",
+            "depozit",
+            "kapora",
+            "passport",
+            "паспорт",
+        )
+    )
+
+    signal_count = sum([has_date, has_guest, has_room_or_price, has_booking_action, has_operational_detail])
+    return signal_count >= 2
+
+
 def check_local_faq(text: str) -> Tuple[bool, str, str, str, str]:
     """
     Local FAQ kontrolü.
     Returns: (found, answer_tr, answer_en, category, answer_ru)
     """
     text_lower = (text or "").lower().strip()
+    # Raw contact payloads (email/URL-ish) should not trigger FAQ keyword matching.
+    # Example: "ivan.petrov@example.com" accidentally contains "pet".
+    if re.search(r"\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b", text_lower):
+        return False, "", "", "", ""
+
+    # Çok net birleşik soru: check-in + check-out + geç çıkış
+    has_checkin_signal = any(k in text_lower for k in ["check-in", "check in", "kaçta giriş", "giriş saati", "giris saati"])
+    has_checkout_signal = any(k in text_lower for k in ["check-out", "check out", "kaçta çıkış", "çıkış saati", "cikis saati"])
+    if has_checkin_signal and has_checkout_signal:
+        return (
+            True,
+            "Check-in saatimiz 14:00, check-out saatimiz 12:00'dir. Geç çıkış talebi müsaitlik durumuna göre değerlendirilir; lütfen resepsiyon ile iletişime geçiniz.",
+            "Check-in is at 14:00 and check-out is at 12:00. Late check-out is subject to availability; please contact reception.",
+            "check_in_out",
+            "Заезд с 14:00, выезд до 12:00. Поздний выезд возможен при наличии свободных номеров; пожалуйста, свяжитесь с ресепшеном.",
+        )
+
     word_count = len(text_lower.split())
     if word_count > LOCAL_MAX_WORDS:
+        # Uzun kahvaltı içerik sorularında (dahil mi/saat) deterministic cevap ver.
+        if (
+            ("kahvaltı" in text_lower or "kahvalti" in text_lower or "breakfast" in text_lower)
+            and any(k in text_lower for k in ["dahil", "included", "saat", "kaçta", "kacta"])
+            and not any(k in text_lower for k in ["rezervasyon", "reservation", "book", "ayirt", "ayırt"])
+        ):
+            data = LOCAL_FAQ.get("kahvalti", {})
+            return (
+                True,
+                str(data.get("answer_tr", "")),
+                str(data.get("answer_en", "")),
+                "kahvalti",
+                str(data.get("answer_ru", data.get("answer_en", ""))),
+            )
+
+        # Uzun mesajlarda sadece güçlü, düşük-risk FAQ'ları yakala.
+        # Bu sayede fiyat/rezervasyon akışını bölmeden "plaj kumlu mu taşlı mı"
+        # gibi sorulara yine de tutarlı cevap verilir.
+        # İletişim/resepsiyon soruları da düşük-risk olduğu için yakalanır.
+        long_message_has_booking_context = _looks_like_multi_intent_booking_query(text_lower)
+        strong_categories = ("plaj_tipi", "plaj") if long_message_has_booking_context else ("telefon", "plaj_tipi", "plaj", "transfer")
+        for category in strong_categories:
+            data = LOCAL_FAQ.get(category, {})
+            for keyword in data.get("keywords", []):
+                if str(keyword).lower() in text_lower:
+                    return (
+                        True,
+                        str(data.get("answer_tr", "")),
+                        str(data.get("answer_en", "")),
+                        category,
+                        str(data.get("answer_ru", data.get("answer_en", ""))),
+                    )
         return False, "", "", "", ""
 
     for category, data in LOCAL_FAQ.items():

@@ -18,6 +18,15 @@ from datetime import datetime
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Generator, Dict, Any
 
+import fastapi.testclient as fastapi_testclient
+import starlette.testclient as starlette_testclient
+import fastapi.concurrency as fastapi_concurrency
+import fastapi.dependencies.utils as fastapi_dependency_utils
+import fastapi.routing as fastapi_routing
+import starlette.concurrency as starlette_concurrency
+
+from tests.asgi_testclient_compat import TestClientCompat
+
 # Proje kökünü Python path'e ekle
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -27,6 +36,22 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-real")
 os.environ.setdefault("WHATSAPP_PHONE_ID", "test-phone-id")
 os.environ.setdefault("WHATSAPP_TOKEN", "test-token")
 os.environ.setdefault("KASSANDRA_ENV", "test")
+
+# Compatibility patch: Starlette/FastAPI TestClient can block in this runtime.
+fastapi_testclient.TestClient = TestClientCompat
+starlette_testclient.TestClient = TestClientCompat
+
+
+async def _run_in_threadpool_compat(func, *args, **kwargs):
+    # CI/runtime bug workaround: anyio threadpool path can block indefinitely.
+    # Test suite uses lightweight sync callables; running inline is safe here.
+    return func(*args, **kwargs)
+
+
+starlette_concurrency.run_in_threadpool = _run_in_threadpool_compat
+fastapi_concurrency.run_in_threadpool = _run_in_threadpool_compat
+fastapi_dependency_utils.run_in_threadpool = _run_in_threadpool_compat
+fastapi_routing.run_in_threadpool = _run_in_threadpool_compat
 
 
 # ======================================================

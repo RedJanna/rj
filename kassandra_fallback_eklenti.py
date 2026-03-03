@@ -1,21 +1,38 @@
 # ============================================================
 # KASSANDRA BOT - FALLBACK & GÜVENLİK EKLENTİSİ
 # ============================================================
-# Bu dosyayı C:/KassandraOpenAI/ klasörüne koy
-# Mevcut bot dosyasında "from kassandra_fallback_eklenti import *" ekle
+# Bu dosyayı proje kökünde tut ve mevcut bot dosyasında import et.
+# İsteğe bağlı: KASSANDRA_ROOT ve ilgili dosya env değişkenleriyle yollar override edilebilir.
 # ============================================================
 
 from datetime import datetime, timedelta
 from pathlib import Path
 import json
+import os
 import re
 import time
+
+# ======================================================
+# DOSYA YOLU ÇÖZÜMLEME (ÇAPRAZ ORTAM)
+# ======================================================
+
+_PROJECT_ROOT = Path(
+    (os.getenv("KASSANDRA_ROOT") or str(Path(__file__).resolve().parent)).strip()
+).expanduser()
+
+
+def _resolve_state_file(env_var: str, default_name: str) -> Path:
+    raw = (os.getenv(env_var) or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return _PROJECT_ROOT / default_name
+
 
 # ======================================================
 # RATE LIMITING (FLOOD KORUMASI)
 # ======================================================
 
-RATE_LIMIT_FILE = Path("C:/KassandraOpenAI/rate_limits.json")
+RATE_LIMIT_FILE = _resolve_state_file("KASSANDRA_RATE_LIMIT_FILE", "rate_limits.json")
 RATE_LIMIT_WINDOW_SECONDS = 60  # 60 saniye içinde
 RATE_LIMIT_MAX_MESSAGES = 10   # Maksimum 10 mesaj
 RATE_LIMIT_BLOCK_MINUTES = 5   # Aşınca 5 dakika blokla
@@ -99,7 +116,7 @@ def unblock_rate_limit(phone: str) -> bool:
 # GÜVENLİ MOD
 # ======================================================
 
-SAFE_MODE_FILE = Path("C:/KassandraOpenAI/safe_mode.json")
+SAFE_MODE_FILE = _resolve_state_file("KASSANDRA_SAFE_MODE_FILE", "safe_mode.json")
 
 def load_safe_mode() -> dict:
     if SAFE_MODE_FILE.exists():
@@ -193,7 +210,7 @@ def get_fallback_error_message(lang: str = "tr") -> str:
 # HATA SAYACI (Otomatik güvenli mod)
 # ======================================================
 
-ERROR_COUNTER_FILE = Path("C:/KassandraOpenAI/error_counter.json")
+ERROR_COUNTER_FILE = _resolve_state_file("KASSANDRA_ERROR_COUNTER_FILE", "error_counter.json")
 ERROR_THRESHOLD = 5  # 5 hata üst üste gelirse güvenli moda geç
 ERROR_WINDOW_MINUTES = 10
 

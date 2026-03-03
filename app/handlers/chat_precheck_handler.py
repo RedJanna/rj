@@ -1,6 +1,87 @@
 from __future__ import annotations
 
 import re
+from app.services.operational_rule_service import evaluate_operational_reservation_rule
+
+
+def _looks_like_price_availability_followup(user_message: str) -> bool:
+    text = (user_message or "").lower().strip()
+    if not text:
+        return False
+    price_markers = [
+        "fiyat", "ücret", "ucret", "fark",
+        "müsait", "musait", "availability", "available",
+        "oda", "room", "manzara", "view",
+        "tl", "₺", "eur", "usd", "euro", "dolar",
+    ]
+    anchors = [
+        "aynı tarihlerde", "ayni tarihlerde", "bu tarihlerde", "o tarihlerde",
+        "same dates", "varsa", "ne kadar", "kaç", "kac",
+    ]
+    hard_operation_markers = [
+        "rezervasyonumu", "rezervasyonum", "bookingimi",
+        "iptal", "iade", "değiş", "degis", "güncelle", "guncelle",
+        "update", "cancel", "modify",
+        "voucher", "rez id", "rez no", "rezervasyon no", "rezervasyon id",
+    ]
+
+    if any(k in text for k in hard_operation_markers):
+        return False
+    has_price_signal = any(k in text for k in price_markers)
+    has_question_signal = ("?" in text) or any(k in text for k in ["ne kadar", "kaç", "kac", "müsait mi", "musait mi"])
+    has_anchor = any(k in text for k in anchors)
+    return has_price_signal and has_question_signal and has_anchor
+
+
+def _looks_like_payment_completed_confirmation(user_message: str) -> bool:
+    text = (user_message or "").lower().strip()
+    if not text:
+        return False
+
+    if len(text) < 4:
+        return False
+
+    question_like_markers = [
+        "?",
+        "ödeme linki",
+        "odeme linki",
+        "payment link",
+        "nasıl öde",
+        "nasil ode",
+        "how can i pay",
+        "payment method",
+        "ödeme yöntemi",
+        "odeme yontemi",
+        "kapora ne kadar",
+        "depozito ne kadar",
+    ]
+    if any(marker in text for marker in question_like_markers):
+        return False
+
+    done_patterns = [
+        r"\bödemeyi?\s+yapt(?:ı|i)m\b",
+        r"\bodemeyi?\s+yaptim\b",
+        r"\bödeme\s+tamam(?:landı|landi)?\b",
+        r"\bodeme\s+tamam(?:landi)?\b",
+        r"\bödedim\b",
+        r"\bodedim\b",
+        r"\bkaporayı?\s+yatırd(?:ı|i)m\b",
+        r"\bkaporayi?\s+yatirdim\b",
+        r"\bdepozito(?:yu)?\s+yatırd(?:ı|i)m\b",
+        r"\bdepozito(?:yu)?\s+yatirdim\b",
+        r"\bhavale\s+yapt(?:ı|i)m\b",
+        r"\beft\s+yapt(?:ı|i)m\b",
+        r"\bdekont(?:u)?\s+(?:gönderdim|gonderdim|attım|attim)\b",
+        r"\bi\s+(?:already\s+)?paid\b",
+        r"\bpayment\s+(?:is\s+)?(?:done|completed|sent)\b",
+        r"\btransfer\s+(?:is\s+)?(?:done|sent)\b",
+        r"\bpaid\b",
+        r"\bоплат(?:ил|ила|или)\b",
+    ]
+    if any(re.search(pattern, text) for pattern in done_patterns):
+        return True
+
+    return False
 
 
 async def run_chat_prechecks(
@@ -15,6 +96,7 @@ async def run_chat_prechecks(
     is_auto_safe_mode_fn,
     check_rate_limit_fn,
     is_automation_enabled_fn,
+    is_operational_rules_enabled_fn,
     is_blacklisted_fn,
     is_paused_fn,
     cancel_followup_fn,
@@ -28,6 +110,9 @@ async def run_chat_prechecks(
     detect_critical_issue_fn,
     send_critical_notification_fn,
     response_factory,
+    notify_admin_handoff_fn,
+    activate_human_takeover_fn,
+    flow_context=None,
 ):
     persisted_conversation = load_conversation_fn(phone) if phone else {"messages": []}
     persisted_messages = persisted_conversation.get("messages", []) if isinstance(persisted_conversation, dict) else []
@@ -112,6 +197,65 @@ async def run_chat_prechecks(
 
     cancel_followup_fn(phone)
     history = get_conversation_history_fn(phone)
+
+    # "Ödemeyi yaptım" benzeri teyit mesajları canlı ekibe anlık bildirilir.
+    # Mesaj işlenmeye devam eder; bu tetik sadece admin'e görünür alarm içindir.
+    if _looks_like_payment_completed_confirmation(user_message):
+        try:
+            await notify_admin_handoff_fn(
+                category="odeme_bildirimi",
+                priority="high",
+                customer_phone=phone or "Bilinmiyor",
+                customer_message=user_message,
+                source="chat_precheck.payment_confirmation",
+                detected_intent="PAYMENT_CONFIRMED",
+                confidence=0.95,
+                conversation_summary="customer_reports_payment_completed",
+                attempted_actions=["payment_confirmation_detected"],
+                suggested_reply="Müşteri ödemeyi yaptığını belirtiyor; dekont/rezervasyon teyidi kontrol edilsin.",
+                tags=["payment_confirmation", "payment_ops"],
+                correlation_id=(flow_context.correlation_id if flow_context else ""),
+            )
+        except Exception:
+            pass
+
+    # Deterministik operasyon kural katmani (LLM oncesi)
+    try:
+        op_result = None
+        if is_operational_rules_enabled_fn() and not _looks_like_price_availability_followup(user_message):
+            op_result = evaluate_operational_reservation_rule(user_message, persisted_messages, lang=lang)
+        if op_result:
+            if op_result.get("notify_admin_handoff"):
+                try:
+                    await notify_admin_handoff_fn(
+                        category=op_result.get("handoff_category", "canli_destek"),
+                        priority=op_result.get("handoff_priority", "medium"),
+                        customer_phone=phone or "Bilinmiyor",
+                        customer_message=user_message,
+                        source="chat_precheck.operational_rule",
+                        detected_intent="OPERATIONAL_RULE",
+                        confidence=1.0,
+                        conversation_summary=op_result.get("handoff_reason", "operational_rule_trigger"),
+                        attempted_actions=["evaluate_operational_reservation_rule"],
+                        suggested_reply=(op_result.get("reply") or "")[:240],
+                        tags=["operational_rule"],
+                        correlation_id=(flow_context.correlation_id if flow_context else ""),
+                    )
+                except Exception:
+                    pass
+            if op_result.get("activate_human_takeover"):
+                try:
+                    activate_human_takeover_fn(phone, reason=op_result.get("handoff_reason", "operational_rule"))
+                except Exception:
+                    pass
+
+            reply = op_result.get("reply", "")
+            add_to_history_fn(phone, "user", user_message)
+            add_to_history_fn(phone, "assistant", reply)
+            save_message_fn(phone, user_message, f"[OPERATIONAL_RULE] {reply}")
+            return {"response": response_factory(reply=reply, status=op_result.get("status", "operational_rule")), "lang": lang, "history": history}
+    except Exception:
+        pass
 
     try:
         cancel_reply = await handle_cancel_flow_v2_fn(phone, user_message)

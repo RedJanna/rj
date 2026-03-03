@@ -1,0 +1,59 @@
+📋 Senaryo: S039 - FAQ Sezon Dışı V1
+Senaryo Kodu ve Adı: S039 - FAQ Sezon Dışı V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin belirli bir tarihte (örn: Aralık) otelin açık olup olmadığını sorduğu durumlarda, otelin hizmet verdiği sezon aralığını net şekilde paylaşmak ve gerekirse alternatif dönem için yönlendirme yapmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Aralık ayında açık mısınız?"
+
+"Kışın hizmet veriyor musunuz?"
+
+"Kasım’dan sonra açık mı?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Talep Edilen Tarih: (Misafirin sorduğu dönem/tarih)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Sezon Kuralı: (10 Nisan - 10 Kasım arası açık)
+
+Alternatif Dönem: (Uygun alternatif sezon dönemi önerisi - genel)
+
+Takip Sorusu: (Misafirin planladığı tarihler için destek sorusu)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin sorusu (intent), mesajın ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+Talep edilen tarih 10 Nisan - 10 Kasım aralığı dışında ise:
+- Otelin bu tarihler dışında kapalı olduğu net şekilde belirtilir.
+- Misafir isterse alternatif dönem için tarih bilgisini paylaşmaya davet edilir.
+
+Talep edilen tarih sezon içindeyse, ilgili rezervasyon bilgilendirme akışına yönlendirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir net tarih vermezse, planladığı tarih aralığı sorulur.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Otelimiz 10 Nisan - 10 Kasım arasında hizmet verir; bu tarihler dışında kapalıyız."
+
+2. Takip Sorusu:
+
+"Dilerseniz planladığınız tarih aralığını paylaşabilirsiniz; size uygun dönem için yardımcı olabilirim."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Information Reply:
+
+"Our hotel operates between April 10 and November 10; we are closed outside these dates."
+
+2. Follow-up Question:
+
+"If you share your preferred dates, I can help you with the suitable period."

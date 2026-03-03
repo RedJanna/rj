@@ -20,6 +20,14 @@ from app.core.auth_service import (
     enable_2fa, disable_2fa, get_totp_uri,
     AdminUser, Session
 )
+from app.core.admin_auth import (
+    require_permission,
+    get_auth_lockout_status,
+    record_auth_failure,
+    record_auth_success,
+)
+from app.services.structured_log_service import log_event
+from app.services.metrics_service import record_metric
 from app.web.login_page import (
     LOGIN_PAGE_HTML, VERIFY_2FA_PAGE_HTML, 
     SETUP_2FA_PAGE_HTML, USER_MANAGEMENT_PAGE_HTML
@@ -94,14 +102,6 @@ def require_auth(request: Request) -> AdminUser:
     return user
 
 
-def require_admin_role(request: Request) -> AdminUser:
-    """Admin rolü gerekli"""
-    user = require_auth(request)
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin yetkisi gerekli")
-    return user
-
-
 def generate_qr_url(username: str, secret: str) -> str:
     """Google Charts API ile QR kod URL'si oluştur"""
     uri = get_totp_uri(username, secret)
@@ -156,7 +156,7 @@ async def setup_2fa_page(request: Request):
 
 
 @router.get("/admin/users-page", response_class=HTMLResponse)
-async def users_management_page(request: Request, user: AdminUser = Depends(require_admin_role)):
+async def users_management_page(request: Request, user: AdminUser = Depends(require_permission("admin.users.manage"))):
     """Kullanıcı yönetim sayfası (sadece admin)"""
     return HTMLResponse(content=USER_MANAGEMENT_PAGE_HTML)
 
@@ -180,17 +180,110 @@ async def logout(request: Request, response: Response):
 @router.post("/auth/login")
 async def login(request: Request, data: LoginRequest, response: Response):
     """Giriş yap"""
+    client_ip = request.client.host if request.client else "unknown"
+    correlation_id = getattr(request.state, "correlation_id", None)
+    username = (data.username or "").strip().lower()
+    locked, retry_sec = get_auth_lockout_status(data.username, client_ip)
+    if locked:
+        log_event(
+            "security.auth.login.locked",
+            level="WARNING",
+            correlation_id=correlation_id,
+            username=username,
+            ip=client_ip,
+            retry_after_sec=retry_sec,
+        )
+        try:
+            record_metric(
+                event="security.auth.login.locked",
+                category="security",
+                meta={"username": username, "ip": client_ip, "retry_after_sec": retry_sec},
+            )
+        except Exception:
+            pass
+        return JSONResponse(
+            status_code=429,
+            content={
+                "success": False,
+                "message": "Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin.",
+                "retry_after_sec": retry_sec,
+            },
+            headers={"Retry-After": str(retry_sec)},
+        )
+
     # Authenticate
     success, user, message = authenticate(data.username, data.password)
     
     if not success:
+        now_locked, now_retry = record_auth_failure(data.username, client_ip)
+        if now_locked:
+            log_event(
+                "security.auth.login.locked",
+                level="WARNING",
+                correlation_id=correlation_id,
+                username=username,
+                ip=client_ip,
+                retry_after_sec=now_retry,
+            )
+            try:
+                record_metric(
+                    event="security.auth.login.locked",
+                    category="security",
+                    meta={"username": username, "ip": client_ip, "retry_after_sec": now_retry},
+                )
+            except Exception:
+                pass
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "success": False,
+                    "message": "Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin.",
+                    "retry_after_sec": now_retry,
+                },
+                headers={"Retry-After": str(now_retry)},
+            )
+        log_event(
+            "security.auth.login.failed",
+            level="WARNING",
+            correlation_id=correlation_id,
+            username=username,
+            ip=client_ip,
+            reason=message,
+        )
+        try:
+            record_metric(
+                event="security.auth.login.failed",
+                category="security",
+                meta={"username": username, "ip": client_ip, "reason": message},
+            )
+        except Exception:
+            pass
         return JSONResponse(
             status_code=401,
             content={"success": False, "message": message}
         )
+    record_auth_success(data.username, client_ip)
+    log_event(
+        "security.auth.login.success",
+        correlation_id=correlation_id,
+        username=username,
+        ip=client_ip,
+        requires_2fa=bool(getattr(user, "totp_enabled", False)),
+    )
+    try:
+        record_metric(
+            event="security.auth.login.success",
+            category="security",
+            meta={
+                "username": username,
+                "ip": client_ip,
+                "requires_2fa": bool(getattr(user, "totp_enabled", False)),
+            },
+        )
+    except Exception:
+        pass
     
     # Session oluştur
-    client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
     
     token = create_session(
@@ -301,14 +394,14 @@ async def enable_2fa_endpoint(request: Request, data: Verify2FARequest):
 # ======================================================
 
 @router.get("/auth/users")
-async def get_users(request: Request, user: AdminUser = Depends(require_admin_role)):
+async def get_users(request: Request, user: AdminUser = Depends(require_permission("admin.users.manage"))):
     """Tüm kullanıcıları listele"""
     users = list_users()
     return {"success": True, "users": users}
 
 
 @router.post("/auth/users")
-async def add_user(request: Request, data: CreateUserRequest, user: AdminUser = Depends(require_admin_role)):
+async def add_user(request: Request, data: CreateUserRequest, user: AdminUser = Depends(require_permission("admin.users.manage"))):
     """Yeni kullanıcı oluştur"""
     success, message, totp_secret = create_user(
         username=data.username,
@@ -334,7 +427,7 @@ async def add_user(request: Request, data: CreateUserRequest, user: AdminUser = 
 
 
 @router.delete("/auth/users/{username}")
-async def remove_user(username: str, request: Request, user: AdminUser = Depends(require_admin_role)):
+async def remove_user(username: str, request: Request, user: AdminUser = Depends(require_permission("admin.users.manage"))):
     """Kullanıcı sil"""
     if username == user.username:
         return JSONResponse(
@@ -354,7 +447,7 @@ async def remove_user(username: str, request: Request, user: AdminUser = Depends
 
 
 @router.put("/auth/users/{username}/password")
-async def reset_user_password(username: str, data: UpdatePasswordRequest, request: Request, user: AdminUser = Depends(require_admin_role)):
+async def reset_user_password(username: str, data: UpdatePasswordRequest, request: Request, user: AdminUser = Depends(require_permission("admin.users.manage"))):
     """Kullanıcı şifresini sıfırla"""
     if len(data.password) < 8:
         return JSONResponse(

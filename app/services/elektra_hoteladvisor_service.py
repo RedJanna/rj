@@ -1,11 +1,4 @@
-"""HotelAdvisor endpoint client for Elektra tenant-style APIs.
-
-This module covers endpoints observed in HAR sessions for base URLs like:
-- https://4001.hoteladvisor.net
-
-It is intentionally isolated from bookingapi.elektraweb.com flows so existing
-createReservation integration remains unchanged.
-"""
+"""HotelAdvisor-style endpoint client for Elektra tenant APIs."""
 
 from __future__ import annotations
 
@@ -24,8 +17,30 @@ from app.services.elektraweb_booking_service import (
 )
 
 HOTELADVISOR_BASE_URL = (
-    os.getenv("ELEKTRA_HOTELADVISOR_BASE_URL") or "https://4001.hoteladvisor.net"
+    os.getenv("ELEKTRA_HOTELADVISOR_BASE_URL")
+    or os.getenv("ELEKTRA_API_BASE_URL")
+    or "https://bookingapi.elektraweb.com"
 ).rstrip("/")
+
+HOTELADVISOR_LEGACY_BASE_URL = (
+    os.getenv("ELEKTRA_HOTELADVISOR_LEGACY_BASE_URL")
+    or "https://4001.hoteladvisor.net"
+).rstrip("/")
+
+_FORCE_LEGACY = str(os.getenv("ELEKTRA_HOTELADVISOR_FORCE_LEGACY", "")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+_LEGACY_ENDPOINTS = {
+    ("update", "HOTEL_RES"),
+    ("select", "QWEB_FOLYO_HESAP"),
+    ("select", "QA_HOTEL_DEPARTMENT"),
+    ("execute", "SP_WEB_PAYMENT"),
+    ("function", "FN_HOTEL_EXCHANGERATES_ALL"),
+}
 
 
 # Endpoint catalog extracted from HAR (provided by user)
@@ -65,6 +80,8 @@ HOTELADVISOR_ENDPOINTS: Dict[str, List[str]] = {
         "QWEB_FOLYO_HESAP",
         "QWEB_RES_CARI",
         "QWEB_RES_FAT_MISAFIR",
+        "QA_ROOMTYPE_AVAILABILITY_LASTRATE",
+        "VW_EASYPMS_AVAILABILITY",
         "RES",
         "RES_CCARD",
     ],
@@ -140,7 +157,16 @@ _KIND_TO_PREFIX = {
 }
 
 
-async def _login_get_jwt_hoteladvisor(*, timeout_sec: int = 15) -> str:
+def _resolve_base_url(kind: str, name: str) -> str:
+    if _FORCE_LEGACY:
+        return HOTELADVISOR_LEGACY_BASE_URL
+    key = ((kind or "").strip().lower(), (name or "").strip())
+    if key in _LEGACY_ENDPOINTS:
+        return HOTELADVISOR_LEGACY_BASE_URL
+    return HOTELADVISOR_BASE_URL
+
+
+async def _login_get_jwt_hoteladvisor(*, base_url: str, timeout_sec: int = 15) -> str:
     api_key = _normalize_token(
         os.getenv("ELEKTRA_HOTELADVISOR_APIKEY", "") or os.getenv("Elektra_Booking", "")
     )
@@ -150,9 +176,12 @@ async def _login_get_jwt_hoteladvisor(*, timeout_sec: int = 15) -> str:
         )
 
     login_candidates = [
-        f"{HOTELADVISOR_BASE_URL}/Login",
-        f"{HOTELADVISOR_BASE_URL}/login",
+        f"{base_url}/Login",
+        f"{base_url}/login",
     ]
+    alt_base = (os.getenv("ELEKTRA_API_BASE_URL") or "").strip().rstrip("/")
+    if alt_base and alt_base != base_url:
+        login_candidates.extend([f"{alt_base}/Login", f"{alt_base}/login"])
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
@@ -189,13 +218,13 @@ async def _login_get_jwt_hoteladvisor(*, timeout_sec: int = 15) -> str:
     raise ElektrawebAuthError(f"/login failed for all candidates: {last_err}")
 
 
-def _build_url(path: str) -> str:
+def _build_url(path: str, *, base_url: str) -> str:
     cleaned = (path or "").strip()
     if cleaned.startswith("http://") or cleaned.startswith("https://"):
         return cleaned
     if not cleaned.startswith("/"):
         cleaned = f"/{cleaned}"
-    return f"{HOTELADVISOR_BASE_URL}{cleaned}"
+    return f"{base_url}{cleaned}"
 
 
 def get_hoteladvisor_path(kind: str, name: str) -> str:
@@ -226,9 +255,10 @@ async def _post_hoteladvisor(
     payload: Optional[Dict[str, Any]] = None,
     timeout_sec: int = 20,
 ) -> Dict[str, Any]:
-    jwt = await _login_get_jwt_hoteladvisor(timeout_sec=timeout_sec)
+    resolved_base = _resolve_base_url(kind, name)
+    jwt = await _login_get_jwt_hoteladvisor(base_url=resolved_base, timeout_sec=timeout_sec)
     path = get_hoteladvisor_path(kind, name)
-    url = _build_url(path)
+    url = _build_url(path, base_url=resolved_base)
 
     action = (kind or "").strip().capitalize()
     request_body: Dict[str, Any] = {

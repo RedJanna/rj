@@ -1,0 +1,53 @@
+📋 Senaryo: S015 - Ödeme Linki Talebi V1
+Senaryo Kodu ve Adı: S015 - Ödeme Linki Talebi V1
+Kanal: E-posta
+
+🎯 Hedef: Rezervasyon ödemesi için ödeme linki talep eden misafirden gerekli rezervasyon numarasını (Rez ID) alarak eksik bilgileri tamamlamak ve güvenli ödeme bağlantısı gönderimi için süreci canlı satış birimine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Ödeme linki gönderebilir misiniz?"
+
+"Kredi kartıyla ödemek için link alabilir miyim?"
+
+"Ön ödemeyi online yapmak istiyorum, bağlantı atar mısınız?"
+
+"Ödeme yapabilmem için bir ekran veya link paylaşır mısınız?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rez ID (Rezervasyon No): (İşlemi bulmak ve ödeme linkini doğru eşleştirmek için zorunludur)
+
+Tutar / Para Birimi: (Ödenecek doğru miktarın linkte yer alması için)
+
+Ad Soyad: (Rezervasyon sahibi ve ödeme yapacak kişinin teyidi için)
+
+Telefon: (Gerekli durumlarda linkin SMS ile de iletilebilmesi veya alternatif iletişim için)
+
+E-posta: (Ödeme linkinin güvenli kanaldan gönderilebilmesi için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin ödeme linki talebi (intent), ilettiği mesajın genel anlamından (semantik) algılandığında sistem tetiklenir. Belirli kelimelere veya kalıplara bağlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl talep bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Ödeme linki oluşturulabilmesi ve gönderilebilmesi için "Rez ID" (Rezervasyon No) mevcudiyeti kural olarak zorunludur.
+
+Eğer misafirin mesajında Rez ID yoksa, işlem başlatılmaz ve bu bilgi misafirden talep edilir. Rez ID alındığında talep ilgili birime aktarılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Rezervasyon numarası başarıyla alındıktan sonra işlem otomasyonda sonlandırılmaz. Ödeme linkinin oluşturulup misafire iletilmesi için bilet, ilgili canlı satış birimine "Soft Devir" ile aktarılır.
+
+SLA Süresi: Aktarılan bu ödeme linki talebine canlı ekip tarafından en geç 20 dakika (SLA hedefi) içerisinde müdahale edilmesi beklenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İlk Karşılama ve Bilgi Talebi (TR):
+
+"Ödeme linki talebinizi iletebilmem için lütfen rezervasyon no bilginizi paylaşır mısınız?"
+
+2. İlk Karşılama ve Bilgi Talebi (EN):
+
+"Please share your reservation number so I can forward your payment link request."

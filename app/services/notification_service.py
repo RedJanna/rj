@@ -13,6 +13,12 @@ import httpx
 import os
 from datetime import datetime
 from typing import Optional
+from app.services.handoff_packet_service import build_handoff_packet, validate_handoff_packet
+from app.services.handoff_policy_service import apply_handoff_policy
+from app.services.handoff_policy_service import HANDOFF_POLICY_BY_CATEGORY
+from app.services.metrics_service import record_metric
+from app.services.conversation_store import load_conversation
+from app.utils.message_utils import detect_language
 
 
 # ======================================================
@@ -40,6 +46,92 @@ else:
     print(f"❌ NotificationService: WHATSAPP_TOKEN BOŞ!")
 
 
+def _normalize_handoff_category(
+    *,
+    category: str,
+    source: str,
+    detected_intent: str,
+    tags: list[str] | None,
+) -> str:
+    raw = (category or "").strip().lower()
+    if raw:
+        return raw
+
+    intent = (detected_intent or "").strip().upper()
+    src = (source or "").strip().lower()
+    tagset = {str(t).strip().lower() for t in (tags or []) if str(t).strip()}
+
+    if "restaurant" in src or "restoran" in src or "restaurant_reservation" in tagset:
+        return "restoran_rezervasyon"
+    if "transfer" in src or "transfer" in tagset:
+        return "antalya_transfer"
+    if "payment_confirmation" in src or "payment_confirmation" in tagset or intent == "PAYMENT_CONFIRMED":
+        return "odeme_bildirimi"
+    if "quiet_room" in src or "quiet_room_handoff" in tagset:
+        return "quiet_room_live_required"
+    if intent in {"COMPLAINT", "CANCEL_REFUND_REQUEST"}:
+        return "sikayet" if intent == "COMPLAINT" else "iptal_iade"
+    if intent == "HUMAN_REQUEST":
+        return "canli_destek"
+    if intent == "PRICE_QUERY":
+        return "fiyat_handoff"
+
+    # Safe fallback for unknown/empty category cases.
+    fallback = "canli_destek"
+    if fallback in HANDOFF_POLICY_BY_CATEGORY:
+        return fallback
+    return next(iter(HANDOFF_POLICY_BY_CATEGORY.keys()), "canli_destek")
+
+
+def _extract_switch_target(text: str) -> str:
+    t = (text or "").lower()
+    if not t:
+        return ""
+    if any(k in t for k in ["english", "ingilizce"]):
+        return "en"
+    if any(k in t for k in ["türkçe", "turkce", "turkish"]):
+        return "tr"
+    if any(k in t for k in ["рус", "russian", "rusça", "rusca"]):
+        return "ru"
+    if any(k in t for k in ["almanca", "german", "deutsch"]):
+        return "de"
+    if any(k in t for k in ["arapça", "arabic", "العربية"]):
+        return "ar"
+    if any(k in t for k in ["ispanyolca", "spanish", "español", "espanol"]):
+        return "es"
+    if any(k in t for k in ["fransızca", "french", "français", "francais"]):
+        return "fr"
+    if any(k in t for k in ["çince", "cince", "chinese", "中文"]):
+        return "zh"
+    if any(k in t for k in ["hintçe", "hintce", "hindi", "हिंदी"]):
+        return "hi"
+    if any(k in t for k in ["portekizce", "portuguese", "português", "portugues"]):
+        return "pt"
+    return ""
+
+
+def _infer_language_lock(customer_phone: str, customer_message: str) -> str:
+    phone = (customer_phone or "").strip()
+    try:
+        if phone:
+            conv = load_conversation(phone) or {}
+            messages = conv.get("messages") or []
+            # latest explicit switch
+            for item in reversed(messages):
+                txt = (item.get("user_message") or "").strip()
+                target = _extract_switch_target(txt)
+                if target:
+                    return target
+            # first user message lock
+            for item in messages:
+                txt = (item.get("user_message") or "").strip()
+                if txt:
+                    return detect_language(txt) or "en"
+    except Exception:
+        pass
+    return detect_language(customer_message or "") or "en"
+
+
 class NotificationService:
     """Admin bildirim servisi"""
     
@@ -56,8 +148,21 @@ class NotificationService:
         self.whatsapp_token = whatsapp_token or WHATSAPP_TOKEN  # DÜZELTME
         self.telegram_token = telegram_token or TELEGRAM_BOT_TOKEN
         self.telegram_chat_id = telegram_chat_id or TELEGRAM_CHAT_ID
-    
-    async def send_whatsapp_admin(self, message: str) -> bool:
+
+    @staticmethod
+    def _normalize_phone(phone: str) -> str:
+        return "".join(ch for ch in str(phone or "") if ch.isdigit())
+
+    def _has_alternate_admin_target(self, customer_phone: str) -> bool:
+        customer = self._normalize_phone(customer_phone)
+        if not customer:
+            return bool(self.admin_phones)
+        for admin_phone in self.admin_phones:
+            if self._normalize_phone(admin_phone) != customer:
+                return True
+        return False
+
+    async def send_whatsapp_admin(self, message: str, *, exclude_phones: Optional[list[str]] = None) -> bool:
         """WhatsApp üzerinden admin'e mesaj gönder"""
         if not self.whatsapp_token:
             print("⚠️ WhatsApp token ayarlanmamış")
@@ -70,8 +175,11 @@ class NotificationService:
         }
         
         success_count = 0
+        excluded = {self._normalize_phone(p) for p in (exclude_phones or []) if self._normalize_phone(p)}
         async with httpx.AsyncClient() as client:
             for admin_phone in self.admin_phones:
+                if self._normalize_phone(admin_phone) in excluded:
+                    continue
                 try:
                     payload = {
                         "messaging_product": "whatsapp",
@@ -133,8 +241,8 @@ class NotificationService:
 ⏰ Zaman: {timestamp}
 
 🔴 Müşteriye cevap VERİLMEDİ - Manuel dönüş yapın!"""
-        
-        return await self.send_whatsapp_admin(message)
+
+        return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
     
     # ======================================================
     # İNSANA DEVİR BİLDİRİMİ (kassandra_openai_bot.py satır 2171-2210)
@@ -144,9 +252,92 @@ class NotificationService:
         category: str,
         priority: str,
         customer_phone: str,
-        customer_message: str
+        customer_message: str,
+        *,
+        source: str = "chat_runtime",
+        detected_intent: str = "unknown",
+        confidence: float | None = None,
+        conversation_summary: str = "",
+        attempted_actions: list[str] | None = None,
+        suggested_reply: str = "",
+        tags: list[str] | None = None,
+        correlation_id: str = "",
     ) -> bool:
         """Admin'e İNSANA DEVİR bildirimi gönder"""
+        normalized_category = _normalize_handoff_category(
+            category=category,
+            source=source,
+            detected_intent=detected_intent,
+            tags=tags,
+        )
+        if normalized_category != (category or "").strip().lower():
+            record_metric(
+                "handoff.category_autofill",
+                category=normalized_category,
+                meta={
+                    "requested_category": (category or "").strip().lower(),
+                    "source": source,
+                    "detected_intent": detected_intent,
+                },
+            )
+
+        policy = apply_handoff_policy(normalized_category, priority)
+        effective_priority = str(policy["effective_priority"])
+        trigger_type = str(policy["trigger_type"])
+        sla_target_minutes = int(policy["sla_target_minutes"])
+        within_business_hours = bool(policy["within_business_hours"])
+
+        normalized_tags = list(tags or [])
+        normalized_tags.extend(
+            [
+                f"trigger:{trigger_type}",
+                f"sla:{sla_target_minutes}m",
+                "mesai_ici" if within_business_hours else "mesai_disi",
+            ]
+        )
+        language_lock = _infer_language_lock(customer_phone, customer_message)
+        normalized_tags.append(f"lang:{language_lock}")
+
+        packet = build_handoff_packet(
+            category=normalized_category,
+            priority=effective_priority,
+            customer_phone=customer_phone,
+            customer_message=customer_message,
+            source=source,
+            detected_intent=detected_intent,
+            confidence=confidence,
+            conversation_summary=conversation_summary,
+            attempted_actions=attempted_actions,
+            suggested_reply=suggested_reply,
+            tags=normalized_tags,
+            correlation_id=correlation_id,
+            trigger_type=trigger_type,
+            sla_target_minutes=sla_target_minutes,
+            within_business_hours=within_business_hours,
+            language_lock=language_lock,
+        )
+        ok, missing = validate_handoff_packet(packet)
+        if not ok:
+            print(f"❌ Handoff packet reject (missing/invalid): {missing}")
+            record_metric(
+                "handoff.packet_reject",
+                category=category or "unknown",
+                meta={
+                    "missing": missing,
+                    "source": source,
+                    "detected_intent": detected_intent,
+                    "confidence": confidence,
+                    "correlation_id": correlation_id,
+                    "language_lock": language_lock,
+                },
+            )
+            return False
+        record_metric(
+            "handoff.packet",
+            category=category or "unknown",
+            meta={"packet": packet},
+        )
+
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         priority_emoji = {
@@ -154,7 +345,7 @@ class NotificationService:
             "medium": "🟡", 
             "high": "🟠",
             "critical": "🔴"
-        }.get(priority, "⚠️")
+        }.get(effective_priority, "⚠️")
         
         category_names = {
             "iptal_iade": "İPTAL/İADE TALEBİ",
@@ -165,26 +356,38 @@ class NotificationService:
             "acil_durum": "ACİL DURUM",
             "erken_gec": "ERKEN GİRİŞ/GEÇ ÇIKIŞ",
             "canli_destek": "CANLI DESTEK TALEBİ",
-            "restoran_rezervasyon": "RESTORAN REZERVASYONU"
+            "restoran_rezervasyon": "RESTORAN REZERVASYONU",
+            "odeme_bildirimi": "ÖDEME BİLDİRİMİ",
         }
         
-        cat_name = category_names.get(category, category.upper())
+        cat_name = category_names.get(normalized_category, normalized_category.upper())
         
         message = f"""{priority_emoji} İNSANA DEVİR - {cat_name}
 
 📱 Müşteri: {customer_phone}
 💬 Mesajı: {customer_message[:200]}
+🧾 Packet: {packet.get('packet_id')}
+🧠 Intent: {packet.get('detected_intent')} (conf: {packet.get('confidence') if packet.get('confidence') is not None else 'n/a'})
+📡 Source: {packet.get('source')}
 
 📂 Kategori: {cat_name}
-🎯 Öncelik: {priority.upper()}
+🎯 Öncelik: {effective_priority.upper()}
+🚦 Trigger: {trigger_type.upper()}
+⏱️ SLA: {sla_target_minutes} dk
+🕘 Mesai: {"İÇİ" if within_business_hours else "DIŞI"}
 
 ⏰ Zaman: {timestamp}
 
 👤 Müşteriye "size dönüş yapacağız" denildi.
 📞 Manuel dönüş yapın!"""
         
-        print(f"{priority_emoji} Admin'e handoff bildirimi gönderildi: {cat_name}")
-        return await self.send_whatsapp_admin(message)
+        print(f"{priority_emoji} Admin'e handoff bildirimi gönderildi: {cat_name} ({trigger_type}, SLA={sla_target_minutes}dk)")
+        # Kritik kural: human takeover/pause tetiklendiyse admin bildirimi asla sessizce düşmemeli.
+        # Eğer tek admin numarası müşteri numarası ile aynıysa, exclusion kaldırılır ve yine gönderilir.
+        if self._has_alternate_admin_target(customer_phone):
+            return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
+        print("⚠️ Handoff bildirimi fallback: admin ve müşteri aynı numara, exclusion kaldırıldı.")
+        return await self.send_whatsapp_admin(message, exclude_phones=[])
     
     # ======================================================
     # ŞÜPHELİ MESAJ BİLDİRİMİ (kassandra_openai_bot.py satır 2636-2661)
@@ -219,7 +422,7 @@ class NotificationService:
 👀 Konuşmayı kontrol edin!"""
         
         print(f"{severity_emoji} Admin'e şüpheli mesaj bildirimi gönderildi: {reason}")
-        return await self.send_whatsapp_admin(message)
+        return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
     
     # ======================================================
     # KRİTİK SORUN BİLDİRİMİ (kassandra_openai_bot.py satır 2563-2601)
@@ -251,8 +454,8 @@ class NotificationService:
 🕐 Zaman: {timestamp}
 
 ⚠️ Lütfen müşteri ile iletişime geçin!"""
-        
-        return await self.send_whatsapp_admin(message)
+
+        return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
     
     # ======================================================
     # KRİTİK İŞLEM BİLDİRİMİ (kassandra_openai_bot.py satır 2621-2633)
@@ -298,8 +501,8 @@ class NotificationService:
 
 📋 Detaylar:
 {details_text}"""
-        
-        return await self.send_whatsapp_admin(message)
+
+        return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
 
 
 # ======================================================

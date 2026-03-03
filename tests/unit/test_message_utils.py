@@ -166,6 +166,11 @@ class TestDetectLanguage:
         """Türkçe mesajları doğru algıla"""
         result = detect_language(input_text)
         assert result == "tr", f"Input: {input_text}, Expected: tr, Got: {result}"
+
+    @pytest.mark.unit
+    def test_turkish_ascii_sentence_is_not_misdetected_as_english(self):
+        result = detect_language("14-18 Agustos 2026 icin 2 yetiskin toplam fiyat nedir?")
+        assert result == "tr"
     
     
     # ==========================================
@@ -231,6 +236,25 @@ class TestDetectLanguage:
         result = detect_language(input_text)
         assert result == expected
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "input_text,expected",
+        [
+            ("14-18 august 2026 for 2 adults", "en"),
+            ("11 haziran ile 14 haziran, 2 yetiskin", "tr"),
+            ("11-14 августа, 2 взрослых", "ru"),
+            ("11-14 oktober, 2 erwachsene", "de"),
+            ("11-14 سبتمبر، 2 بالغين", "ar"),
+            ("11-14 septiembre, 2 adultos", "es"),
+            ("11-14 octobre, 2 adultes", "fr"),
+            ("2026年8月11日到8月14日，2位成人", "zh"),
+            ("11-14 सितंबर, 2 वयस्क", "hi"),
+            ("11-14 setembro, 2 adultos", "pt"),
+        ],
+    )
+    def test_date_slot_payload_detection_for_supported_languages(self, input_text: str, expected: str):
+        assert detect_language(input_text) == expected
+
 
 class TestLooksLikeTransferMessage:
     @pytest.mark.unit
@@ -262,6 +286,21 @@ class TestDetectPriceRequest:
     def test_does_not_trigger_for_non_booking_suitability_sentence(self):
         msg = "Is August suitable for swimming?"
         assert detect_price_request(msg, history=[]) is False
+
+    @pytest.mark.unit
+    def test_detects_chinese_price_request_with_date_and_guest(self):
+        msg = "请提供2026年8月14日至18日两位成人的总价。"
+        assert detect_price_request(msg, history=[]) is True
+
+    @pytest.mark.unit
+    def test_detects_arabic_price_request_with_date_and_guest(self):
+        msg = "يرجى مشاركة السعر الإجمالي لشخصين بالغين من 14 إلى 18 أغسطس 2026."
+        assert detect_price_request(msg, history=[]) is True
+
+    @pytest.mark.unit
+    def test_detects_hindi_price_request_with_date_and_guest(self):
+        msg = "कृपया 14 से 18 अगस्त 2026 तक 2 वयस्कों के लिए कुल कीमत बताएं।"
+        assert detect_price_request(msg, history=[]) is True
 
 
 class TestMenuSelection:

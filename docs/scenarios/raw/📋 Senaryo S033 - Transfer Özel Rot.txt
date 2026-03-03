@@ -1,0 +1,88 @@
+📋 Senaryo: S033 - Transfer Özel Rota V1
+Senaryo Kodu ve Adı: S033 - Transfer Özel Rota V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin Dalaman dışı özel bir lokasyondan otele transfer talebinde, öncelikle alınış lokasyonu (açık adres) ve temel planlama bilgilerini eksiksiz toplamak; ardından talebi ilgili canlı ekibe yönlendirerek misafire 30 dakika içinde geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Başka bir lokasyondan otele transfer ayarlayabilir misiniz?"
+
+"Havalimanı dışında bir yerden alınmak istiyoruz, transfer mümkün mü?"
+
+"Şehir merkezinden otele transfer ayarlayabilir misiniz?"
+
+"Farklı bir adresten transfer isteyeceğim."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Alış Lokasyonu: (Açık adres / işletme adı + ilçe + şehir bilgisi)
+
+Tarih: (GG/AA/YYYY formatında)
+
+Saat: (Örn: 18:30)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Telefon: (İletişim numarası)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin transfer talebi (intent) e-posta içeriğinin ANLAMINDAN (semantik) algılanır; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Eğer rota Dalaman dışı “özel lokasyon” ise:
+- Öncelik alınış lokasyonunu (açık adres) netleştirmektir.
+- Eksik bilgiler varsa misafire tek e-postada topluca sorulur.
+- Bilgiler tamamlandığında talep canlı ekibe devredilir.
+
+Yönlendirme kuralı:
+- Alış lokasyonu Antalya Havalimanı ise talep “antalya_transfer” ekibine yönlendirilir.
+- Antalya Havalimanı dışında bir özel lokasyon ise talep “canlı_destek” ekibine yönlendirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma: Dalaman dışı özel lokasyon talepleri “canlı_destek” veya “antalya_transfer” ekibine yönlendirilir.
+
+SLA: 30 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir adresi eksik/kapalı paylaşırsa (örn: sadece semt adı), açık adres istenerek aynı akış sürdürülür.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Yanıt ve Bilgi Talebi:
+
+"Elbette yardımcı olurum. Özel rota transferi için lütfen alınış adresinizi (açık adres) paylaşır mısınız? Ayrıca tarih, saat, kişi sayısı ve iletişim telefon numaranızı iletirseniz talebinizi ilgili ekibe yönlendirebilirim."
+
+2. Teyit Mesajı (Bilgiler Tamamlandığında):
+
+"Teşekkür ederim. Hemen kontrol edelim:
+📍 Alış Lokasyonu: [Alış Lokasyonu]
+🗓️ Tarih: [Tarih]
+🕒 Saat: [Saat]
+👥 Kişi Sayısı: [Kişi Sayısı]
+📞 Telefon: [Telefon]
+
+Bilgiler doğruysa bu e-postayı onaylayarak yanıtlayabilirsiniz. Değiştirmek istediğiniz bir detay varsa lütfen belirtin."
+
+3. Yönlendirme / SLA Bilgilendirmesi:
+
+"Harika, teşekkürler. ✅ Talebinizi ilgili ekibimize iletiyorum. En geç 30 dakika içinde dönüş sağlayacağız."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Reply & Information Request:
+
+"For a custom-route transfer, please share your pick-up address (full address). Also, please provide the date, time, guest count, and a contact phone number so I can forward your request to our team."
+
+2. Summary / Confirmation (When Details Are Complete):
+
+"Thank you. Please confirm the details:
+📍 Pick-up Address: [Pick-up Address]
+🗓️ Date: [Date]
+🕒 Time: [Time]
+👥 Guest Count: [Guest Count]
+📞 Phone: [Phone]
+
+If everything is correct, please confirm by replying to this email. If you’d like to change anything, please let me know."
+
+3. Forwarding / SLA Notice:
+
+"Perfect, thank you. ✅ I’m forwarding your request to our team. We will get back to you within 30 minutes."

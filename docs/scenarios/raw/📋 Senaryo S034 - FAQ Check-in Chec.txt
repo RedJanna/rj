@@ -1,0 +1,61 @@
+📋 Senaryo: S034 - FAQ Check-in Check-out V1
+Senaryo Kodu ve Adı: S034 - FAQ Check-in Check-out V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin check-in / check-out saatleri ile ilgili sorusuna WhatsApp üzerinden hızlı, net ve standart bilgi vermek; gerekirse konuşmayı sürdürmek için kısa bir takip sorusu ile destek sunmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Check-in ve check-out saatleri kaç?"
+
+"Giriş ve çıkış saatleriniz nedir?"
+
+"Check-in saat kaçta, check-out saat kaçta?"
+
+"Otele giriş/çıkış saatleri nedir?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+FAQ Konusu: (Check-in / Check-out saatleri)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Mesaj Tipi: (FAQ Bilgilendirme)
+
+Takip Sorusu: (Misafirin başka bir konuda desteğe ihtiyacı olup olmadığını soran kısa soru)
+
+Kayıt: (Sohbet kaydı/etiketi - ilgili FAQ konusu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin check-in / check-out saatlerini sorma niyeti (intent), mesajın ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+FAQ konusu “check-in / check-out saatleri” ise sabit bilgi verilir:
+- Check-in: 14:00
+- Check-out: 12:00
+
+Yanıt sonrası, misafirin başka bir konuda desteğe ihtiyacı olup olmadığını anlamak için kısa bir takip sorusu sorulur.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir aynı soruyu farklı şekilde tekrar ederse aynı sabit bilgi tekrar edilir ve takip sorusu korunur.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Check-in saatimiz 14:00, check-out saatimiz 12:00’dir."
+
+2. Takip Sorusu:
+
+"Başka yardımcı olabileceğim bir konu var mı?"
+
+💬 Standart Yanıt Mesajları (EN)
+1. Information Reply:
+
+"Our check-in time is 14:00 and check-out time is 12:00."
+
+2. Follow-up Question:
+
+"Is there anything else I can help you with?"

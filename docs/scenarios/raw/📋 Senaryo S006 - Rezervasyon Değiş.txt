@@ -1,0 +1,51 @@
+📋 Senaryo: S006 - Rezervasyon Değişiklik Rezervasyon No V1
+Senaryo Kodu ve Adı: S006 - Rezervasyon Değişiklik Rezervasyon No V1
+Kanal: E-posta
+
+🎯 Hedef: Rezervasyonunda değişiklik yapmak isteyen misafirden gerekli ön bilgileri (özellikle rezervasyon numarası) eksiksiz toplamak ve değişiklik işlemini başlatmak üzere ilgili operasyon ekibine (canlı temsilciye) aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Rezervasyon tarihimi değiştirmek istiyorum."
+
+"Rezervasyonumda gün değişikliği yapabilir miyiz?"
+
+"Tatil tarihlerimi ertelemek/öne çekmek istiyorum."
+
+"Mevcut rezervasyonumu güncellemem gerekiyor."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No / Voucher No: (İşlemi başlatmak ve sistemde kaydı bulmak için zorunludur)
+
+Yeni Giriş Tarihi: (GG/AA/YYYY formatında talep edilen yeni başlangıç tarihi)
+
+Yeni Çıkış Tarihi: (GG/AA/YYYY formatında talep edilen yeni bitiş tarihi)
+
+Oda Bilgisi: (Mevcut oda tipi veya değişiklik istenen yeni oda tipi)
+
+İletişim Telefonu: (Teyit veya detaylar için misafire hızlıca ulaşabilmek adına)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin rezervasyon değişikliği talebi (intent), ilettiği mesajın genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya kalıp bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl talep kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer misafirin mesajında "Rezervasyon No" veya "Voucher No" (Rez ID) bulunmuyorsa, sistem değişiklik işlemini kesinlikle başlatmaz.
+
+İlk adım olarak eksik olan Rezervasyon Numarası misafirden talep edilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Eskalasyon): Misafirden "Rezervasyon No" bilgisi başarıyla alındıktan sonra süreç botta kalmaz; sohbet, değişiklik işlemlerini yürütmek üzere ilgili canlı temsilciye soft devir (30 dk bekleme süresi kurgusuyla) aktarılır.
+
+💬 Standart Yanıt Mesajları
+
+1. İlk Karşılama ve Bilgi Talebi (TR):
+
+"Değişiklik işlemini başlatmam için lütfen rezervasyon no veya Voucher No bilginizi paylaşın."
+
+2. İlk Karşılama ve Bilgi Talebi (EN):
+
+"To start the modification, please share your reservation number or Voucher No."

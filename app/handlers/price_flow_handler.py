@@ -30,6 +30,7 @@ from app.services.price_flow_service import (
 )
 from app.services.elektraweb_booking_service import (
     handle_elektra_price_request,
+    fetch_room_stock_by_type_from_availability,
     ElektrawebConfigError,
     _extract_all_dates,
     _extract_adult_count,
@@ -37,6 +38,7 @@ from app.services.elektraweb_booking_service import (
     _normalize_turkish_chars,
     _infer_currency,
 )
+from app.core.settings_service import get_currency_policy
 
 # ===========================================================
 # 0) SEZON KONTROLÜ (Sezon dışı taleplerde Elektra'ya gitme)
@@ -126,6 +128,142 @@ HANDOFF_PRICE_KEYWORDS_TR = [
     "grup konaklama", "grup teklif",
 ]
 
+_ROOM_KEY_BY_HINT = {
+    "deluxe": "deluxe",
+    "superior": "superior",
+    "exclusive pool": "exclusivePool",
+    "havuz manzar": "exclusivePool",
+    "exclusive land": "exclusiveLand",
+    "sokak manzar": "exclusiveLand",
+    "penthouse land": "penthouseLand",
+    "penthouse": "penthouse",
+    "premium": "premium",
+}
+
+_ROOM_LABEL_TR = {
+    "deluxe": "Deluxe",
+    "superior": "Superior",
+    "exclusiveLand": "Exclusive Sokak Manzaralı",
+    "exclusivePool": "Exclusive Havuz Manzaralı",
+    "penthouseLand": "Penthouse Land - Jakuzili",
+    "penthouse": "Penthouse - Jakuzili",
+    "premium": "Premium - Jakuzili",
+}
+
+
+def _is_technical_handoff_error(error_type: str) -> bool:
+    return (error_type or "").strip().upper() in {"API_ERROR", "AVAILABILITY_ERROR", "FORMAT_ERROR"}
+
+
+def _technical_price_error_reply(lang: str) -> str:
+    if lang == "en":
+        return "I have forwarded your request to our team. We will contact you shortly with price and availability details."
+    return "Talebinizi ekibimize ilettim. Fiyat ve müsaitlik detayları için en kısa sürede sizinle iletişime geçeceğiz."
+
+
+_DISABLED_CURRENCY_REPLY = (
+    "Fiyat talebinde bulunduğunuz para birimi ile fiyat bilgisi veremiyorum "
+    "daha detaylı bilgi için lütfen canlı müşteri temsilcisini bekleyiniz"
+)
+
+
+def _is_currency_enabled(code: Optional[str]) -> bool:
+    cur = str(code or "").strip().upper()
+    if not cur:
+        return True
+    policy = get_currency_policy()
+    # Bilinmeyen para birimlerinde mevcut davranisi koru (engelleme yok).
+    if cur not in policy:
+        return True
+    return bool(policy.get(cur))
+
+
+def _extract_stock_from_cached_offers(cached_offers: List[Dict[str, Any]], room_key: str) -> Optional[int]:
+    """
+    Son fiyat sorgusunda gelen offer listesinden oda adedi cikarmayi dener.
+    Bu, fiyat mesaji ile stok mesaji arasinda tutarlilik saglar.
+    """
+    candidates: List[int] = []
+    try:
+        from app.services.elektraweb_booking_service import _normalize_room_type
+    except Exception:
+        _normalize_room_type = None
+
+    for offer in cached_offers or []:
+        room_type_raw = str(offer.get("room-type", "") or "")
+        if not room_type_raw:
+            continue
+        key = ""
+        if _normalize_room_type:
+            info = _normalize_room_type(room_type_raw)
+            if info and info.get("key"):
+                key = str(info["key"])
+        if key != room_key:
+            continue
+
+        arr = offer.get("availability-arr")
+        if isinstance(arr, list) and arr:
+            nums = []
+            for v in arr:
+                try:
+                    nums.append(int(v))
+                except Exception:
+                    pass
+            if nums:
+                candidates.append(max(0, min(nums)))
+                continue
+
+        for count_key in ("room-to-sell", "room_to_sell", "room-count", "room_count", "remaining", "availability"):
+            try:
+                iv = int(offer.get(count_key))
+            except Exception:
+                iv = None
+            if iv is not None:
+                candidates.append(max(0, iv))
+                break
+
+    if not candidates:
+        return None
+    return max(candidates)
+
+
+def _extract_room_key_for_stock_query(message: str) -> Optional[str]:
+    low = _normalize_turkish_chars((message or "").lower())
+    for hint, room_key in _ROOM_KEY_BY_HINT.items():
+        if hint in low:
+            return room_key
+    return None
+
+
+def _is_room_stock_query(message: str) -> bool:
+    low = _normalize_turkish_chars((message or "").lower())
+    stock_markers = [
+        "kac adet", "kaç adet", "kac oda", "kaç oda", "oda kaldi", "oda kaldi",
+        "musait", "müsait", "available", "left", "remaining",
+    ]
+    return any(k in low for k in stock_markers) and _extract_room_key_for_stock_query(low) is not None
+
+
+def _extract_multi_room_guest_groups(message: str) -> List[Dict[str, Any]]:
+    """
+    Ornek:
+    - "1. Aile 2 yetişkin. 2. aile 2 yetişkin + 2 çocuk 3 ve 10 yaşındalar."
+    - "1. Oda: 2 yetişkin | 2. Oda: 2 yetişkin + 2 çocuk (3 ve 10 yaş)"
+    """
+    raw = (message or "").strip()
+    if not raw:
+        return []
+    segments = re.split(r"\s*(?:\||\n|(?=\d+\s*[\.\)]\s*(?:aile|oda)))\s*", raw, flags=re.IGNORECASE)
+    groups: List[Dict[str, Any]] = []
+    for seg in segments:
+        txt = (seg or "").strip()
+        if not txt:
+            continue
+        adult, child_ages = _extract_guests_smart(txt)
+        if adult:
+            groups.append({"adult_count": int(adult), "child_ages": child_ages or []})
+    return groups
+
 HANDOFF_PRICE_KEYWORDS_EN = [
     # Long stay / special pricing
     "long stay", "extended stay", "long term",
@@ -208,6 +346,15 @@ PRICE_INTENT_KEYWORDS = [
     "price", "cost", "rate", "how much",
     "available", "availability", "vacancy",
     "cheapest", "affordable", "quote",
+    # multi-language smoke support
+    "цена", "стоимость", "тариф",
+    "preis", "kosten", "verfügbarkeit", "verfugbarkeit",
+    "precio", "coste", "tarifa", "disponibilidad",
+    "prix", "coût", "cout", "tarif", "disponibilité", "disponibilite",
+    "preço", "preco", "custo", "disponibilidade",
+    "سعر", "الأسعار", "الاسعار", "التكلفة", "التوفر",
+    "价格", "价钱", "费用", "房价", "可订", "可用", "多少钱",
+    "कीमत", "मूल्य", "दर", "उपलब्धता",
 ]
 
 # Karsilastirma / bilgi / varlik sorulari — fiyat akisina sokma, OpenAI'ye yonlendir
@@ -257,6 +404,8 @@ PRICE_EXCLUSION_PATTERNS_TR = [
     "peşin ödeme", "pesin odeme", "peşin indirim",
     "tekne", "boat", "aktivite", "activity",
     "pasta", "süsleme", "dekorasyon",
+    "surpriz", "sürpriz", "balayi", "balayı",
+    "romantik", "romantik masa", "cicek", "çiçek", "el yazisi not",
     "şarap", "şampanya", "wine", "champagne",
     "bayram", "özel gün", "ozel gun",
     "havuz", "pool", "plaj", "beach",
@@ -323,6 +472,8 @@ PRICE_EXCLUSION_PATTERNS_EN = [
     "late check-out", "late check out", "late checkout",
     "boat", "tour", "activity",
     "cake", "decoration", "wine", "champagne",
+    "surprise", "honeymoon", "romantic", "romantic table",
+    "flower", "flowers", "note card", "welcome note",
     "pool", "beach", "bicycle", "bike",
     "wifi", "internet",
     # Policy / rules / information queries
@@ -348,7 +499,52 @@ def detect_price_intent(message: str) -> bool:
     """
     if not message:
         return False
+    raw_low = message.lower()
+    multilingual_raw_markers = (
+        "价格", "价钱", "房价", "多少钱", "总价", "总价格", "可用", "可订",
+        "цена", "стоимость", "тариф",
+        "سعر", "الأسعار", "الاسعار", "التكلفة",
+        "कीमत", "मूल्य", "दर",
+    )
+    if any(k in raw_low for k in multilingual_raw_markers):
+        return True
     low = _normalize_turkish_chars(message.lower())
+    normalized_keywords = [_normalize_turkish_chars(k) for k in PRICE_INTENT_KEYWORDS]
+
+    # Oda ozelligi + fiyat/musaitlik sorgularini exclusion oncesi kabul et.
+    # Ornek: "14-18 Agustos 2 yetiskin havuz manzarali oda fiyati nedir?"
+    if _is_single_room_feature_price_query(message):
+        return True
+
+    # Güçlü oda+fiyat/müsaitlik sorgusu: exclusion listesi bunu engellememeli.
+    # Örn: "deniz manzaralı vs standart fiyat nasıl değişir?", "balkonlu oda ek ücret var mı?"
+    strong_room_comparison = any(
+        k in low
+        for k in (
+            "fiyat fark",
+            "fark ne kadar",
+            "fark nedir",
+            "price difference",
+            "fiyat nasil degisir",
+            "fiyat nasıl değişir",
+            "fiyat degisir",
+            "değişir",
+            "degisir",
+            "ek ucret",
+            "ek ücret",
+            "extra fee",
+            "additional charge",
+        )
+    )
+    room_or_view_markers = (
+        "oda", "room", "deluxe", "superior", "exclusive", "penthouse", "premium",
+        "manzara", "view", "sea", "deniz", "balkon", "balcony",
+    )
+    availability_markers = ("musait", "müsait", "availability", "available", "var mi", "var mı")
+    has_room_context = any(k in low for k in room_or_view_markers)
+    has_availability_or_price = any(k in low for k in availability_markers) or any(k in low for k in normalized_keywords)
+    if strong_room_comparison and has_room_context and has_availability_or_price:
+        return True
 
     # Önce exclusion kontrolü — karşılaştırma soruları fiyat akışına girmemeli
     all_exclusions = PRICE_EXCLUSION_PATTERNS_TR + PRICE_EXCLUSION_PATTERNS_EN
@@ -357,7 +553,68 @@ def detect_price_intent(message: str) -> bool:
             print(f"[SKIP] Fiyat akisi engellendi (karsilastirma sorusu): '{pattern}' bulundu")
             return False
 
-    return any(kw in low for kw in [_normalize_turkish_chars(k) for k in PRICE_INTENT_KEYWORDS])
+    return any(kw in low for kw in normalized_keywords)
+
+
+def _looks_like_price_slot_followup(message: str, history: Optional[List[Dict[str, Any]]] = None) -> bool:
+    """
+    Fiyat anahtar kelimesi olmasa bile, fiyat akışı içinde slot tamamlama
+    mesajlarını (örn. "2 yetişkin 2 çocuk", "7 ve 8") yakalar.
+    """
+    if not message:
+        return False
+    text = message.strip()
+    if not text:
+        return False
+    low = _normalize_turkish_chars(text.lower())
+    slot_markers = (
+        "yetişkin",
+        "yetiskin",
+        "adult",
+        "çocuk",
+        "cocuk",
+        "child",
+        "kids",
+        "kisi",
+        "kişi",
+        "age",
+        "yas",
+        "yaş",
+        "gece",
+        "night",
+        "check-in",
+        "check in",
+        "check-out",
+        "check out",
+    )
+    has_slot_signal = bool(re.search(r"\d", low)) or any(m in low for m in slot_markers)
+    if not has_slot_signal:
+        return False
+
+    recent_user_price_context = False
+    recent_assistant_slot_prompt = False
+    for item in reversed(history or []):
+        role = (item.get("role") or "").lower()
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        norm_content = _normalize_turkish_chars(content.lower())
+        if role == "user" and detect_price_intent(content):
+            recent_user_price_context = True
+            break
+        if role == "assistant" and (
+            "eksik" in norm_content
+            or "cocuk yasi" in norm_content
+            or "çocuk yaşı" in content.lower()
+            or "giris-cikis" in norm_content
+            or "giriş-çıkış" in content.lower()
+            or "kisi sayisi" in norm_content
+            or "kişi sayısı" in content.lower()
+            or "check-in" in norm_content
+            or "check-out" in norm_content
+        ):
+            recent_assistant_slot_prompt = True
+    return recent_user_price_context or recent_assistant_slot_prompt
 
 
 def detect_handoff_price(message: str) -> Tuple[bool, str]:
@@ -365,9 +622,13 @@ def detect_handoff_price(message: str) -> Tuple[bool, str]:
     if not message:
         return False, ""
     low = _normalize_turkish_chars(message.lower())
+    room_count = _extract_room_count_from_message(message)
     for kw in HANDOFF_PRICE_KEYWORDS_TR + HANDOFF_PRICE_KEYWORDS_EN:
         kw_norm = _normalize_turkish_chars(kw.lower())
         if kw_norm in low:
+            # 2-3 odali normal talepleri handoff'a atma.
+            if room_count in (2, 3):
+                continue
             return True, kw.strip()
     return False, ""
 
@@ -522,10 +783,44 @@ def _extract_guests_smart(message: str) -> Tuple[Optional[int], List[int]]:
     return adult, child_ages
 
 
+def _extract_child_count(message: str, child_ages: Optional[List[int]] = None) -> Optional[int]:
+    if not message:
+        inferred = len(child_ages or [])
+        return inferred or None
+
+    low = _normalize_turkish_chars(message.lower())
+    m = re.search(r"\b(\d+)\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant)\b", low)
+    if m:
+        try:
+            cnt = int(m.group(1))
+            if 0 <= cnt <= 10:
+                return cnt
+        except Exception:
+            pass
+
+    if any(w in low for w in ["cocuk", "child", "children", "kid", "kids", "bebek", "baby", "infant"]):
+        ages_len = len(child_ages or [])
+        if ages_len > 0:
+            return ages_len
+        return None
+
+    inferred = len(child_ages or [])
+    return inferred or None
+
+
 def _has_child_mention(message: str) -> bool:
     low = _normalize_turkish_chars(message.lower())
     child_words = ["cocuk", "child", "children", "kid", "baby", "bebek", "infant"]
     return any(w in low for w in child_words)
+
+
+def _looks_like_guest_count_payload(message: str) -> bool:
+    """Mesaj kişi sayısı payload'ı mı? (örn: '2 yetişkin 2 çocuk')"""
+    low = _normalize_turkish_chars((message or "").lower())
+    return bool(
+        re.search(r"\b\d+\s*(?:yetiskin|adult|adults)\b", low)
+        or re.search(r"\b\d+\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant)\b", low)
+    )
 
 
 # ===========================================================
@@ -579,7 +874,36 @@ def _ask_dates_message(lang: str, ack: str = "") -> str:
     )
 
 
-def _ask_guests_message(lang: str, ack: str = "") -> str:
+def _extract_room_count_from_message(message: str) -> int:
+    low = _normalize_turkish_chars((message or "").lower())
+    m = re.search(r"\b(\d+)\s*(?:oda|room|rooms)\b", low)
+    if m:
+        try:
+            return max(1, int(m.group(1)))
+        except Exception:
+            return 1
+    if "iki oda" in low or "2 oda" in low:
+        return 2
+    if "uc oda" in low or "3 oda" in low:
+        return 3
+    return 1
+
+
+def _ask_guests_message(lang: str, ack: str = "", room_count: int = 1) -> str:
+    if room_count > 1:
+        if lang == "en":
+            return (
+                f"{ack}"
+                f"Great, I can prepare pricing for {room_count} rooms.\n"
+                "Could you share guest details separately for each room/family?\n"
+                '(e.g., "Room 1: 2 adults | Room 2: 2 adults + 2 children (ages 3 and 10)")'
+            )
+        return (
+            f"{ack}"
+            f"Memnuniyetle, {room_count} oda için fiyat hazırlayabilirim.\n"
+            "Lütfen her oda/aile için kişi bilgilerini ayrı ayrı paylaşır mısınız?\n"
+            '(Örn: "1. Oda: 2 yetişkin | 2. Oda: 2 yetişkin + 2 çocuk (3 ve 10 yaş)")'
+        )
     if lang == "en":
         return (
             f"{ack}"
@@ -607,6 +931,20 @@ def _ask_child_ages_message(lang: str, child_count: int, ack: str = "") -> str:
     )
 
 
+def _ask_child_count_message(lang: str, ack: str = "") -> str:
+    if lang == "en":
+        return (
+            f"{ack}"
+            "You mentioned children. Could you share how many children will stay?\n"
+            '(e.g., "1 child", "2 children")'
+        )
+    return (
+        f"{ack}"
+        "Çocuk belirttiniz. Kaç çocuk konaklayacak paylaşır mısınız?\n"
+        '(Örn: "1 çocuk", "2 çocuk")'
+    )
+
+
 def _ask_checkout_message(lang: str, from_date: str, ack: str = "") -> str:
     from app.services.elektraweb_booking_service import MONTHS_TR_REVERSE, MONTHS_EN_REVERSE
     try:
@@ -625,6 +963,183 @@ def _ask_checkout_message(lang: str, from_date: str, ack: str = "") -> str:
 # ===========================================================
 # 6) ANA HANDLER
 # ===========================================================
+def _is_quiet_room_request(text: str) -> bool:
+    low = _normalize_turkish_chars((text or "").lower())
+    return any(k in low for k in ("sessiz", "sakin", "quiet", "no noise", "less noise"))
+
+
+def _is_breakfast_fee_policy_question(text: str) -> bool:
+    low = _normalize_turkish_chars((text or "").lower())
+    has_breakfast = ("kahvalt" in low) or ("breakfast" in low)
+    has_policy_probe = any(
+        k in low
+        for k in (
+            "dahil mi",
+            "dahil",
+            "included",
+            "ek ucret",
+            "ek ücret",
+            "extra charge",
+            "additional charge",
+            "kisi basi",
+            "kişi başı",
+            "per person",
+        )
+    )
+    return has_breakfast and has_policy_probe
+
+
+def _is_policy_interruption_question(text: str) -> bool:
+    """
+    Aktif fiyat slot-filling sırasında gelen politika/bilgi sorularını tespit et.
+    Bu sorular fiyat akışını override etmemeli; genel bilgi katmanına paslanmalı.
+    """
+    low = _normalize_turkish_chars((text or "").lower())
+    if not low:
+        return False
+
+    if _is_breakfast_fee_policy_question(text):
+        return True
+
+    markers = (
+        "child policy", "kids policy", "infant policy",
+        "cocuk politika", "çocuk politika", "cocuk kural", "çocuk kural",
+        "does the child pay", "discounted rate", "full price",
+        "extra bed", "ek yatak", "nightly fee", "gecelik ucret", "gecelik ücret",
+        "check-in", "check in", "check-out", "check out",
+        "gece gec", "gece geç", "late check-in", "late check in",
+        "erken giris", "erken giriş", "gec cikis", "geç çıkış",
+        "payment method", "odeme yontemi", "ödeme yöntemi",
+        "odeme linki", "ödeme linki", "payment link",
+        "deposit", "depozito", "kapora",
+        "otopark", "parking", "wifi", "wi-fi", "kahvalti", "kahvaltı",
+        "rezervasyonu baslatalim", "rezervasyonu başlatalım", "rezervasyon baslatalim", "rezervasyon başlatalım",
+        "book now", "start reservation", "start booking",
+        "surpriz", "sürpriz", "balayi", "balayı",
+        "romantik", "romantic", "special arrangement",
+        "cicek", "çiçek", "flower", "note card", "welcome note",
+        "gluten", "glutensiz", "gluten-free", "gluten free",
+    )
+    return any(k in low for k in markers)
+
+
+def _is_single_room_feature_price_query(text: str) -> bool:
+    """
+    Tek oda oda-ozelligi/fiyat sorgusu:
+    Ornek: "havuz manzarali oda fiyati", "pool view room price"
+    """
+    low = _normalize_turkish_chars((text or "").lower())
+    if not low:
+        return False
+
+    feature_markers = (
+        "havuz manzara",
+        "pool view",
+        "deniz manzara",
+        "sea view",
+        "sokak manzara",
+        "street view",
+        "city view",
+        "standart oda",
+        "standard room",
+        "jakuzi",
+        "jacuzzi",
+    )
+    price_or_availability_markers = (
+        "fiyat",
+        "price",
+        "ucret",
+        "ücret",
+        "musait",
+        "müsait",
+        "availability",
+        "available",
+        "fark",
+        "difference",
+    )
+    multi_room_markers = (
+        "2 oda",
+        "iki oda",
+        "3 oda",
+        "uc oda",
+        "üç oda",
+        "room 1",
+        "room 2",
+        "1. oda",
+        "2. oda",
+        "biri",
+        "digeri",
+        "diğeri",
+        "one room",
+        "other room",
+        "two rooms",
+        "three rooms",
+    )
+
+    has_feature = any(k in low for k in feature_markers)
+    has_price_or_availability = any(k in low for k in price_or_availability_markers)
+    has_room_word = ("oda" in low) or ("room" in low)
+    has_multi_room = any(k in low for k in multi_room_markers)
+    return has_feature and has_price_or_availability and has_room_word and not has_multi_room
+
+
+def _has_room_preference_hint(text: str) -> bool:
+    low = _normalize_turkish_chars((text or "").lower())
+    if not low:
+        return False
+    markers = (
+        "havuz manzara",
+        "pool view",
+        "deniz manzara",
+        "sea view",
+        "sokak manzara",
+        "street view",
+        "city view",
+        "standart oda",
+        "standard room",
+        "jakuzi",
+        "jacuzzi",
+        "sessiz oda",
+        "quiet room",
+    )
+    return any(k in low for k in markers)
+
+
+def _build_breakfast_fee_policy_reply(lang: str) -> str:
+    if lang == "en":
+        return (
+            "Our concept includes breakfast. We also have a restaurant for lunch and dinner, "
+            "but lunch and dinner are not included in accommodation price. "
+            "Our pricing is room-based, not per person. "
+            "If you are asking room pricing, please share your date range and guest count and I will provide a quote."
+        )
+    return (
+        "Konseptimiz kahvaltı dahildir ayrıca akşam ve öğlen yemeği hizmeti veren restoranımız mevcuttur fakat akşam ve öğlen yemeği konaklama ücretine dahil değildir. "
+        "Fiyatlarımız kişi başı değil, oda bazlıdır. "
+        "Kişi başı ek ücret fiyatını eğer oda için sorduysanız, öğrenmek istediğiniz tarih aralığı ve kişi sayısını söyleyiniz ve sizlere fiyat paylaşımı yapalım."
+    )
+
+
+def _append_context_hint(flow_data: Dict[str, Any], message: str) -> None:
+    """
+    Fiyat akışında kullanıcı niyetini (örn. standart oda, TL vb.) adım adım koru.
+    Böylece tarih/kişi tamamlayıcı mesajlarında gelen tercihler kaybolmaz.
+    """
+    txt = (message or "").strip()
+    if not txt:
+        return
+    existing = str(flow_data.get("context_hint") or "").strip()
+    if not existing:
+        flow_data["context_hint"] = txt[:1200]
+        return
+    low_existing = _normalize_turkish_chars(existing.lower())
+    low_txt = _normalize_turkish_chars(txt.lower())
+    if low_txt and low_txt in low_existing:
+        return
+    merged = f"{existing} | {txt}"
+    flow_data["context_hint"] = merged[-1200:]
+
+
 async def handle_price_flow(
     phone: str,
     message: str,
@@ -641,9 +1156,26 @@ async def handle_price_flow(
 
     hotel_id = (os.getenv("ELEKTRA_HOTEL_ID") or "21966").strip()
 
+    # Kahvalti dahil mi / kisi basi ek ucret gibi politika sorulari fiyat sorgusuna dusmemeli.
+    if _is_breakfast_fee_policy_question(message):
+        return {
+            "reply": _build_breakfast_fee_policy_reply(lang),
+            "status": "price_policy_info",
+            "log": "breakfast_policy_info",
+            "is_price_template": False,
+        }
+
     # ----- A) PARA BIRIMI DEGISIKLIGI KONTROLU (EN YUKSEK ONCELIK) -----
     requested_currency = detect_currency_change(message)
     if requested_currency:
+        if not _is_currency_enabled(requested_currency):
+            return {
+                "reply": _DISABLED_CURRENCY_REPLY,
+                "status": "handoff",
+                "log": f"currency_disabled:{requested_currency}",
+                "is_price_template": False,
+                "handoff_reason": "price_currency_disabled",
+            }
         last_q = get_last_query(phone)
         if last_q and last_q.get("from_date") and last_q.get("adult_count"):
             # Son sorgu var — sadece currency degistirip tekrar sor
@@ -652,6 +1184,12 @@ async def handle_price_flow(
             return await _query_elektraweb(phone, last_q, hotel_id, currency_override=requested_currency)
         # Son sorgu yok — normal akisa dus (tarih/kisi soracak)
 
+    # ----- A.1) Oda adedi/musaitlik sorusu (Elektra availability'den adet) -----
+    if _is_room_stock_query(message):
+        stock_reply = await _handle_room_stock_query(phone=phone, message=message, lang=lang, hotel_id=hotel_id)
+        if stock_reply is not None:
+            return stock_reply
+
     # ----- B) Aktif flow var mi? -----
     flow = get_price_flow(phone)
     if flow and flow.get("state") and flow["state"] != PriceFlowState.IDLE:
@@ -659,7 +1197,8 @@ async def handle_price_flow(
 
     # ----- C) Yeni fiyat niyeti var mi? -----
     if not detect_price_intent(message):
-        return None
+        if not _looks_like_price_slot_followup(message, history):
+            return None
 
     # ----- D) Handoff gerektiren sorusu mu? -----
     is_handoff, handoff_reason = detect_handoff_price(message)
@@ -676,6 +1215,118 @@ async def handle_price_flow(
     return await _start_new_flow(phone, message, lang, hotel_id, history=history)
 
 
+async def _handle_room_stock_query(phone: str, message: str, lang: str, hotel_id: str) -> Optional[Dict[str, Any]]:
+    room_key = _extract_room_key_for_stock_query(message)
+    if not room_key:
+        return None
+
+    from_date, to_date = _extract_dates_smart(message)
+    adult, child_ages = _extract_guests_smart(message)
+    child_count = _extract_child_count(message, child_ages)
+    last_q = get_last_query(phone) or {}
+
+    if not from_date:
+        from_date = last_q.get("from_date")
+    if not to_date:
+        to_date = last_q.get("to_date")
+    if adult is None:
+        adult = last_q.get("adult_count")
+    if not child_ages:
+        lq_ages = last_q.get("child_ages")
+        if isinstance(lq_ages, list):
+            child_ages = lq_ages
+
+    if not from_date or not to_date:
+        reply = (
+            "Oda adedini net kontrol edebilmem için giriş ve çıkış tarihini paylaşır mısınız?"
+            if lang == "tr"
+            else "To check exact room count, could you share check-in and check-out dates?"
+        )
+        return {"reply": reply, "status": "price_flow", "log": "room_stock_missing_dates", "is_price_template": False}
+
+    if not adult:
+        reply = (
+            "Oda adedini net kontrol edebilmem için yetişkin sayısını da paylaşır mısınız?"
+            if lang == "tr"
+            else "Could you also share the number of adults so I can check exact room count?"
+        )
+        return {"reply": reply, "status": "price_flow", "log": "room_stock_missing_guests", "is_price_template": False}
+
+    room_type_id_to_key: Dict[int, str] = {}
+    cached_offers: List[Dict[str, Any]] = []
+    try:
+        from app.services.booking_flow_service import get_price_offers
+        cached = get_price_offers(phone) or {}
+        cached_offers = list(cached.get("offers") or [])
+        for offer in cached_offers:
+            try:
+                rid = int(offer.get("room-type-id") or 0)
+            except Exception:
+                rid = 0
+            if rid <= 0:
+                continue
+            room_info = None
+            try:
+                from app.services.elektraweb_booking_service import _normalize_room_type
+                room_info = _normalize_room_type(offer.get("room-type", "") or "")
+            except Exception:
+                room_info = None
+            if room_info and room_info.get("key"):
+                room_type_id_to_key[rid] = room_info["key"]
+    except Exception:
+        room_type_id_to_key = {}
+
+    # 1) Once son fiyat cevap cache'indeki offer'lardan oda adedi cikarmayi dene.
+    cached_count = _extract_stock_from_cached_offers(cached_offers, room_key=room_key)
+    if cached_count is not None:
+        room_label = _ROOM_LABEL_TR.get(room_key, room_key)
+        if lang == "tr":
+            reply = (
+                f"{from_date} - {to_date} tarihleri arasında "
+                f"{room_label} için {int(cached_count)} adet müsait oda görünmektedir."
+            )
+        else:
+            reply = (
+                f"For {from_date} - {to_date}, there are currently {int(cached_count)} {room_label} room(s) available."
+            )
+        return {"reply": reply, "status": "price_room_stock_result", "log": "room_stock_ok_cached_offers", "is_price_template": False}
+
+    # 2) Cache'ten bulunamazsa bookingapi /availability ile canlı stok hesapla.
+    try:
+        stocks = await fetch_room_stock_by_type_from_availability(
+            hotel_id=hotel_id,
+            from_date=from_date,
+            to_date=to_date,
+            adult=int(adult),
+            currency=(last_q.get("currency") or "EUR"),
+            child_ages=child_ages or None,
+            room_type_id_to_key=room_type_id_to_key,
+            timeout_sec=20,
+        )
+    except Exception as e:
+        log = f"room_stock_query_failed: {type(e).__name__}: {str(e)[:250]}"
+        return {
+            "reply": _technical_price_error_reply(lang),
+            "status": "handoff",
+            "log": log,
+            "is_price_template": False,
+            "handoff_reason": "fiyat_sistemi_hatasi",
+        }
+
+    count = int(stocks.get(room_key, 0))
+    room_label = _ROOM_LABEL_TR.get(room_key, room_key)
+    if lang == "tr":
+        reply = (
+            f"{from_date} - {to_date} tarihleri arasında "
+            f"{room_label} için {count} adet müsait oda görünmektedir."
+        )
+    else:
+        reply = (
+            f"For {from_date} - {to_date}, there are currently {count} {room_label} room(s) available."
+        )
+    return {"reply": reply, "status": "price_room_stock_result", "log": "room_stock_ok", "is_price_template": False}
+
+
 async def _start_new_flow(
     phone: str,
     message: str,
@@ -685,12 +1336,21 @@ async def _start_new_flow(
 ) -> Dict[str, Any]:
     from_date, to_date = _extract_dates_smart(message)
     adult, child_ages = _extract_guests_smart(message)
+    child_count = _extract_child_count(message, child_ages)
+    room_count = _extract_room_count_from_message(message)
+    room_groups = _extract_multi_room_guest_groups(message) if room_count > 1 else []
     has_child = _has_child_mention(message)
     currency = _infer_currency(message)
+    has_user_slot_payload = bool(from_date and to_date and adult is not None)
 
     # 0) Aynı konuşmada kullanıcı "fiyat verir misin?" dediğinde, son bilinen parametrelerden tamamla
     last_q = get_last_query(phone)
-    if last_q:
+    allow_last_query_backfill = bool(
+        detect_price_intent(message)
+        or detect_currency_change(message)
+        or _looks_like_price_slot_followup(message, history)
+    )
+    if last_q and allow_last_query_backfill:
         if not from_date:
             from_date = last_q.get("from_date")
         if not to_date:
@@ -701,11 +1361,31 @@ async def _start_new_flow(
             lq_ages = last_q.get("child_ages")
             if isinstance(lq_ages, list):
                 child_ages = lq_ages
+        if not child_count:
+            lq_child_count = last_q.get("child_count")
+            if isinstance(lq_child_count, int):
+                child_count = lq_child_count
         if not currency:
             currency = last_q.get("currency")
+        if not room_count:
+            room_count = int(last_q.get("room_count") or 1)
 
-    if child_ages:
+    # Kisa takip sorularinda ("fiyat bilgisini verir misiniz") onceki oda tercihlerini
+    # koru; ancak yeni mesajda acik tercih varsa onu esas al.
+    context_hint_seed = message[:1200]
+    if last_q and not _has_room_preference_hint(message) and not has_user_slot_payload:
+        prev_pref_hint = str(last_q.get("request_context_hint") or "").strip()
+        if prev_pref_hint and _has_room_preference_hint(prev_pref_hint):
+            context_hint_seed = f"{prev_pref_hint} | {message}"[-1200:]
+
+    if room_count > 1 and room_groups:
+        child_ages = []
+        has_child = False
+        child_count = 0
+    elif child_ages:
         has_child = True
+        if not child_count:
+            child_count = len(child_ages)
 
     # 1) Flow persistence kaçarsa bile, son 10 USER mesajından tarih/kişi bilgisini geri doldur
     if history and (not from_date or not to_date or adult is None or (has_child and not child_ages)):
@@ -729,26 +1409,59 @@ async def _start_new_flow(
                     adult = a
                 if ages and not child_ages:
                     child_ages = ages
+                if not child_count:
+                    cc = _extract_child_count(txt, ages)
+                    if cc:
+                        child_count = cc
 
             if _has_child_mention(txt):
                 has_child = True
             if child_ages:
                 has_child = True
+                if not child_count:
+                    child_count = len(child_ages)
 
             if from_date and to_date and adult is not None and (not (has_child and not child_ages)):
                 break
 
+    # Aktif child baglami varken kullanici sadece "7 ve 8" gibi sayi yazarsa
+    # bu sayilari yas olarak kabul et; aksi halde ayni soruyu tekrar sorup loop olusuyor.
+    if (
+        has_child
+        and not child_ages
+        and not _has_child_mention(message)
+        and not _looks_like_guest_count_payload(message)
+    ):
+        inline_ages = [int(n) for n in re.findall(r"\d+", message) if 0 <= int(n) <= 17]
+        if inline_ages:
+            child_ages = inline_ages[:4]
+            if not child_count:
+                child_count = len(child_ages)
+
     flow_data: Dict[str, Any] = {
         "lang": lang,
         "original_question": message[:500],
+        "context_hint": context_hint_seed,
         "from_date": from_date,
         "to_date": to_date,
         "adult_count": adult,
+        "room_count": room_count,
+        "room_groups": room_groups,
         "child_ages": child_ages if child_ages else [],
         "child_mentioned": has_child,
+        "child_count": int(child_count or 0),
     }
     if currency:
         flow_data["currency"] = currency
+        if not _is_currency_enabled(currency):
+            clear_price_flow(phone)
+            return {
+                "reply": _DISABLED_CURRENCY_REPLY,
+                "status": "handoff",
+                "log": f"currency_disabled:{currency}",
+                "is_price_template": False,
+                "handoff_reason": "price_currency_disabled",
+            }
 
     missing = _get_missing_fields(flow_data)
     if not missing:
@@ -761,7 +1474,18 @@ async def _process_active_flow(
 ) -> Dict[str, Any]:
     state = flow.get("state", PriceFlowState.IDLE)
     flow_data = flow.get("data", {})
-    lang = flow_data.get("lang", lang)
+    incoming_lang = (lang or "").strip().lower()
+    flow_lang = str(flow_data.get("lang") or "").strip().lower()
+    if incoming_lang:
+        lang = incoming_lang
+        if flow_lang != incoming_lang:
+            flow_data["lang"] = incoming_lang
+            try:
+                save_price_flow(phone, state, flow_data)
+            except Exception:
+                pass
+    else:
+        lang = flow_lang or "tr"
 
     msg_lower = message.lower().strip()
 
@@ -769,6 +1493,22 @@ async def _process_active_flow(
         clear_price_flow(phone)
         reply = "Fiyat sorgusu iptal edildi. Size nasıl yardımcı olabilirim?" if lang == "tr" else "Price inquiry cancelled. How can I help you?"
         return {"reply": reply, "status": "price_flow_cancelled", "log": None, "is_price_template": False}
+
+    # Tek oda ozellik/fiyat sorusu geldiyse (örn. havuz manzarali oda),
+    # multi-room loop'a sapmadan mevcut tarih/kisi baglamiyla direkt fiyatla.
+    if state == PriceFlowState.ASK_GUESTS and _is_single_room_feature_price_query(message):
+        flow_data["room_count"] = 1
+        flow_data["room_groups"] = []
+        missing = _get_missing_fields(flow_data)
+        if not missing:
+            return await _query_elektraweb(phone, flow_data, hotel_id)
+        ack = _build_ack_message(flow_data, lang)
+        return _ask_next_missing(phone, flow_data, missing, lang, ack=ack)
+
+    # Aktif flow sırasında politika/bilgi sorusunu slot-filling'e zorlamadan
+    # bir sonraki katmanlara bırak (local/openai). Flow state korunur.
+    if _is_policy_interruption_question(message):
+        return None
 
     if state == PriceFlowState.ASK_DATES:
         return await _handle_dates_response(phone, message, flow_data, lang, hotel_id)
@@ -784,6 +1524,11 @@ async def _process_active_flow(
 async def _handle_dates_response(
     phone: str, message: str, flow_data: Dict[str, Any], lang: str, hotel_id: str,
 ) -> Dict[str, Any]:
+    _append_context_hint(flow_data, message)
+    currency_new = _infer_currency(message)
+    if currency_new:
+        flow_data["currency"] = currency_new
+
     from_date, to_date = _extract_dates_smart(message)
     night_count = _extract_night_count(message)
 
@@ -805,10 +1550,13 @@ async def _handle_dates_response(
 
     # Ayni mesajda kisi bilgisi de olabilir
     adult_new, child_ages_new = _extract_guests_smart(message)
+    child_count_new = _extract_child_count(message, child_ages_new)
     if adult_new:
         flow_data["adult_count"] = adult_new
     if child_ages_new:
         flow_data["child_ages"] = child_ages_new
+    if child_count_new is not None:
+        flow_data["child_count"] = int(child_count_new)
     if _has_child_mention(message):
         flow_data["child_mentioned"] = True
 
@@ -845,7 +1593,41 @@ async def _handle_dates_response(
 async def _handle_guests_response(
     phone: str, message: str, flow_data: Dict[str, Any], lang: str, hotel_id: str,
 ) -> Dict[str, Any]:
+    _append_context_hint(flow_data, message)
+    currency_new = _infer_currency(message)
+    if currency_new:
+        flow_data["currency"] = currency_new
+
+    room_count = int(flow_data.get("room_count") or 1)
+
+    if room_count > 1:
+        groups = _extract_multi_room_guest_groups(message)
+        if groups:
+            flow_data["room_groups"] = groups
+        if groups and len(groups) < room_count:
+            save_price_flow(phone, PriceFlowState.ASK_GUESTS, flow_data)
+            reply = (
+                f"{room_count} oda için her oda/aile bilgisini ayrı ayrı yazabilir misiniz?\n"
+                '(Örn: "1. Oda: 2 yetişkin | 2. Oda: 2 yetişkin + 2 çocuk (3 ve 10 yaş)")'
+                if lang == "tr"
+                else (
+                    f"Could you share guest details separately for all {room_count} rooms/families?\n"
+                    '(e.g., "Room 1: 2 adults | Room 2: 2 adults + 2 children (ages 3 and 10)")'
+                )
+            )
+            return {"reply": reply, "status": "price_flow", "log": None, "is_price_template": False}
+
+        if len(groups) >= room_count and flow_data.get("from_date") and flow_data.get("to_date"):
+            return await _query_multi_room_quotes(
+                phone=phone,
+                flow_data=flow_data,
+                groups=groups[:room_count],
+                hotel_id=hotel_id,
+                lang=lang,
+            )
+
     adult, child_ages = _extract_guests_smart(message)
+    child_count = _extract_child_count(message, child_ages)
 
     from_date, to_date = _extract_dates_smart(message)
     if from_date:
@@ -857,6 +1639,8 @@ async def _handle_guests_response(
         flow_data["adult_count"] = adult
     if child_ages:
         flow_data["child_ages"] = child_ages
+    if child_count is not None:
+        flow_data["child_count"] = int(child_count)
     if _has_child_mention(message):
         flow_data["child_mentioned"] = True
 
@@ -873,21 +1657,106 @@ async def _handle_guests_response(
     return _ask_next_missing(phone, flow_data, missing, lang, ack=ack)
 
 
+async def _query_multi_room_quotes(
+    *,
+    phone: str,
+    flow_data: Dict[str, Any],
+    groups: List[Dict[str, Any]],
+    hotel_id: str,
+    lang: str,
+) -> Dict[str, Any]:
+    from_date = flow_data.get("from_date", "")
+    to_date = flow_data.get("to_date", "")
+    if not from_date or not to_date:
+        save_price_flow(phone, PriceFlowState.ASK_DATES, flow_data)
+        return {"reply": _ask_dates_message(lang), "status": "price_flow", "log": None, "is_price_template": False}
+
+    family_blocks: List[str] = []
+    for i, group in enumerate(groups, start=1):
+        adults = int(group.get("adult_count") or 0)
+        child_ages = list(group.get("child_ages") or [])
+        if adults <= 0:
+            continue
+        parts = [from_date, to_date, f"{adults} yetişkin" if lang == "tr" else f"{adults} adults"]
+        if child_ages:
+            if lang == "tr":
+                parts.append(f"{len(child_ages)} çocuk " + " ".join(f"{a} yaş" for a in child_ages))
+            else:
+                parts.append(f"{len(child_ages)} children " + " ".join(str(a) for a in child_ages))
+        query_text = " ".join(parts)
+        reply_i, log_i, _offers_i = await handle_elektra_price_request(
+            query_text,
+            hotel_id=hotel_id,
+            lang=lang,
+        )
+        if (reply_i or "").startswith("HANDOFF:"):
+            error_type = (reply_i or "").replace("HANDOFF:", "", 1).strip() or "UNKNOWN"
+            clear_price_flow(phone)
+            if _is_technical_handoff_error(error_type):
+                return {
+                    "reply": _technical_price_error_reply(lang),
+                    "status": "handoff",
+                    "log": log_i,
+                    "is_price_template": False,
+                    "handoff_reason": "fiyat_sistemi_hatasi",
+                }
+            return {
+                "reply": "",
+                "status": "handoff",
+                "log": log_i,
+                "is_price_template": False,
+                "handoff_reason": "multi_room_quote_failed",
+            }
+        title = f"{i}. Aile:" if lang == "tr" else f"Family {i}:"
+        family_blocks.append(f"{title}\n\n{reply_i}")
+
+    clear_price_flow(phone)
+    if not family_blocks:
+        return {
+            "reply": "Çok odalı fiyat hesaplaması için aile/oda bazlı kişi bilgilerini tekrar paylaşır mısınız?",
+            "status": "price_flow",
+            "log": "multi_room_empty_groups",
+            "is_price_template": False,
+        }
+    if lang == "tr":
+        header = "Sizlere aşağıda her aile için fiyat paylaşımı yaptım:\n\n"
+    else:
+        header = "Please find pricing below for each family:\n\n"
+    return {
+        "reply": header + "\n\n".join(family_blocks),
+        "status": "price_result_multi_room",
+        "log": "multi_room_quote_ok",
+        "is_price_template": False,
+    }
+
+
 async def _handle_child_ages_response(
     phone: str, message: str, flow_data: Dict[str, Any], lang: str, hotel_id: str,
 ) -> Dict[str, Any]:
+    _append_context_hint(flow_data, message)
+    currency_new = _infer_currency(message)
+    if currency_new:
+        flow_data["currency"] = currency_new
+
     child_ages = _extract_child_ages(message)
+    child_count = _extract_child_count(message, child_ages)
 
     if not child_ages:
         numbers = re.findall(r"\d+", message)
-        child_ages = [int(n) for n in numbers if 0 <= int(n) <= 17]
+        if not _looks_like_guest_count_payload(message):
+            child_ages = [int(n) for n in numbers if 0 <= int(n) <= 17]
 
     if child_ages:
         flow_data["child_ages"] = child_ages[:4]
+        if not flow_data.get("child_count"):
+            flow_data["child_count"] = len(flow_data["child_ages"])
+    if child_count is not None:
+        flow_data["child_count"] = int(child_count)
 
     if not flow_data.get("child_ages"):
         if any(w in message.lower() for w in ["yok", "hayır", "hayir", "no", "none", "0"]):
             flow_data["child_mentioned"] = False
+            flow_data["child_count"] = 0
             flow_data["child_ages"] = []
         else:
             save_price_flow(phone, PriceFlowState.ASK_CHILD_AGES, flow_data)
@@ -910,8 +1779,16 @@ def _get_missing_fields(flow_data: Dict[str, Any]) -> List[str]:
     missing = []
     if not flow_data.get("from_date") or not flow_data.get("to_date"):
         missing.append("dates")
-    if not flow_data.get("adult_count"):
-        missing.append("guests")
+    room_count = int(flow_data.get("room_count") or 1)
+    if room_count > 1:
+        groups = flow_data.get("room_groups") or []
+        if not isinstance(groups, list) or len(groups) < room_count:
+            missing.append("guests")
+    else:
+        if not flow_data.get("adult_count"):
+            missing.append("guests")
+    if flow_data.get("child_mentioned") and int(flow_data.get("child_count") or 0) <= 0:
+        missing.append("child_count")
     if flow_data.get("child_mentioned") and not flow_data.get("child_ages"):
         missing.append("child_ages")
     return missing
@@ -931,13 +1808,14 @@ def _ask_next_missing(
             reply = _ask_dates_message(lang, ack=ack)
     elif next_field == "guests":
         save_price_flow(phone, PriceFlowState.ASK_GUESTS, flow_data)
-        reply = _ask_guests_message(lang, ack=ack)
+        reply = _ask_guests_message(lang, ack=ack, room_count=int(flow_data.get("room_count") or 1))
     elif next_field == "child_ages":
-        low = _normalize_turkish_chars(flow_data.get("original_question", "").lower())
-        m = re.search(r"(\d+)\s*(?:cocuk|child|children|kid)", low)
-        child_count = int(m.group(1)) if m else 1
+        child_count = int(flow_data.get("child_count") or 1)
         save_price_flow(phone, PriceFlowState.ASK_CHILD_AGES, flow_data)
         reply = _ask_child_ages_message(lang, child_count, ack=ack)
+    elif next_field == "child_count":
+        save_price_flow(phone, PriceFlowState.ASK_GUESTS, flow_data)
+        reply = _ask_child_count_message(lang, ack=ack)
     else:
         clear_price_flow(phone)
         return None
@@ -954,6 +1832,15 @@ async def _query_elektraweb(
     """Tum bilgi tamam — Elektraweb'e sorgu at."""
     lang = flow_data.get("lang", "tr")
     currency = currency_override or flow_data.get("currency", "EUR")
+    if not _is_currency_enabled(currency):
+        clear_price_flow(phone)
+        return {
+            "reply": _DISABLED_CURRENCY_REPLY,
+            "status": "handoff",
+            "log": f"currency_disabled:{currency}",
+            "is_price_template": False,
+            "handoff_reason": "price_currency_disabled",
+        }
 
     # Elektraweb icin mesaj olustur (ISO format)
     parts = [
@@ -975,6 +1862,16 @@ async def _query_elektraweb(
         else:
             parts.append(f"{child_count} child {ages_str}")
 
+    # Oda tercihi / para birimi gibi ilk niyet bilgilerini kaybetmemek için bağlamı taşı.
+    context_hint = str(
+        flow_data.get("context_hint")
+        or flow_data.get("request_context_hint")
+        or flow_data.get("original_question")
+        or ""
+    ).strip()
+    if context_hint:
+        parts.append(context_hint[:500])
+
     constructed_message = " ".join(parts)
 
     try:
@@ -987,6 +1884,14 @@ async def _query_elektraweb(
         if reply.startswith("HANDOFF:"):
             clear_price_flow(phone)
             error_type = reply.replace("HANDOFF:", "", 1).strip() or "UNKNOWN"
+            if _is_technical_handoff_error(error_type):
+                return {
+                    "reply": _technical_price_error_reply(lang),
+                    "status": "handoff",
+                    "log": log,
+                    "is_price_template": False,
+                    "handoff_reason": "fiyat_sistemi_hatasi",
+                }
             return {
                 "reply": "",  # ham HANDOFF:* geri donme
                 "status": "handoff",
@@ -1002,10 +1907,12 @@ async def _query_elektraweb(
             "from_date": flow_data["from_date"],
             "to_date": flow_data["to_date"],
             "adult_count": flow_data["adult_count"],
+            "child_count": int(flow_data.get("child_count") or 0),
             "child_ages": flow_data.get("child_ages", []),
             "child_mentioned": flow_data.get("child_mentioned", False),
             "lang": lang,
             "currency": currency,
+            "request_context_hint": context_hint[:500],
         })
 
         # Ham offer'lari cache'le (booking flow icin)
@@ -1020,6 +1927,7 @@ async def _query_elektraweb(
                     "currency": currency,
                     "hotel_id": hotel_id,
                     "lang": lang,
+                    "quiet_mode": _is_quiet_room_request(constructed_message),
                 })
             except Exception as e:
                 print(f"[BOOKING] Offer cache error: {e}")

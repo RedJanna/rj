@@ -1,0 +1,53 @@
+📋 Senaryo: S017 - Canlı Destek Talebi V1
+Senaryo Kodu ve Adı: S017 - Canlı Destek Talebi V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin doğrudan yetkili bir müşteri temsilcisiyle görüşme talebini almak, görüşme konusunu ve iletişim bilgilerini toplayarak zaman kaybetmeden işlemi ilgili canlı destek ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Yetkili biriyle görüşmek istiyorum."
+
+"Beni bir müşteri temsilcisine bağlar mısınız?"
+
+"Canlı destek almak istiyorum."
+
+"Gerçek bir insanla konuşmak istiyorum."
+
+"Operatörle görüşebilir miyim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Talep Nedeni: (Görüşmenin doğru departmana aktarılabilmesi için)
+
+Telefon: (Hatta kopma olması veya geri dönüş yapılması durumları için)
+
+Tercih Edilen Dönüş Saati: (Müsaitlik durumuna göre arama planlaması yapılabilmesi için)
+
+Konu Başlığı: (Görüşme öncesi temsilcinin hazırlık yapabilmesi için)
+
+Öncelik Seviyesi: (Acil bir müdahale gerekip gerekmediğinin tespiti için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin canlı destek veya yetkili biriyle görüşme talebi (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. "Canlı", "destek", "temsilci" gibi kelime bazlı eşleştirmeler kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle veya nasıl ifade ederse etsin asıl talebin bir insanla görüşmek olduğu sistem tarafından kavranır.
+
+Yukarıdaki temel bilgiler (slotlar) toplanır.
+
+Eğer misafir açıkça canlı destek istiyorsa, araya başka işlem veya otonom çözüm adımları sokulmadan doğrudan "handoff" (canlı desteğe aktarım) süreci başlatılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Bot, misafirin insan desteği talebi doğrultusunda sohbeti "Soft Devir" ile canlı destek ekibine aktarır.
+
+SLA Süresi: Aktarılan bu çağrıya veya talebe müşteri temsilcisi tarafından en geç 20 dakika (SLA hedefi) içerisinde yanıt verilmesi hedeflenir.
+
+💬 Standart Yanıt Mesajları
+
+1. Aktarım Onayı (TR):
+
+"Talebinizi aldım, sizi canlı müşteri temsilcimize bağlıyorum."
+
+2. Aktarım Onayı (EN):
+
+"I have received your request and I am connecting you to our live customer representative."

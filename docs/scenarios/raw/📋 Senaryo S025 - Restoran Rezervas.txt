@@ -1,0 +1,100 @@
+📋 Senaryo: S025 - Restoran Rezervasyon Büyük Grup V1
+Senaryo Kodu ve Adı: S025 - Restoran Rezervasyon Büyük Grup V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin 8 kişi üzeri restoran rezervasyonu talebinde, gerekli bilgileri sohbet akışı içinde eksiksiz toplamak; bilgileri özetleyerek teyit etmek ve otomatik rezervasyon yerine canlı ekip onayı gerektiren talebi “soft devir” ile restoran rezervasyon ekibine iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"10 kişilik masa ayırtabilir miyiz?"
+
+"9 kişi için akşam yemeğine masa ayırabilir misiniz?"
+
+"Kalabalık bir grubuz, rezervasyon yapabilir miyiz?"
+
+"8’den fazla kişi için masa ayırtmak istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Tarih: (GG/AA/YYYY formatında)
+
+Saat: (Örn: 20:00)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Ad Soyad: (Rezervasyonun oluşturulacağı ad-soyad)
+
+Telefon: (İletişim numarası)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin büyük grup restoran rezervasyonu talebi (intent), mesajın ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Slotlar kontrol edilir; eksik bilgi varsa misafiri yormadan tek mesajda istenir.
+
+Kişi sayısı 8 üstü ise:
+- Otomatik rezervasyon oluşturulmaz.
+- Talep “canlı onay” gerektiren kayıt olarak hazırlanır.
+- Bilgiler özetlenir ve misafirden teyit alınır.
+- Ardından talep restoran rezervasyon ekibine “soft devir” ile iletilir.
+
+Kişi sayısı 8 ve altı ise:
+- Bu senaryo yerine standart restoran rezervasyon akışına yönlenir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Kişi sayısı 8 üstü talepler restoran_rezervasyon ekibine soft devir ile iletilir.
+
+SLA: 20 dakika içinde geri dönüş hedeflenir.
+
+Fallback:
+- Misafir bilgileri eksik/yanlış paylaşırsa, eksik alanlar net şekilde yeniden istenir.
+- Misafir kişi sayısını sonradan 8 üstüne güncellerse, akış canlı onay gerektiren sürece çevrilir ve soft devir uygulanır.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Karşılama ve Bilgi Talebi:
+
+"Memnuniyetle yardımcı olurum. 😊 8’den fazla kişi için rezervasyonlarda ekip onayı gerekiyor. Talebinizi iletebilmem için lütfen tarih, saat, kişi sayısı, ad-soyad ve iletişim telefon numaranızı paylaşır mısınız?"
+
+2. Eksik Bilgi Varsa (Örnek - Sadece tarih ve saat eksikse):
+
+"Teşekkür ederim, kişi sayısı ve iletişim bilgilerinizi not aldım. Rezervasyon talebinizi ekibe iletebilmem için rica etsem tarih ve saati de paylaşır mısınız?"
+
+3. Teyit Mesajı (Tüm bilgiler toplandığında):
+
+"Bilgileriniz için teşekkür ederim. Hemen kontrol edelim:
+🗓️ Tarih: [Tarih]
+🕒 Saat: [Saat]
+👥 Kişi Sayısı: [Kişi Sayısı]
+👤 Ad Soyad: [Ad Soyad]
+📞 Telefon: [Telefon]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir detay varsa bana yazabilirsiniz."
+
+4. Devir / Onay Bilgilendirmesi (SLA ile):
+
+"Harika, teşekkürler. ✅ 8+ kişilik rezervasyonlar için ekip onayı gerektiğinden talebinizi canlı restoran ekibimize iletiyorum (soft devir). Size en geç 20 dakika içinde dönüş sağlayacağız."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Message & Information Request:
+
+"With pleasure. 😊 For groups above 8 guests, team approval is required. To forward your request, could you please share the date, time, guest count, full name, and a contact phone number?"
+
+2. If Details Are Missing (Example - Only date and time are missing):
+
+"Thank you—I noted the guest count and contact details. Could you please share the date and time as well so I can forward your request to the team?"
+
+3. Summary / Confirmation (When All Details Are Collected):
+
+"Thank you. Let’s confirm the details:
+🗓️ Date: [Date]
+🕒 Time: [Time]
+👥 Guest Count: [Guest Count]
+👤 Full Name: [Full Name]
+📞 Phone: [Phone]
+
+If everything is correct, please reply 'Yes'. If you’d like to change anything, just let me know."
+
+4. Forwarding / SLA Notice:
+
+"Perfect, thank you. ✅ Since approval is required for 8+ guest reservations, I’m forwarding your request to our live restaurant team (soft handover). We will get back to you within 20 minutes."

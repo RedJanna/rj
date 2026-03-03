@@ -1,0 +1,33 @@
+version: 1
+policies:
+  - id: cancellation_policy.v1
+    topic: cancellation
+    trigger_terms:
+      - iptal
+      - iade
+      - cancellation
+      - refund
+    inquiry_markers:
+      - kosul
+      - sart
+      - politika
+      - policy
+      - nedir
+      - nasil
+      - detay
+      - bilgi
+      - var mi
+      - geri odeme
+    reply:
+      tr: |
+        İptal/iade koşulları tarife göre değişir:
+        - Ücretsiz iptal tarifelerinde girişten 5 gün öncesine kadar iptalde %100 geri ödeme yapılır.
+        - Girişten sonra iptal/iade seçeneği bulunmamaktadır.
+      en: |
+        Our cancellation policy depends on rate type:
+        - Free Cancellation rates: 100% refund up to 5 days before check-in.
+        - After check-in: no cancellation/refund is available.
+      ru: |
+        Условия отмены зависят от типа тарифа:
+        - Для тарифов с бесплатной отменой: 100% возврат при отмене не позднее чем за 5 дней до заезда.
+        - После заезда отмена/возврат не предусмотрены.

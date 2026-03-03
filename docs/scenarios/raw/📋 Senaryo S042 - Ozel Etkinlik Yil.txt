@@ -1,0 +1,60 @@
+📋 Senaryo: S042 - Ozel Etkinlik Yildonumu V1
+Senaryo Kodu ve Adı: S042 - Ozel Etkinlik Yildonumu V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin yıldönümü kutlaması için romantik paket talebinde, gerekli bilgileri e-posta üzerinden toplamak; oda ve restoran koordinasyonu yapılacağını belirtmek ve talebi “özel_istek” canlı ekibine soft devir ile ileterek 30 dakika içinde geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Yıldönümü kutlaması için romantik paket var mı?"
+
+"Yıldönümü için özel bir hazırlık yapabilir misiniz?"
+
+"Romantik paket / sürpriz organizasyon istiyoruz."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Etkinlik Tarihi: (GG/AA/YYYY)
+
+Konaklama Durumu: (Konaklama var mı? Rezervasyon bilgisi varsa)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Özel Talep Notu: (Paket içeriği beklentisi / özel istek)
+
+Telefon: (İletişim numarası)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin yıldönümü talebi (intent), mesajın ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+Yıldönümü talebi algılandığında:
+- Oda + restoran koordinasyonu yapılacağı belirtilir.
+- Eksik bilgiler tek e-postada topluca istenir.
+- Bilgiler tamamlandığında talep “özel_istek” ekibine soft devir ile aktarılır ve misafire geri dönüş süreci bildirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Soft Devir: özel_istek
+
+SLA: 30 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir konaklama bilgisi paylaşamazsa, isim + telefon + tarih üzerinden kontrol için ek bilgi istenir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Yanıt + Bilgi Talebi:
+
+"Yıldönümü talebinizi memnuniyetle planlarız. Oda ve restoran koordinasyonu birlikte yapılacaktır. Size en uygun seçenekleri sunabilmemiz için lütfen etkinlik tarihini, konaklama durumunuzu (rezervasyon bilginiz varsa), kişi sayısını, özel talep notunuzu ve telefon numaranızı paylaşır mısınız?"
+
+2. Yönlendirme / SLA Bilgilendirmesi:
+
+"Teşekkür ederim. Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). En geç 30 dakika içinde oda ve restoran detayları için sizinle iletişime geçeceğiz."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Reply & Info Request:
+
+"We would be happy to plan your anniversary. Room and restaurant coordination will be arranged together. Please share the event date, your stay status (reservation details if available), guest count, special request notes, and a contact phone number."
+
+2. Forwarding / SLA:
+
+"Thank you. I’m forwarding your request to our live team (special_request - soft handover). We will contact you within 30 minutes for room and restaurant details."

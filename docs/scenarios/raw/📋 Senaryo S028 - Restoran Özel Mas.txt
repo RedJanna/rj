@@ -1,0 +1,90 @@
+📋 Senaryo: S028 - Restoran Özel Masa Talebi V1
+Senaryo Kodu ve Adı: S028 - Restoran Özel Masa Talebi V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin daha sessiz masa ve/veya özel süsleme gibi özel masa taleplerini sohbet akışı içinde netleştirmek, gerekli bilgileri eksiksiz ve misafiri yormadan toplamak, talebi özetleyip teyit almak ve uygunluk kontrolü için “özel_istek” canlı ekibine soft devir ile iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Daha sessiz bir masa ve özel süsleme istiyoruz."
+
+"Sakin bir köşe masa ayarlayabilir misiniz?"
+
+"Doğum günü için masa süslemesi rica edebilir miyiz?"
+
+"Özel bir masa istiyoruz, mümkün mü?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Tarih: (GG/AA/YYYY formatında)
+
+Saat: (Örn: 20:30)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Özel Talep Notu: (Sessiz masa / masa konumu / süsleme türü / kutlama detayı vb. kısa açıklama)
+
+İsim / Telefon: (Rezervasyon adı ve iletişim numarası)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin özel masa / süsleme talebi (intent), mesajın ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eksik bilgiler varsa, misafiri yormayacak şekilde tek mesajda topluca istenir.
+
+Özel masa ve/veya süsleme talebi varsa:
+- Talep notu netleştirilir (sessiz masa isteği + süsleme türü/amacı gibi).
+- Bilgiler toplandığında misafire “Özet Teyit Mesajı” gönderilir.
+- Misafir onayladığında talep “özel_istek” canlı ekibine soft devir ile iletilir (uygunluk ve uygulanabilirlik kontrolü için).
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Özel masa/süsleme talepleri “özel_istek” ekibine soft devir ile aktarılır.
+
+SLA: 30 dakika içinde öncelikli geri dönüş hedeflenir.
+
+Fallback:
+- Misafir tarih/saat veya kişi sayısını net paylaşmazsa, eksik alanlar yeniden istenir.
+- Misafir talebini günceller/değiştirirse, güncel not eklenerek aynı soft devir süreci korunur.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Yanıt + Bilgi Talebi:
+
+"Özel masa talebinizi not aldım. 😊 Uygunluğa göre ekibimiz öncelikli dönüş sağlayacaktır. Talebinizi iletebilmem için lütfen tarih, saat, kişi sayısı, özel talep notunuz (sessiz masa / süsleme detayları) ve isim-telefon bilginizi paylaşır mısınız?"
+
+2. Teyit Mesajı (Tüm bilgiler toplandığında):
+
+"Teşekkür ederim. Hemen kontrol edelim:
+🗓️ Tarih: [Tarih]
+🕒 Saat: [Saat]
+👥 Kişi Sayısı: [Kişi Sayısı]
+📝 Özel Talep: [Özel Talep Notu]
+👤 İsim / 📞 Telefon: [İsim] / [Telefon]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir detay varsa bana yazabilirsiniz."
+
+3. Soft Devir + SLA Bilgilendirmesi:
+
+"Harika, teşekkürler. ✅ Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size öncelikli geri dönüş sağlayacağız."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Message & Information Request:
+
+"I noted your special table request. 😊 We will provide a priority update based on availability. To forward your request, please share the date, time, guest count, your special request details (quiet table / decoration), and your name + phone number."
+
+2. Summary / Confirmation (When All Details Are Collected):
+
+"Thank you. Let’s confirm the details:
+🗓️ Date: [Date]
+🕒 Time: [Time]
+👥 Guest Count: [Guest Count]
+📝 Special Request: [Special Request Note]
+👤 Name / 📞 Phone: [Name] / [Phone]
+
+If everything is correct, please reply 'Yes'. If you’d like to change anything, just let me know."
+
+3. Forwarding / SLA Notice:
+
+"Perfect, thank you. ✅ I’m forwarding your request to our live team (special_request - soft handover). We will get back to you with a priority update within 30 minutes, based on availability."

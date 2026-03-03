@@ -1,0 +1,60 @@
+📋 Senaryo: S026 - Restoran Rezervasyon Değişiklik V1
+Senaryo Kodu ve Adı: S026 - Restoran Rezervasyon Değişiklik V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin restoran rezervasyonunda tarih/saat veya kişi sayısı gibi değişiklik talebini görüşme sırasında netleştirmek, gerekli bilgileri hızlıca toparlamak ve değişiklik işlemi için misafiri canlı müşteri temsilcisine aktarmak. Talebi eş zamanlı olarak admin ve restoran şefine bildirerek 20 dakika içinde geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Restoran rezervasyonumu 20:30'a alabilir miyiz?"
+
+"Rezervasyon saatimi değiştirmek istiyorum."
+
+"Rezervasyon tarihini değiştirebilir miyim?"
+
+"Kişi sayısını güncellemek istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Restoran Rezervasyon Kodu: (Varsa)
+
+Yeni Tarih / Saat: (GG/AA/YYYY ve saat formatında)
+
+İsim: (Rezervasyonun adına kayıtlı kişi)
+
+Telefon: (İletişim numarası)
+
+Kişi Sayısı: (Güncel toplam kişi sayısı)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin rezervasyon değişikliği talebi (intent), cümlenin ANLAMINDAN (semantik) algılandığında senaryo tetiklenir.
+
+Bu senaryoda otomatik değişiklik yapılmaz; işlem için canlı müşteri temsilcisine aktarım esastır.
+
+Aktarım öncesinde, görüşmeyi uzatmadan mümkünse gerekli bilgiler (rezervasyon kodu / isim / telefon / yeni tarih-saat / kişi sayısı) toplanır veya eksik olanlar netleştirilir.
+
+Toplanan bilgiler, ilgili ekibe aktarım notu olarak iletilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Eskalasyon): Misafir rezervasyon değişikliği talep ettiğinde çağrı canlı müşteri temsilcisine aktarılır.
+
+Bildirim: Admin ve restoran şefine, değişiklik talebi bilgileriyle (rezervasyon kodu, yeni tarih/saat, kişi sayısı, isim ve telefon) bilgilendirme mesajı gönderilir.
+
+SLA: 20 dakika içinde misafire değişiklik sonucu hakkında geri dönüş hedeflenir.
+
+Fallback: Misafir rezervasyon kodunu bilmiyorsa, isim + telefon + mevcut rezervasyon bilgisi üzerinden kontrol için yine canlı müşteri temsilcisi süreci yönetir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Aktarım Bilgilendirmesi:
+
+"Elbette yardımcı olurum. Değişiklik işlemi için sizi canlı müşteri temsilcimize aktarıyorum."
+
+2. Eksik Bilgi Varsa (Aktarım Öncesi Hızlı Netleştirme):
+
+"Aktarmadan önce hızlıca kontrol edebilmem için rezervasyon kodunuzu (varsa), ad-soyadınızı ve telefon numaranızı paylaşabilir misiniz? Ayrıca yeni istediğiniz tarih/saat ile kişi sayısını da öğrenebilir miyim?"
+
+3. SLA Bilgilendirmesi:
+
+"Teşekkür ederim. Talebinizi ilgili ekibe iletiyorum. En geç 20 dakika içinde değişiklik durumuyla ilgili size bilgi verilecektir."

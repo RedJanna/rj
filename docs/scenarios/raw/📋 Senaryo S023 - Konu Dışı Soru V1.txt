@@ -1,0 +1,56 @@
+📋 Senaryo: S023 - Konu Dışı Soru V1
+Senaryo Kodu ve Adı: S023 - Konu Dışı Soru V1
+Kanal: Telefon
+
+🎯 Hedef: Telefon görüşmesinde misafirin otel hizmetleri kapsamı dışında kalan bir talepte bulunduğu durumlarda, misafire nazikçe sınır çizmek ve sohbeti otel hizmetleri kapsamında desteklenebilir konulara yönlendirmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Bana başka bir otel önerebilir misin?"
+
+"Başka otel tavsiye eder misiniz?"
+
+"Alternatif bir otel öneriniz var mı?"
+
+"Sizin dışınızda bir otel önerir misiniz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Konu Metni: (Misafirin ilettiği soru/isteğin kısa özeti)
+
+Kapsam Dışı Etiketi: (Örn: "Konu Dışı" / "Out of Scope" sınıflandırması)
+
+Yönlendirme Metni: (Misafirin hangi kapsam içi konu/kanala yönlendirileceği)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Takip Sorusu: (Misafiri kapsam içi hizmetlere döndüren kısa soru)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin talebi (intent), cümlenin ANLAMINDAN (semantik) algılanır; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Konu metni değerlendirilir ve kapsam dışı etiketi kontrol edilir.
+
+Eğer konu kapsam dışı ise:
+- Misafire nazikçe sınır çizilir (bu konuda destek verilemeyeceği belirtilir).
+- Misafir, otel hizmetleri kapsamında desteklenebilecek konulara yönlendirilir.
+- Akışı sürdürmek için tek bir takip sorusu sorulur.
+
+Eğer konu kapsam içi ise:
+- Bu senaryo tetiklenmez; ilgili kapsam içi senaryoya yönlenir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir konu dışı talebini farklı şekilde tekrar ederse, aynı sınır çizme + yönlendirme akışı korunur ve takip sorusu yeniden sorulur.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Konu Dışı Yanıt (Nazik Sınır + Yönlendirme):
+
+"Elbette yardımcı olmaya çalışırım. Ancak farklı oteller hakkında detaylı yönlendirme veremiyorum. Yine de dilerseniz size Kassandra Heritage Otel’i önerebilirim. Daha detaylı bilgi almak isterseniz lütfen +90 532 391 87 84 numaraya mesaj atınız."
+
+2. Takip Sorusu (Kapsam İçi Hizmetlere Dönüş):
+
+"Otelimizle ilgili size yardımcı olabileceğim bir konu var mı?"

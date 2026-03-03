@@ -1,0 +1,991 @@
+{
+  "scenarios": [
+    {
+      "id": "S001",
+      "title": "S001 - Hotel Rezervasyon Baslangici V1",
+      "source_file": "📋 Senaryo S001 - Hotel Rezervasyon.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_CREATE",
+      "trigger_utterances": [
+        "Merhaba, oda rezervasyonu yapmak istiyorum.",
+        "Otelinizde yer var mı?",
+        "Fiyat almak istiyorum, rezervasyon yapacağım.",
+        "Boş odalarınız hakkında bilgi alabilir miyim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette yardımcı olurum. Net teklif için giriş-çıkış tarihinizi ve kişi sayınızı paylaşır mısınız?",
+          "Tarihlerinizi not aldım. Size en uygun oda seçeneklerini listeleyebilmem için kaç yetişkin ve (varsa) kaç çocuk konaklayacağınızı öğrenebilir miyim?"
+        ],
+        "en": [
+          "Sure, I can help. Please share your check-in/check-out dates and guest count for a net quote."
+        ]
+      }
+    },
+    {
+      "id": "S002",
+      "title": "S002 - Hotel Rezervasyon Tamamlama V2",
+      "source_file": "📋 Senaryo S002 - Hotel Rezervasyon.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_CREATE",
+      "trigger_utterances": [
+        "Tarihleri ve oda tipini seçtim, rezervasyonu tamamlayalım.",
+        "Tamam, bu odayı ayırtmak istiyorum. Ne yapmam lazım?",
+        "Ödemeyi nasıl yapacağım, bilgileri vereyim.",
+        "Seçtiğim oda için işlemleri bitirmek istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Harika bir seçim! ✨ Rezervasyon talebinizi hemen oluşturuyorum. İşlemi adınıza kaydedebilmemiz için Ad Soyad, telefon numaranız ve onay belgenizi iletebileceğimiz bir e-posta adresinizi paylaşır mısınız?",
+          "Sanırım telefon numaranızda veya e-posta adresinizde ufak bir yazım hatası oldu. İletişimde sorun yaşamamamız için kontrol edip tekrar yazabilir misiniz?",
+          "Teşekkürler [Ad Soyad]. İşleminizi tamamlamadan önce son bir adım kaldı: Bu rezervasyonu 'Ücretsiz İptal Edilebilir' mi yoksa daha avantajlı olan 'İptal Edilemez' fiyat üzerinden mi ilerletelim? Ve ödemenizi Havale ile mi yoksa Kredi Kartı (Ödeme Linki) ile mi yapmak istersiniz?",
+          "Bilgilerinizi aldım ve rezervasyon talebinizi (No: #10293) başarıyla oluşturdum! ✅ İlgili satış temsilcimiz ödeme adımları ve kesin onay için 60 dakika içerisinde sizinle iletişime geçecektir."
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S003",
+      "title": "S003 - Fiyat Sorgusu Eksik Tarih V1",
+      "source_file": "📋 Senaryo S003 - Fiyat Sorgusu Eks.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "PRICE_QUERY",
+      "trigger_utterances": [
+        "Fiyat alabilir miyim?",
+        "Konaklama ücretleriniz ne kadar?",
+        "Oda fiyatlarını öğrenebilir miyim?",
+        "Gecelik ne kadar ödeleriz?",
+        "Tatil için fiyat bilgisi verir misiniz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "İlginiz için çok teşekkür ederiz! Size en uygun oda seçeneklerimizi ve net bir fiyat sunabilmem için; planladığınız giriş-çıkış tarihlerinizi, konaklayacak yetişkin sayısını ve eğer çocuk misafirimiz olacaksa çocukların yaşlarını da benimle paylaşabilir misiniz?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S004",
+      "title": "S004 - Fiyat Sorgusu Çocuk Yaş V1",
+      "source_file": "📋 Senaryo S004 - Fiyat Sorgusu Çoc.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "PRICE_QUERY",
+      "trigger_utterances": [
+        "2 yetişkin 2 çocuk için fiyat istiyorum.",
+        "Aile odası ücretlerinizi öğrenebilir miyim?",
+        "Çocuklu aileler için tatil fiyatlarınız nedir?",
+        "Biz eşim ve çocuklarla geleceğiz, fiyat alabilir miyim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "İlginiz için teşekkürler. Size net bir fiyat verebilmem için planladığınız giriş-çıkış tarihlerini ve çocukların yaşlarını da paylaşabilir misiniz?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S005",
+      "title": "S005 - Müsaitlik Sorgusu V1",
+      "source_file": "📋 Senaryo S005 - Müsaitlik Sorgusu.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "AVAILABILITY_QUERY",
+      "trigger_utterances": [
+        "Aynı tarihlerde oda müsait mi?",
+        "Bu hafta sonu için boş yeriniz var mı?",
+        "Otelinizde yer var mı?",
+        "Müsaitlik durumunuz nedir?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Müsaitliği kontrol ediyorum. Tarih aralığı ve kişi sayısını net yazar mısınız?"
+        ],
+        "en": [
+          "I am checking availability. Please confirm the exact date range and guest count."
+        ]
+      }
+    },
+    {
+      "id": "S006",
+      "title": "S006 - Rezervasyon Değişiklik Rezervasyon No V1",
+      "source_file": "📋 Senaryo S006 - Rezervasyon Değiş.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_MODIFY",
+      "trigger_utterances": [
+        "Rezervasyon tarihimi değiştirmek istiyorum.",
+        "Rezervasyonumda gün değişikliği yapabilir miyiz?",
+        "Tatil tarihlerimi ertelemek/öne çekmek istiyorum.",
+        "Mevcut rezervasyonumu güncellemem gerekiyor."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Değişiklik işlemini başlatmam için lütfen rezervasyon no veya Voucher No bilginizi paylaşın."
+        ],
+        "en": [
+          "To start the modification, please share your reservation number or Voucher No."
+        ]
+      }
+    },
+    {
+      "id": "S007",
+      "title": "S007 - Rezervasyon Iptal Ilk Adim V1",
+      "source_file": "📋 Senaryo S007 - Rezervasyon Iptal.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_CANCEL",
+      "trigger_utterances": [
+        "Rezervasyonumu iptal etmek istiyorum.",
+        "Tatilimi iptal edebilir miyim?",
+        "Oda rezervasyonumu iptal etmek için ne yapmalıyım?",
+        "Gelemiyorum, rezervasyonu nasıl iptal ederiz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "İptal işleminiz için size yardımcı olayım. İşlemi başlatabilmemiz için lütfen Rezervasyon / Voucher Numaranızı ve rezervasyondaki Ad-Soyad bilginizi paylaşır mısınız? Ayrıca, rezervasyonunuzu hangi koşulla oluşturmuştunuz? (1- İptal Edilemez, 2- Ücretsiz İptal)"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S008",
+      "title": "S008 - Rezervasyon Iptal Fiyat Tipi Onayi V1",
+      "source_file": "📋 Senaryo S008 - Rezervasyon Iptal.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_CANCEL",
+      "trigger_utterances": [
+        "2 numara, ücretsiz iptal tarifesiydi.",
+        "İptal edilemez şartıyla almıştım.",
+        "Ücretsiz iptal hakkımı kullanmak istiyorum.",
+        "Fiyat tipi olarak birinci seçeneği seçmiştim."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Teşekkür ederim, talebinizi öncelikli olarak canlı müşteri temsilcimize iletiyorum."
+        ],
+        "en": [
+          "Thank you, I am forwarding your cancellation request to our live team with priority."
+        ]
+      }
+    },
+    {
+      "id": "S009",
+      "title": "S009 - Çoklu Oda Kısmi İptal V1",
+      "source_file": "📋 Senaryo S009 - Çoklu Oda Kısmi İ.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_CANCEL",
+      "trigger_utterances": [
+        "3 odadan sadece 1 tanesini iptal etmek istiyorum.",
+        "Rezerve ettiğimiz odalardan birini iptal edebilir miyiz?",
+        "Gruptan bir aile gelemiyor, onların odasını iptal edeceğiz.",
+        "İki oda ayırmıştık, birini iptal etmek istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette. Lütfen iptal edilecek odayı (misafir adı/oda bilgisi) netleştirir misiniz?"
+        ],
+        "en": [
+          "Sure. Please confirm which room should be cancelled (guest name/room detail)."
+        ]
+      }
+    },
+    {
+      "id": "S010",
+      "title": "S010 - Tarih Değişikliği Aynı Oda Tipi V1",
+      "source_file": "📋 Senaryo S010 - Tarih Değişikliği.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_MODIFY",
+      "trigger_utterances": [
+        "Rezervasyonumu 15 Ağustos yerine 18 Ağustos giriş yapmak istiyorum.",
+        "Tatil tarihlerimizi birkaç gün ileri alabilir miyiz?",
+        "Giriş günümüzü değiştirmek istiyoruz, aynı odada kalmaya devam edebilir miyiz?",
+        "Rezervasyon tarihlerimi güncelleyebilir miyim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Aynı oda tipinde yeni tarih müsaitliğini kontrol edeceğim. Rezervasyon no bilginizi paylaşır mısınız?"
+        ],
+        "en": [
+          "I will check availability for the same room type on new dates. Please share your reservation number."
+        ]
+      }
+    },
+    {
+      "id": "S011",
+      "title": "S011 - Tarih Değişikliği Çoklu Oda V1",
+      "source_file": "📋 Senaryo S011 - Tarih Değişikliği.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_MODIFY",
+      "trigger_utterances": [
+        "2 odadan sadece birinin tarihini değiştirmek istiyorum.",
+        "Ayırttığımız 3 odadan birinin giriş çıkış günlerini güncelleyebilir miyiz?",
+        "Diğer oda aynı kalsın, bizim odanın tarihlerini ileri alacağız.",
+        "Grup rezervasyonumuzda tek bir odanın tarihlerinde değişiklik yapmak istiyoruz."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Çoklu oda talebinizi aldım. Hangi odanın değişeceğini rezervasyon no ile birlikte yazar mısınız?"
+        ],
+        "en": [
+          "Received. For multi-room change, please specify which room will be changed with your rezervation number."
+        ]
+      }
+    },
+    {
+      "id": "S012",
+      "title": "S012 - Rezervasyon Kodu Sorusu V1",
+      "source_file": "📋 Senaryo S012 - Rezervasyon Kodu.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Rezervasyon kesinleşince kodu ne zaman paylaşıyorsunuz?",
+        "Onay numaram bana ne zaman ulaşır?",
+        "Rezervasyon kodumu ne zaman alacağım?",
+        "İşlem bittikten sonra teyit mesajı veya kodu gönderiyor musunuz?",
+        "Rezervasyonum onaylandığında bana nasıl bilgi verilecek?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Rezervasyon kesinleştiğinde rezervasyon no ve teyit mesajı tarafınıza iletilir."
+        ],
+        "en": [
+          "Once the booking is finalized, your reservation number and confirmation message will be sent to you."
+        ]
+      }
+    },
+    {
+      "id": "S013",
+      "title": "S013 - RezID Açıklama V1",
+      "source_file": "📋 Senaryo S013 - RezID Açıklama V1.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Rez ID nedir?",
+        "Benden istenen Rez ID numarası nerede yazıyor?",
+        "Voucher No veya Rezervasyon numarası dediğiniz şey aynı mı?",
+        "Formdaki Rez ID kısmına ne yazmam gerekiyor?",
+        "Rezervasyon ID numaramı nasıl öğrenebilirim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Rez ID, konfirmasyon formunda yer alan rezervasyon numarasıdır (Voucher No)."
+        ],
+        "en": [
+          "Rez ID is the reservation number on your confirmation form (Voucher No)."
+        ]
+      }
+    },
+    {
+      "id": "S014",
+      "title": "S014 - Ödeme Yöntemi Bilgisi V1",
+      "source_file": "📋 Senaryo S014 - Ödeme Yöntemi Bil.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "PAYMENT_METHOD_QUERY",
+      "trigger_utterances": [
+        "Hangi ödeme yöntemleri var?",
+        "Rezervasyon ödemesini nasıl yapabilirim?",
+        "Kredi kartıyla online ödeme alıyor musunuz?",
+        "Havale seçeneğiniz bulunuyor mu?",
+        "Ön ödemeyi nereye göndermem gerekiyor?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Ön ödeme için ödeme linki, havale veya nakit seçeneklerimiz bulunur. Ödeme linki canlı satış ekibimiz tarafından iletilir."
+        ],
+        "en": [
+          "For prepayment, payment link, bank transfer, or cash options are available. Payment links are sent by our live sales team."
+        ]
+      }
+    },
+    {
+      "id": "S015",
+      "title": "S015 - Ödeme Linki Talebi V1",
+      "source_file": "📋 Senaryo S015 - Ödeme Linki Taleb.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "PAYMENT_LINK_REQUEST",
+      "trigger_utterances": [
+        "Ödeme linki gönderebilir misiniz?",
+        "Kredi kartıyla ödemek için link alabilir miyim?",
+        "Ön ödemeyi online yapmak istiyorum, bağlantı atar mısınız?",
+        "Ödeme yapabilmem için bir ekran veya link paylaşır mısınız?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Ödeme linki talebinizi iletebilmem için lütfen rezervasyon no bilginizi paylaşır mısınız?"
+        ],
+        "en": [
+          "Please share your reservation number so I can forward your payment link request."
+        ]
+      }
+    },
+    {
+      "id": "S016",
+      "title": "S016 - İndirim Pazarlığı V1",
+      "source_file": "📋 Senaryo S016 - İndirim Pazarlığı.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "DISCOUNT_NEGOTIATION",
+      "trigger_utterances": [
+        "Bu fiyata indirim yapar mısınız?",
+        "Biraz daha uygun bir fiyat verebilir misiniz?",
+        "Bize özel bir kampanya veya son fiyatınız ne olur?",
+        "Fiyatta bir şeyler yapma şansınız var mı?",
+        "Bütçemizi biraz aşıyor, yardımcı olabilir misiniz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Bütçenize uygun alternatifleri kontrol edip talebinizi satış ekibimize iletiyorum."
+        ],
+        "en": [
+          "I will check budget-friendly alternatives and forward your request to our sales team."
+        ]
+      }
+    },
+    {
+      "id": "S017",
+      "title": "S017 - Canlı Destek Talebi V1",
+      "source_file": "📋 Senaryo S017 - Canlı Destek Tale.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HUMAN_AGENT_REQUEST",
+      "trigger_utterances": [
+        "Yetkili biriyle görüşmek istiyorum.",
+        "Beni bir müşteri temsilcisine bağlar mısınız?",
+        "Canlı destek almak istiyorum.",
+        "Gerçek bir insanla konuşmak istiyorum.",
+        "Operatörle görüşebilir miyim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Talebinizi aldım, sizi canlı müşteri temsilcimize bağlıyorum."
+        ],
+        "en": [
+          "I have received your request and I am connecting you to our live customer representative."
+        ]
+      }
+    },
+    {
+      "id": "S018",
+      "title": "S018 - Şikayet Kaydı V1",
+      "source_file": "📋 Senaryo S018 - Şikayet Kaydı V1.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "COMPLAINT",
+      "trigger_utterances": [
+        "Hizmetten memnun değilim, şikayet oluşturmak istiyorum.",
+        "Yaşadığım olumsuz deneyimi bildirmek istiyorum.",
+        "Otelinizle ilgili ciddi bir şikayetim var.",
+        "Bu konuyla ilgili yetkililere şikayette bulunacağım.",
+        "Hizmetinizden hiç memnun kalmadım, nereye yazabilirim?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Üzgünüz. Şikayetinizi öncelikli olarak ilgili ekibimize iletiyorum ve hızlı dönüş sağlayacağız."
+        ],
+        "en": [
+          "We are sorry. I am escalating your complaint to the relevant team with high priority."
+        ]
+      }
+    },
+    {
+      "id": "S019",
+      "title": "S019 - Acil Bugün Giriş V1",
+      "source_file": "📋 Senaryo S019 - Acil Bugün Giriş.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "URGENT_CASE",
+      "trigger_utterances": [
+        "Bugün gece 01:30 gibi giriş yapacağım, acil teyit eder misiniz?",
+        "Bu gece yarısı otele varıyorum, odam hazır olur mu?",
+        "Sabaha karşı geleceğim, hemen check-in yapabilir miyim?",
+        "Uçağım gece geç iniyor, otele geç saatte giriş yapacağım."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Otele giriş 14:00'dan sonradır; giriş gününüzde 14:00 sonrası istediğiniz saatte gelebilirsiniz. Talebinizi acil olarak ekibe iletiyorum."
+        ],
+        "en": [
+          "Check-in starts after 14:00; you may arrive at any time after 14:00 on your check-in day. I am escalating this as urgent."
+        ]
+      }
+    },
+    {
+      "id": "S020",
+      "title": "S020 - Acil Transfer Gecikmesi V1",
+      "source_file": "📋 Senaryo S020 - Acil Transfer Gec.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "URGENT_CASE",
+      "trigger_utterances": [
+        "Uçuşum rötar yaptı, transferimi acil günceller misiniz?",
+        "Uçağım gecikti, transfer aracı beni bekleyecek mi?",
+        "Rötar yedik, otele transfer saatimi ileri alabilir miyiz?",
+        "Havalimanı transferim için varış saatim değişti, bilgi vermek istedim."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Bilgiyi aldım. Şoför ekibimizi acil bilgilendiriyorum, en kısa sürede geri döneceğiz. Talebinizi acil olarak ekibe iletiyorum."
+        ],
+        "en": [
+          "Received. I am urgently informing the driver team and we will update you shortly."
+        ]
+      }
+    },
+    {
+      "id": "S021",
+      "title": "S021 - Güvenlik Riski Talebi V1",
+      "source_file": "📋 Senaryo S021 - Güvenlik Riski Ta.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "RISK_ABUSE",
+      "trigger_utterances": [
+        "IBAN yerine kart bilgilerimi buradan atayım mı?",
+        "Kredi kartı numaramı yazsam ödemeyi siz çeker misiniz?",
+        "Kartın fotoğrafını çekip e-postayla göndersem olur mu?",
+        "İşlem hızlı olsun diye kart şifremi ve detaylarını iletiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Güvenlik nedeniyle kart bilgilerinizi mesajla paylaşmayın. Bu konuda doğrudan resmi ödeme kanallarını kullanın."
+        ],
+        "en": [
+          "For security, please do not share card details in chat. Use official payment channels only."
+        ]
+      }
+    },
+    {
+      "id": "S023",
+      "title": "S023 - Konu Dışı Soru V1",
+      "source_file": "📋 Senaryo S023 - Konu Dışı Soru V1.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "OUT_OF_SCOPE_OTHER",
+      "trigger_utterances": [
+        "Bana başka bir otel önerebilir misin?",
+        "Başka otel tavsiye eder misiniz?",
+        "Alternatif bir otel öneriniz var mı?",
+        "Sizin dışınızda bir otel önerir misiniz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette yardımcı olmaya çalışırım. Ancak farklı oteller hakkında detaylı yönlendirme veremiyorum. Yine de dilerseniz size Kassandra Heritage Otel’i önerebilirim. Daha detaylı bilgi almak isterseniz lütfen +90 532 391 87 84 numaraya mesaj atınız.",
+          "Otelimizle ilgili size yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S024",
+      "title": "S024 - Restoran Rezervasyon Başlangıcı V1",
+      "source_file": "📋 Senaryo S024 - Restoran Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "RESTAURANT_BOOKING_CREATE",
+      "trigger_utterances": [
+        "Akşam yemeği için masa ayırtmak istiyorum.",
+        "Bu akşam için restoran rezervasyonu yapabilir miyim?",
+        "Yemeğe gelmek istiyoruz, masa ayırtabilir misiniz?",
+        "Restoranınızda rezervasyon yaptırmak istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Memnuniyetle. Rezervasyonunuzu oluşturabilmem için lütfen tarih, saat, kişi sayısı, rezervasyon ismi ve iletişim telefon numaranızı paylaşır mısınız?"
+        ],
+        "en": [
+          "With pleasure. To create your reservation, could you please share the date, time, guest count, reservation name, and a contact phone number?"
+        ]
+      }
+    },
+    {
+      "id": "S025",
+      "title": "S025 - Restoran Rezervasyon Büyük Grup V1",
+      "source_file": "📋 Senaryo S025 - Restoran Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "RESTAURANT_BOOKING_CREATE",
+      "trigger_utterances": [
+        "10 kişilik masa ayırtabilir miyiz?",
+        "9 kişi için akşam yemeğine masa ayırabilir misiniz?",
+        "Kalabalık bir grubuz, rezervasyon yapabilir miyiz?",
+        "8’den fazla kişi için masa ayırtmak istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Memnuniyetle yardımcı olurum. 😊 8’den fazla kişi için rezervasyonlarda ekip onayı gerekiyor. Talebinizi iletebilmem için lütfen tarih, saat, kişi sayısı, ad-soyad ve iletişim telefon numaranızı paylaşır mısınız?",
+          "Teşekkür ederim, kişi sayısı ve iletişim bilgilerinizi not aldım. Rezervasyon talebinizi ekibe iletebilmem için rica etsem tarih ve saati de paylaşır mısınız?",
+          "Harika, teşekkürler. ✅ 8+ kişilik rezervasyonlar için ekip onayı gerektiğinden talebinizi canlı restoran ekibimize iletiyorum (soft devir). Size en geç 20 dakika içinde dönüş sağlayacağız."
+        ],
+        "en": [
+          "With pleasure. 😊 For groups above 8 guests, team approval is required. To forward your request, could you please share the date, time, guest count, full name, and a contact phone number?",
+          "Thank you—I noted the guest count and contact details. Could you please share the date and time as well so I can forward your request to the team?",
+          "Perfect, thank you. ✅ Since approval is required for 8+ guest reservations, I’m forwarding your request to our live restaurant team (soft handover). We will get back to you within 20 minutes."
+        ]
+      }
+    },
+    {
+      "id": "S026",
+      "title": "S026 - Restoran Rezervasyon Değişiklik V1",
+      "source_file": "📋 Senaryo S026 - Restoran Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "RESTAURANT_BOOKING_MODIFY",
+      "trigger_utterances": [
+        "Restoran rezervasyonumu 20:30'a alabilir miyiz?",
+        "Rezervasyon saatimi değiştirmek istiyorum.",
+        "Rezervasyon tarihini değiştirebilir miyim?",
+        "Kişi sayısını güncellemek istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette yardımcı olurum. Değişiklik işlemi için sizi canlı müşteri temsilcimize aktarıyorum.",
+          "Aktarmadan önce hızlıca kontrol edebilmem için rezervasyon kodunuzu (varsa), ad-soyadınızı ve telefon numaranızı paylaşabilir misiniz? Ayrıca yeni istediğiniz tarih/saat ile kişi sayısını da öğrenebilir miyim?",
+          "Teşekkür ederim. Talebinizi ilgili ekibe iletiyorum. En geç 20 dakika içinde değişiklik durumuyla ilgili size bilgi verilecektir."
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S027",
+      "title": "S027 - Restoran Rezervasyon İptal V1",
+      "source_file": "📋 Senaryo S027 - Restoran Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "RESTAURANT_BOOKING_CANCEL",
+      "trigger_utterances": [
+        "Bu akşamın masa rezervasyonunu iptal etmek istiyorum.",
+        "Rezervasyonumu iptal edebilir misiniz?",
+        "Bu akşam için yaptığım rezervasyonu iptal edeceğim.",
+        "Restoran rezervasyonumu iptal etmek istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "İptal talebinizi aldım. Kaydınızı bulup işlemi tamamlayabilmem için rezervasyon kodunuzu paylaşır mısınız? Kod yoksa ad-soyadınız ve telefon numaranızı iletebilir misiniz?"
+        ],
+        "en": [
+          "I received your cancellation request. To locate your record and complete the cancellation, please share your booking code. If you don’t have it, please share your full name and phone number."
+        ]
+      }
+    },
+    {
+      "id": "S028",
+      "title": "S028 - Restoran Özel Masa Talebi V1",
+      "source_file": "📋 Senaryo S028 - Restoran Özel Mas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Daha sessiz bir masa ve özel süsleme istiyoruz.",
+        "Sakin bir köşe masa ayarlayabilir misiniz?",
+        "Doğum günü için masa süslemesi rica edebilir miyiz?",
+        "Özel bir masa istiyoruz, mümkün mü?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Özel masa talebinizi not aldım. 😊 Uygunluğa göre ekibimiz öncelikli dönüş sağlayacaktır. Talebinizi iletebilmem için lütfen tarih, saat, kişi sayısı, özel talep notunuz (sessiz masa / süsleme detayları) ve isim-telefon bilginizi paylaşır mısınız?",
+          "Harika, teşekkürler. ✅ Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size öncelikli geri dönüş sağlayacağız."
+        ],
+        "en": [
+          "I noted your special table request. 😊 We will provide a priority update based on availability. To forward your request, please share the date, time, guest count, your special request details (quiet table / decoration), and your name + phone number.",
+          "Perfect, thank you. ✅ I’m forwarding your request to our live team (special_request - soft handover). We will get back to you with a priority update within 30 minutes, based on availability."
+        ]
+      }
+    },
+    {
+      "id": "S029",
+      "title": "S029 - Transfer Bilgisi Dalaman V1",
+      "source_file": "📋 Senaryo S029 - Transfer Bilgisi.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "TRANSFER_INFO",
+      "trigger_utterances": [
+        "Dalaman Havalimanı transfer ücreti nedir?",
+        "Dalaman'dan otele transfer kaç euro?",
+        "Dalaman Havalimanı'ndan otele transfer fiyatını öğrenebilir miyim?",
+        "Transfer ücretiniz nedir (Dalaman)?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Dalaman Havalimanı’ndan Kassandra’ya tek yön transfer ücreti 75 EUR’dur. Ödemeyi nakit olarak resepsiyona yapmanız gerekmektedir.",
+          "İsterseniz transfer tarihinizi ve kişi sayısını da paylaşabilirsiniz; buna göre not alıp sizi yönlendirebilirim. Başka yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S030",
+      "title": "S030 - Transfer Rezervasyon Bilgi Toplama V1",
+      "source_file": "📋 Senaryo S030 - Transfer Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "TRANSFER_BOOKING_REQUEST",
+      "trigger_utterances": [
+        "Transfer ayarlayalım, uçuş bilgimi vereceğim.",
+        "Havalimanı transferi ayarlamak istiyorum.",
+        "Uçuş bilgilerimi paylaşayım, transfer organize edelim.",
+        "Transfer için yardımcı olur musunuz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Memnuniyetle yardımcı olurum. Transferi oluşturabilmem için lütfen varış tarihinizi, iniş saatinizi, uçuş numaranızı, kişi/bagaj bilginizi, ad-soyadınızı ve nereden alınacağınızı paylaşır mısınız?",
+          "Teşekkür ederim. ✅ Talebinizi belirttiğiniz bilgilerle işleme alıyorum. Başka yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": [
+          "To create the transfer, please share the date, landing time, flight number, guest/luggage details, your full name, and where we will pick you up from.",
+          "Thank you. ✅ I’m processing your request with the details provided. Is there anything else I can help you with?"
+        ]
+      }
+    },
+    {
+      "id": "S031",
+      "title": "S031 - Transfer Rezervasyon Onay V1",
+      "source_file": "📋 Senaryo S031 - Transfer Rezervas.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "TRANSFER_BOOKING_REQUEST",
+      "trigger_utterances": [
+        "Evet, transfer özeti doğru.",
+        "Onaylıyorum, bilgiler doğru.",
+        "Evet doğru, devam edebiliriz.",
+        "Tamamdır, onaylıyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Teşekkürler! ✅ Transfer talebinizi ekibimize ilettim. Şoförümüz sizi isminizin yazılı olduğu tabela ile karşılayacak.",
+          "En geç 20 dakika içinde süreçle ilgili bilgilendirmeyi buradan paylaşacağız.",
+          "Teşekkürler, onayınızı aldım. Talebi iletebilmem için son olarak şu bilgileri paylaşır mısınız: telefon numaranız, uçuş numaranız ve varış tarih-saat bilginiz?",
+          "We will update you here within 20 minutes."
+        ],
+        "en": [
+          "Thank you! ✅ I have forwarded your transfer request. Our driver will greet you with a name sign."
+        ]
+      }
+    },
+    {
+      "id": "S032",
+      "title": "S032 - Transfer Antalya Yönlendirme V2",
+      "source_file": "📋 Senaryo S032 - Transfer Antalya.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "TRANSFER_BOOKING_REQUEST",
+      "trigger_utterances": [
+        "Antalya Havalimanı'ndan transfer istiyorum.",
+        "Antalya'dan otele nasıl gelebilirim?",
+        "Havalimanı transferiniz var mı?",
+        "Uçaktan inince otele ulaşım sağlıyor musunuz?",
+        "VIP transfer ayarlayabilir miyiz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Antalya'ya şimdiden hoş geldiniz! ☀️ Otelimize konforlu bir şekilde ulaşmanız için transfer hizmetimizden memnuniyetle yardımcı olabilirim. Rezervasyonunuzu hızlıca planlayabilmem için lütfen; transfer tarihinizi, kişi sayısını, uçuş numaranızı ve iniş saatinizi benimle paylaşır mısınız?",
+          "Harika, tarih ve kişi sayısını not aldım. Uçuşunuzu anlık takip edip rötar durumunda bile sizi tam vaktinde karşılayabilmemiz için uçuş numaranızı ve iniş saatinizi de öğrenebilir miyim?",
+          "Mükemmel! ✅ Transfer talebinizi başarıyla oluşturdum ve rezervasyon ekibimize ilettim. İşleminiz onaylandığında size buradan kısa süre içinde kesin onay mesajı göndereceğiz. Şimdiden iyi ve güvenli yolculuklar dileriz! 🧳 Başka yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S033",
+      "title": "S033 - Transfer Özel Rota V1",
+      "source_file": "📋 Senaryo S033 - Transfer Özel Rot.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "TRANSFER_BOOKING_REQUEST",
+      "trigger_utterances": [
+        "Başka bir lokasyondan otele transfer ayarlayabilir misiniz?",
+        "Havalimanı dışında bir yerden alınmak istiyoruz, transfer mümkün mü?",
+        "Şehir merkezinden otele transfer ayarlayabilir misiniz?",
+        "Farklı bir adresten transfer isteyeceğim."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette yardımcı olurum. Özel rota transferi için lütfen alınış adresinizi (açık adres) paylaşır mısınız? Ayrıca tarih, saat, kişi sayısı ve iletişim telefon numaranızı iletirseniz talebinizi ilgili ekibe yönlendirebilirim.",
+          "Harika, teşekkürler. ✅ Talebinizi ilgili ekibimize iletiyorum. En geç 30 dakika içinde dönüş sağlayacağız."
+        ],
+        "en": [
+          "For a custom-route transfer, please share your pick-up address (full address). Also, please provide the date, time, guest count, and a contact phone number so I can forward your request to our team.",
+          "Perfect, thank you. ✅ I’m forwarding your request to our team. We will get back to you within 30 minutes."
+        ]
+      }
+    },
+    {
+      "id": "S034",
+      "title": "S034 - FAQ Check-in Check-out V1",
+      "source_file": "📋 Senaryo S034 - FAQ Check-in Chec.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Check-in ve check-out saatleri kaç?",
+        "Giriş ve çıkış saatleriniz nedir?",
+        "Check-in saat kaçta, check-out saat kaçta?",
+        "Otele giriş/çıkış saatleri nedir?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Check-in saatimiz 14:00, check-out saatimiz 12:00’dir.",
+          "Başka yardımcı olabileceğim bir konu var mı?",
+          "Is there anything else I can help you with?"
+        ],
+        "en": [
+          "Our check-in time is 14:00 and check-out time is 12:00."
+        ]
+      }
+    },
+    {
+      "id": "S035",
+      "title": "S035 - FAQ Kahvaltı Dahil V1",
+      "source_file": "📋 Senaryo S035 - FAQ Kahvaltı Dahi.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Kahvaltı dahil mi, saat kaça kadar?",
+        "Kahvaltı fiyata dahil mi?",
+        "Kahvaltı saatleri nedir?",
+        "Kahvaltı ne zaman başlıyor, ne zaman bitiyor?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Kahvaltı 08:00-10:30 arasında servis edilir ve fiyata dahildir.",
+          "Başka yardımcı olabileceğim bir konu var mı?",
+          "Is there anything else I can help you with?"
+        ],
+        "en": [
+          "Breakfast is served between 08:00-10:30 and is included in the price."
+        ]
+      }
+    },
+    {
+      "id": "S036",
+      "title": "S036 - FAQ Havuz Isıtma V1",
+      "source_file": "📋 Senaryo S036 - FAQ Havuz Isıtma.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Havuz ısıtmalı mı?",
+        "Havuzunuz ısıtılıyor mu?",
+        "Isıtmalı havuz var mı?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Evet, açık havuzumuz var; fakat havuzumuz ısıtmasızdır.",
+          "Başka yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S037",
+      "title": "S037 - FAQ WiFi Otopark V1",
+      "source_file": "📋 Senaryo S037 - FAQ WiFi Otopark.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Wi-Fi ve otopark ücretsiz mi?",
+        "İnternet ücretsiz mi?",
+        "Otopark var mı, ücretli mi?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Evet, otel genelinde ücretsiz Wi-Fi ve ücretsiz otopark mevcuttur. Araçlarınızı otel önünde bulunan alana park edebilirsiniz; bu alan ücretsizdir. Otel karşısında ayrıca ücretli özel otopark da mevcuttur.",
+          "Başka yardımcı olabileceğim bir konu var mı?"
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S038",
+      "title": "S038 - FAQ Konum Plaj V1",
+      "source_file": "📋 Senaryo S038 - FAQ Konum Plaj V1.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Otel nerede, plaja uzaklık ne kadar?",
+        "Konumunuz neresi?",
+        "Plaja yürüyerek kaç dakika?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Otelimiz Fethiye/Ölüdeniz merkezindedir; plaj yaklaşık 300 metre uzaklıktadır.",
+          "Dilerseniz konum linkini de WhatsApp veya SMS ile paylaşabilirim. Hangi kanaldan iletmemi istersiniz?"
+        ],
+        "en": [
+          "Our hotel is in central Fethiye/Oludeniz; the beach is about 300 meters away."
+        ]
+      }
+    },
+    {
+      "id": "S039",
+      "title": "S039 - FAQ Sezon Dışı V1",
+      "source_file": "📋 Senaryo S039 - FAQ Sezon Dışı V1.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Aralık ayında açık mısınız?",
+        "Kışın hizmet veriyor musunuz?",
+        "Kasım’dan sonra açık mı?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Otelimiz 10 Nisan - 10 Kasım arasında hizmet verir; bu tarihler dışında kapalıyız.",
+          "Dilerseniz planladığınız tarih aralığını paylaşabilirsiniz; size uygun dönem için yardımcı olabilirim."
+        ],
+        "en": [
+          "Our hotel operates between April 10 and November 10; we are closed outside these dates.",
+          "If you share your preferred dates, I can help you with the suitable period."
+        ]
+      }
+    },
+    {
+      "id": "S040",
+      "title": "S040 - Ozel Etkinlik Dogum Gunu V1",
+      "source_file": "📋 Senaryo S040 - Ozel Etkinlik Dog.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Doğum günü için oda süsleme ve akşam yemeği istiyoruz.",
+        "Doğum günü sürprizi hazırlayabilir misiniz?",
+        "Odaya süsleme ve restoranda masa ayırtmak istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Doğum günü talebinizi not aldım. 🎉 Süsleme/pasta/masa detayları için sizi canlı ekibimize yönlendireceğim. Lütfen etkinlik tarihini, kişi sayısını, istediğiniz detayları ve iletişim bilginizi (isim/telefon) paylaşır mısınız? Varsa bütçe aralığınızı da ekleyebilirsiniz.",
+          "Harika, teşekkürler. ✅ Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size dönüş yapacağız."
+        ],
+        "en": [
+          "I noted your birthday request. 🎉 I’m connecting you to our live team for decoration/cake/table details. Please share the event date, guest count, your request details, and your contact (name/phone). If you have a budget range, you may include it as well.",
+          "Perfect, thank you. ✅ I’m forwarding your request to our live team (special_request - soft handover). We will get back to you within 30 minutes, based on availability."
+        ]
+      }
+    },
+    {
+      "id": "S041",
+      "title": "S041 - Ozel Etkinlik Balayi V1",
+      "source_file": "📋 Senaryo S041 - Ozel Etkinlik Bal.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Balayı için jakuzili oda ve romantik masa istiyoruz.",
+        "Jakuzili oda var mı? Romantik akşam yemeği de planlamak istiyoruz.",
+        "Balayı için özel hazırlık yapılabilir mi?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Balayı planınız için memnuniyetle yardımcı olurum. Jakuzili oda seçeneklerimizi paylaşabiliriz; uygunluk durumuna göre planlama yapıyoruz. Giriş-çıkış tarihlerinizi, kişi sayısını ve özellikle istediğiniz detayları (romantik masa vb.) paylaşır mısınız?",
+          "Teşekkür ederim. Özel hazırlık notunuzu canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size dönüş sağlayacağız."
+        ],
+        "en": [
+          "For your honeymoon, we can offer jacuzzi room options, subject to availability. Could you please share your check-in/check-out dates, guest count, and your special requests (romantic table, etc.)?",
+          "Thank you. I’m forwarding your special setup details to our live team (special_request - soft handover). We will get back to you within 30 minutes based on availability."
+        ]
+      }
+    },
+    {
+      "id": "S042",
+      "title": "S042 - Ozel Etkinlik Yildonumu V1",
+      "source_file": "📋 Senaryo S042 - Ozel Etkinlik Yil.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Yıldönümü kutlaması için romantik paket var mı?",
+        "Yıldönümü için özel bir hazırlık yapabilir misiniz?",
+        "Romantik paket / sürpriz organizasyon istiyoruz."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Yıldönümü talebinizi memnuniyetle planlarız. Oda ve restoran koordinasyonu birlikte yapılacaktır. Size en uygun seçenekleri sunabilmemiz için lütfen etkinlik tarihini, konaklama durumunuzu (rezervasyon bilginiz varsa), kişi sayısını, özel talep notunuzu ve telefon numaranızı paylaşır mısınız?",
+          "Teşekkür ederim. Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). En geç 30 dakika içinde oda ve restoran detayları için sizinle iletişime geçeceğiz."
+        ],
+        "en": [
+          "We would be happy to plan your anniversary. Room and restaurant coordination will be arranged together. Please share the event date, your stay status (reservation details if available), guest count, special request notes, and a contact phone number.",
+          "Thank you. I’m forwarding your request to our live team (special_request - soft handover). We will contact you within 30 minutes for room and restaurant details."
+        ]
+      }
+    },
+    {
+      "id": "S043",
+      "title": "S043 - Erken Giriş Talebi V1",
+      "source_file": "📋 Senaryo S043 - Erken Giriş Taleb.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Sabah erken gelebilir miyiz?",
+        "Erken giriş yapabilir miyiz?",
+        "Check-in saatinden önce odaya girebilir miyim?",
+        "Sabah erken varacağız, erken giriş mümkün mü?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Elbette yardımcı olurum. Check-in saatimiz normalde 14:00’dır. Eğer odanız hazırsa erken giriş yapabilirsiniz. Erken giriş talebinizi resepsiyona not geçebilmem için lütfen giriş tarihinizi, tahmini varış saatinizi, rezervasyon numaranızı (yoksa ad-soyadınızı) ve telefon numaranızı paylaşır mısınız?",
+          "Teşekkür ederim. Talebinizi iletebilmem için rezervasyon numaranızı (varsa) veya ad-soyad bilginizi de paylaşabilir misiniz?",
+          "Harika, teşekkürler. ✅ Erken giriş talebinizi resepsiyona not geçtim. Odanın hazır olma durumuna göre en geç 20 dakika içinde size buradan bilgi vereceğiz."
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "S044",
+      "title": "S044 - Geç Çıkış Talebi V1",
+      "source_file": "📋 Senaryo S044 - Geç Çıkış Talebi.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "SPECIAL_REQUEST_EVENT",
+      "trigger_utterances": [
+        "Geç check-out yapabilir miyiz?",
+        "Çıkışı biraz geciktirebilir miyiz?",
+        "Bugün geç çıkış mümkün mü?",
+        "Check-out saatini uzatmak istiyorum."
+      ],
+      "standard_responses": {
+        "tr": [
+          "Check-out saatimiz 12:00’dir. Geç çıkış talebinizi müsaitliğe göre değerlendirmek için ekibimize iletiyorum.",
+          "Talebinizi iletebilmem için çıkış tarihinizi, istediğiniz çıkış saatini, rezervasyon numaranızı (yoksa ad-soyadınızı) ve telefon numaranızı paylaşır mısınız?",
+          "Teşekkür ederim. Talebiniz ekibimize iletildi. En geç 20 dakika içinde dönüş sağlayacağız."
+        ],
+        "en": [
+          "Our check-out time is 12:00. I am forwarding your late check-out request for availability review."
+        ]
+      }
+    },
+    {
+      "id": "S045",
+      "title": "S045 - Evcil Hayvan Politikası V1",
+      "source_file": "📋 Senaryo S045 - Evcil Hayvan Poli.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Evcil hayvan kabul ediyor musunuz?",
+        "Köpekle gelebilir miyiz?",
+        "Kedi ile konaklama mümkün mü?",
+        "Evcil hayvan politikası nedir?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Evcil hayvan politikası için lütfen +90 533 250 32 77 numarasından bizimle iletişime geçebilir misiniz?",
+          "Evcil hayvanınızın türünü (kedi/köpek vb.) ve yaklaşık ağırlığını da paylaşırsanız, görüşmede daha hızlı yardımcı olabiliriz."
+        ],
+        "en": [
+          "For pet policy details, please contact us at +90 533 250 32 77."
+        ]
+      }
+    },
+    {
+      "id": "S046",
+      "title": "S046 - Sigara Politikası V1",
+      "source_file": "📋 Senaryo S046 - Sigara Politikası.txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "LOCAL_FAQ_INFO",
+      "trigger_utterances": [
+        "Odalarda sigara içiliyor mu?",
+        "Oda içinde sigara içebilir miyim?",
+        "Sigara yasağı var mı?",
+        "Sigara içilen alanınız var mı?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Odalarımız sigara içilmezdir; sigara sadece belirlenmiş açık alanlarda içilebilir.",
+          "Başka yardımcı olabileceğim bir konu var mı?",
+          "Our rooms are non-smoking; smoking is allowed only in designated outdoor areas."
+        ],
+        "en": []
+      }
+    },
+    {
+      "id": "MOD-002",
+      "title": "MOD-002 - Misafir İsim Değişikliği / Oda Tipi Değişikliği Kurallar (V1.0)",
+      "source_file": "📋 Senaryo S047 - Misafir İsim Değişikliği  Oda Tipi Değişikliği Kurallar .txt",
+      "source_dir": "/mnt/c/KassandraOpenAI/docs/scenarios/raw",
+      "intent": "HOTEL_BOOKING_MODIFY",
+      "trigger_utterances": [
+        "Rezervasyondaki isim değişsin istiyorum.",
+        "Oda tipimi değiştirebilir miyim?",
+        "Deluxe yerine superior istiyorum.",
+        "Aynı tarihte daha büyük odaya geçmek istiyorum.",
+        "İsimde yazım hatası var, düzeltebilir misiniz?"
+      ],
+      "standard_responses": {
+        "tr": [
+          "Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+        ],
+        "en": []
+      }
+    }
+  ]
+}

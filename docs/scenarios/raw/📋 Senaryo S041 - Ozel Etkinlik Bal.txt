@@ -1,0 +1,61 @@
+📋 Senaryo: S041 - Ozel Etkinlik Balayi V1
+Senaryo Kodu ve Adı: S041 - Ozel Etkinlik Balayi V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin balayı için jakuzili oda ve romantik masa talebini telefon görüşmesinde netleştirmek, uygun oda seçeneği konusunda yönlendirmek ve özel hazırlık/operasyon notunu “özel_istek” canlı ekibine soft devir ile ileterek 30 dakika içinde geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Balayı için jakuzili oda ve romantik masa istiyoruz."
+
+"Jakuzili oda var mı? Romantik akşam yemeği de planlamak istiyoruz."
+
+"Balayı için özel hazırlık yapılabilir mi?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş-Çıkış Tarihi: (GG/AA/YYYY)
+
+Oda Tercihi: (Jakuzili oda vb.)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Özel Not: (Romantik masa / özel hazırlık detayları)
+
+İletişim: (Telefon / isim)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin balayı talebi (intent), ifadenin ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+Balayı talebi algılandığında:
+- Misafire jakuzili oda seçenekleri olduğu belirtilir (uygunluğa bağlı).
+- Gerekli bilgiler mümkün olduğunca görüşme sırasında toparlanır.
+- Özel hazırlık notu operasyon için kaydedilir.
+- Talep “özel_istek” ekibine soft devir ile aktarılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Soft Devir: özel_istek
+
+SLA: 30 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir tarih/oda tercihini netleştiremezse, önce tarih aralığı ve kişi sayısı alınarak süreç başlatılır.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgilendirme + Bilgi Toplama:
+
+"Balayı planınız için memnuniyetle yardımcı olurum. Jakuzili oda seçeneklerimizi paylaşabiliriz; uygunluk durumuna göre planlama yapıyoruz. Giriş-çıkış tarihlerinizi, kişi sayısını ve özellikle istediğiniz detayları (romantik masa vb.) paylaşır mısınız?"
+
+2. Yönlendirme / Devir Bilgilendirmesi:
+
+"Teşekkür ederim. Özel hazırlık notunuzu canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size dönüş sağlayacağız."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Info & Details:
+
+"For your honeymoon, we can offer jacuzzi room options, subject to availability. Could you please share your check-in/check-out dates, guest count, and your special requests (romantic table, etc.)?"
+
+2. Forwarding / SLA:
+
+"Thank you. I’m forwarding your special setup details to our live team (special_request - soft handover). We will get back to you within 30 minutes based on availability."

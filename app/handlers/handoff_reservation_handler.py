@@ -23,13 +23,27 @@ async def try_handle_handoff_and_reservation_flow(
     reservation_state_cls,
     handle_reservation_flow_fn,
     response_factory,
+    flow_context=None,
 ):
     if needs_handoff:
+        try:
+            from app.services.access_control_service import activate_human_takeover
+            activate_human_takeover(phone, reason=handoff_category or "handoff")
+        except Exception:
+            pass
         await notify_admin_handoff_fn(
             category=handoff_category,
             priority=handoff_priority,
             customer_phone=phone or "Bilinmiyor",
             customer_message=user_message,
+            source="handoff_reservation_handler",
+            detected_intent="HUMAN_AGENT_REQUEST",
+            confidence=1.0,
+            conversation_summary=f"needs_handoff=True category={handoff_category}",
+            attempted_actions=["detect_handoff_required"],
+            suggested_reply=(handoff_msg_tr or handoff_msg_en or handoff_msg_ru or "")[:240],
+            tags=["handoff", "reservation_flow"],
+            correlation_id=(flow_context.correlation_id if flow_context else ""),
         )
         lang = detect_language_fn(user_message)
         if lang == "ru" and handoff_msg_ru:

@@ -1,0 +1,53 @@
+📋 Senaryo: S011 - Tarih Değişikliği Çoklu Oda V1
+Senaryo Kodu ve Adı: S011 - Tarih Değişikliği Çoklu Oda V1
+Kanal: Telefon
+
+🎯 Hedef: Çoklu oda rezervasyonlarında odalardan sadece birinin (veya bir kısmının) tarihini değiştirmek isteyen misafirden gerekli ön bilgileri eksiksiz toplamak, değişecek odayı netleştirerek işlemi canlı destek ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"2 odadan sadece birinin tarihini değiştirmek istiyorum."
+
+"Ayırttığımız 3 odadan birinin giriş çıkış günlerini güncelleyebilir miyiz?"
+
+"Diğer oda aynı kalsın, bizim odanın tarihlerini ileri alacağız."
+
+"Grup rezervasyonumuzda tek bir odanın tarihlerinde değişiklik yapmak istiyoruz."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No: (İşlemi başlatmak ve sistemde kaydı bulmak için zorunludur)
+
+Değişecek Oda Bilgisi: (Misafir adı veya oda detayları - hangi odanın tarihinin değişeceğini belirlemek için)
+
+Yeni Tarih: (Talep edilen yeni konaklama tarih aralığı)
+
+Kalan Odaların Teyidi: (Hata yapmamak adına tarihleri sabit kalacak odaların doğrulanması için)
+
+Telefon: (Gerekli durumlarda misafire hızlıca teyit için ulaşabilmek adına)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin çoklu odalardan kısmi tarih değişikliği talebi (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime, sayı (örneğin "2 oda", "1 tane") veya kalıp eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl talep bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer rezervasyon çoklu oda içeriyorsa ve sadece tek/kısmi oda değişikliği talep ediliyorsa, sistem için "oda eşleştirmesi" (hangi odanın değişeceğinin belirlenmesi) zorunludur. Değişecek oda netleştirilmeden işlem adımlarına geçilmez.
+
+Eksik olan bilgiler (rezervasyon no ve değişecek odanın hangisi olduğu) misafirden talep edilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Gerekli bilgiler toplanıp değişecek odanın eşleştirmesi yapıldıktan sonra, işlem otomasyonda sonlandırılmaz; bilet "Soft Devir" yöntemiyle canlı destek ekibine aktarılır.
+
+SLA Süresi: Aktarılan bu talebe operasyon ekibi tarafından 30 dakika (SLA hedefi) içerisinde müdahale edilmesi beklenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İlk Karşılama ve Bilgi Talebi (TR):
+
+"Çoklu oda talebinizi aldım. Hangi odanın değişeceğini rezervasyon no ile birlikte yazar mısınız?"
+
+2. İlk Karşılama ve Bilgi Talebi (EN):
+
+"Received. For multi-room change, please specify which room will be changed with your rezervation number."

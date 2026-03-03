@@ -1,0 +1,74 @@
+📋 Senaryo: S032 - Transfer Antalya Yönlendirme V2
+Senaryo Kodu ve Adı: S032 - Transfer Antalya Yönlendirme V2
+Kanal: Mesajlaşma (WhatsApp / Web Chat)
+
+🎯 Hedef: Antalya Havalimanı transferi için misafirden gerekli ön bilgileri sohbet akışı içinde eksiksiz ve yormadan toplamak, bilgileri özetleyerek teyit etmek ve transfer rezervasyonunu oluşturarak yetkili birime (admin) iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Antalya Havalimanı'ndan transfer istiyorum."
+
+"Antalya'dan otele nasıl gelebilirim?"
+
+"Havalimanı transferiniz var mı?"
+
+"Uçaktan inince otele ulaşım sağlıyor musunuz?"
+
+"VIP transfer ayarlayabilir miyiz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Transfer Rotası: (Örn: Antalya Havalimanı -> Otel / Otel -> Antalya Havalimanı)
+
+Transfer Tarihi: (GG/AA/YYYY formatında geliş veya dönüş tarihi)
+
+Kişi Sayısı: (Yetişkin/Çocuk kırılımı veya toplam sayı - araç tipi ve bagaj kapasitesi için)
+
+Uçuş Numarası: (Örn: TK2410 - Rötar ve terminal takibi için)
+
+Uçuş Saati: (İniş veya kalkış saati)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin Antalya Havalimanı transfer talebi (intent) algılandığında sistem tetiklenir.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+İlk mesajda eksik olan bilgiler, misafiri sıkmayacak şekilde sırasıyla veya gruplanarak sorulur.
+
+Tüm bilgiler toplandığında, sistem misafire bir "Özet Teyit Mesajı" sunar.
+
+Misafir onayladığında transfer rezervasyon kaydı oluşturulur ve Webhook aracılığıyla admine (CRM/Rezervasyon sistemi) bildirim gönderilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Admin Onayı: Webhook ile iletilen talep admin panelinde "Beklemede" statüsünde düşer. Admin onayladığında misafire SMS/WhatsApp üzerinden "Transferiniz onaylanmıştır, şoför bilgileriniz uçuş günü iletilecektir" otomatik mesajı gider.
+
+Canlı Desteğe Aktarma (Eskalasyon): * Misafir bebek koltuğu, tekerlekli sandalye erişimi, evcil hayvan taşıma veya güzergah üstü duraklama (örn: market/eczane) gibi özel taleplerde bulunursa.
+
+Bot, istenen bilgileri (örn: uçuş numarasını) üst üste 2 kez yanlış formatta alırsa.
+
+Misafir "Canlı destek", "Müşteri temsilcisi" gibi doğrudan insan talebinde bulunursa, sohbet tüm geçmişiyle birlikte ilgili operasyon ekibine aktarılır.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Karşılama ve Bilgi Talebi:
+
+"Antalya'ya şimdiden hoş geldiniz! ☀️ Otelimize konforlu bir şekilde ulaşmanız için transfer hizmetimizden memnuniyetle yardımcı olabilirim. Rezervasyonunuzu hızlıca planlayabilmem için lütfen; transfer tarihinizi, kişi sayısını, uçuş numaranızı ve iniş saatinizi benimle paylaşır mısınız?"
+
+2. Eksik Bilgi Varsa (Örnek - Sadece uçuş saati ve numarası eksikse):
+
+"Harika, tarih ve kişi sayısını not aldım. Uçuşunuzu anlık takip edip rötar durumunda bile sizi tam vaktinde karşılayabilmemiz için uçuş numaranızı ve iniş saatinizi de öğrenebilir miyim?"
+
+3. Teyit Mesajı (Tüm bilgiler toplandığında):
+
+"Bilgileriniz için teşekkür ederim. Hemen kontrol edelim:
+🗓️ Tarih: [Transfer Tarihi]
+👥 Kişi Sayısı: [Kişi Sayısı] Kişi
+✈️ Uçuş Bilgisi: [Uçuş Numarası], İniş: [Uçuş Saati]
+📍 Rota: Antalya Havalimanı ➡️ Otel
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4. Kapanış / İşlem Onayı (Ekstra Öneri):
+
+"Mükemmel! ✅ Transfer talebinizi başarıyla oluşturdum ve rezervasyon ekibimize ilettim. İşleminiz onaylandığında size buradan kısa süre içinde kesin onay mesajı göndereceğiz. Şimdiden iyi ve güvenli yolculuklar dileriz! 🧳 Başka yardımcı olabileceğim bir konu var mı?"

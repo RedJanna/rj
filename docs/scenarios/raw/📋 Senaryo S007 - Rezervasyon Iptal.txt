@@ -1,0 +1,49 @@
+📋 Senaryo: S007 - Rezervasyon Iptal Ilk Adim V1
+Senaryo Kodu ve Adı: S007 - Rezervasyon Iptal Ilk Adim V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Rezervasyon iptali talep eden misafirden, işlemi başlatabilmek için gerekli olan rezervasyon numarasını, kimlik doğrulama bilgilerini ve fiyat tipini sohbet akışı içinde eksiksiz toplamak ve işlemi ilgili iptal/iade birimine hızlıca aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Rezervasyonumu iptal etmek istiyorum."
+
+"Tatilimi iptal edebilir miyim?"
+
+"Oda rezervasyonumu iptal etmek için ne yapmalıyım?"
+
+"Gelemiyorum, rezervasyonu nasıl iptal ederiz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No / Voucher No: (İptal edilecek kaydı sistemde bulmak için zorunludur)
+
+Fiyat Tipi: (1- İptal Edilemez veya 2- Ücretsiz İptal - iade koşullarının belirlenmesi için)
+
+İptal Nedeni: (Opsiyonel - hizmet iyileştirme ve istatistik için)
+
+Telefon: (İletişim ve acil durumlarda teyit için)
+
+Ad Soyad: (Rezervasyon sahibi doğrulaması için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin rezervasyon iptal talebi (intent), mesajının genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya kalıp bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi ifadelerle dile getirirse getirsin asıl talep sistem tarafından kavranır.
+
+Yukarıdaki temel bilgiler (slotlar) kontrol edilir.
+
+İptal talebi alındığında, işlemin ilerleyebilmesi için rezervasyonun hangi fiyat tipiyle (1- İptal Edilemez, 2- Ücretsiz İptal) oluşturulduğu kuralı işletilir ve bu durum misafire sorulur.
+
+Rezervasyon numarası ve Ad-Soyad gibi doğrulama bilgileri alınmadan kesin iptal sürecine geçilmez.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Hard Devir): İptal ve iade süreci hassas bir işlem olduğu için bot ön bilgileri topladıktan sonra işlemi kendi başına sonlandırmaz. Sohbet, tüm detaylarla birlikte doğrudan iptal/iade departmanına "Hard Devir" (kesin aktarım) yapılarak ilgili insan temsilciye atanır.
+
+SLA Süresi: Aktarılan bu talebe operasyon ekibi tarafından en geç 15 dakika (SLA) içerisinde yanıt verilmesi hedeflenir.
+
+💬 Standart Yanıt Mesajları (TR)
+
+1. İlk Karşılama ve Bilgi Talebi:
+
+"İptal işleminiz için size yardımcı olayım. İşlemi başlatabilmemiz için lütfen Rezervasyon / Voucher Numaranızı ve rezervasyondaki Ad-Soyad bilginizi paylaşır mısınız? Ayrıca, rezervasyonunuzu hangi koşulla oluşturmuştunuz? (1- İptal Edilemez, 2- Ücretsiz İptal)"

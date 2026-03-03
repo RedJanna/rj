@@ -43,6 +43,7 @@ async def try_start_restaurant_reservation_flow(
                 for k in [
                     "restoran rezervasyonunuz için yardımcı olurum",
                     "kaç kişi, tarih, saat ve isim",
+                    "kaç kişilik rezervasyon yapmak istersiniz",
                     "restaurant reservation",
                     "how many people",
                     "what name should the reservation be under",
@@ -71,17 +72,33 @@ async def try_start_restaurant_reservation_flow(
         all_numbers = re.findall(r"\b(\d+)\b", user_message)
         guest_numbers = [n for n in all_numbers if 1 <= int(n) <= 20]
 
+    max_auto_reservation = int(restaurant_settings.get("max_auto_reservation", 9) or 9)
+
     if guest_numbers:
         guest_count = int(guest_numbers[0])
-        if guest_count <= restaurant_settings["max_auto_reservation"]:
+        if guest_count <= max_auto_reservation:
             extracted_data["guest_count"] = guest_count
         else:
             clear_reservation_flow_fn(phone)
+            try:
+                from app.services.access_control_service import activate_human_takeover
+                activate_human_takeover(phone, reason="restoran_grup_rezervasyon")
+            except Exception:
+                pass
             await notify_admin_handoff_fn(
                 category="restoran_rezervasyon",
                 priority="medium",
                 customer_phone=phone,
                 customer_message=f"GRUP REZERVASYONU: {guest_count} kişi",
+                source="restaurant_start_handler.group_handoff",
+                detected_intent="RESTAURANT_BOOKING_CREATE",
+                confidence=0.95,
+                conversation_summary=f"group_reservation guest_count={guest_count}",
+                attempted_actions=["restaurant_group_limit_check"],
+                suggested_reply=(
+                    f"{guest_count} kişilik grup rezervasyonu (10+ kişi) için sizi müşteri temsilcimize bağlıyorum."
+                ),
+                tags=["restaurant", "group_handoff"],
             )
             if customer_lang == "en":
                 reply = f"For a group reservation of {guest_count} people, I'm connecting you with our representative. Please wait a moment."
@@ -143,7 +160,7 @@ async def try_start_restaurant_reservation_flow(
         if customer_lang == "en":
             reply = "Of course! I'd be happy to help. 🍽️\n\nHow many people will the reservation be for?"
         else:
-            reply = "Restoran rezervasyonunuz için yardımcı olurum. 🍽️\n\nLütfen şu bilgileri yazın: kaç kişi, tarih, saat ve isim. (Örn: 2 kişi, 20 Ağustos, 20:00, Ali)"
+            reply = "Restoran rezervasyonunuz için yardımcı olurum. 🍽️\n\nKaç kişilik rezervasyon yapmak istersiniz?"
     elif "date" in missing_fields and "guest_count" not in missing_fields:
         update_reservation_flow_fn(phone, reservation_state_cls.ASK_DATE.value, extracted_data)
         if customer_lang == "en":
@@ -161,7 +178,7 @@ async def try_start_restaurant_reservation_flow(
         if customer_lang == "en":
             reply = "Of course! I'd be happy to help you make a restaurant reservation. 🍽️\n\nHow many people will the reservation be for?"
         else:
-            reply = "Restoran rezervasyonunuz için yardımcı olurum. 🍽️\n\nLütfen şu bilgileri yazın: kaç kişi, tarih, saat ve isim. (Örn: 2 kişi, 20 Ağustos, 20:00, Ali)"
+            reply = "Restoran rezervasyonunuz için yardımcı olurum. 🍽️\n\nKaç kişilik rezervasyon yapmak istersiniz?"
 
     add_to_history_fn(phone, "user", user_message)
     add_to_history_fn(phone, "assistant", reply)

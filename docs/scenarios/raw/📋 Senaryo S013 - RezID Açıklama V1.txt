@@ -1,0 +1,51 @@
+📋 Senaryo: S013 - RezID Açıklama V1
+Senaryo Kodu ve Adı: S013 - RezID Açıklama V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Rezervasyon işlemleri veya sorgulamaları sırasında "Rez ID" kavramının ne anlama geldiğini soran misafiri WhatsApp üzerinden bilgilendirmek ve konfirmasyon belgesindeki rezervasyon numarasını (Voucher No) bulması için doğru şekilde yönlendirmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Rez ID nedir?"
+
+"Benden istenen Rez ID numarası nerede yazıyor?"
+
+"Voucher No veya Rezervasyon numarası dediğiniz şey aynı mı?"
+
+"Formdaki Rez ID kısmına ne yazmam gerekiyor?"
+
+"Rezervasyon ID numaramı nasıl öğrenebilirim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Soru Metni: (Misafirin Rez ID, Voucher veya rezervasyon numarası tanımını soran ifadesi)
+
+Dil: (Doğru dilde bilgilendirme yapabilmek için iletişim dili - TR/EN vb.)
+
+Konfirmasyon Bağlamı: (Misafirin onaylanmış bir rezervasyon belgesine/formuna bakıp bakmadığı)
+
+Rezervasyon Numarası Alanı: (Misafirin belge üzerinde doğru yere yönlendirilebilmesi için)
+
+Takip Notu: (Numarayı öğrendikten sonra asıl işlem akışına geri dönülebilmesi için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin "Rez ID" (Rezervasyon Numarası / Voucher No) kavramının ne anlama geldiğini veya nerede bulunduğunu sorma niyeti (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Belirli bir kelime ("nedir", "nerede") veya kısaltma eşleştirmesi kesinlikle yapılmaz; misafir sorusunu hangi ifadelerle dile getirirse getirsin asıl bilgi talebi kavranır.
+
+Sistem, sorunun rezervasyon numarası tanımıyla ilgili olduğunu doğruladığında, kural olarak bu ifadenin onay (konfirmasyon) formunda yer alan rezervasyon numarası olduğunu açıklar.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Bilgi Cevabı: Bu senaryo sadece bir tanımlama ve bilgilendirme (SSS) yanıtı içerir. Otomasyon gerekli bilgiyi doğrudan sağlar.
+
+Devir Yok: İşlem bir bilgi paylaşımı olduğundan herhangi bir canlı destek temsilcisine aktarıma veya eskalasyona gerek duyulmaz.
+
+💬 Standart Yanıt Mesajları
+
+1. Bilgilendirme Yanıtı (TR):
+
+"Rez ID, konfirmasyon formunda yer alan rezervasyon numarasıdır (Voucher No)."
+
+2. Bilgilendirme Yanıtı (EN):
+
+"Rez ID is the reservation number on your confirmation form (Voucher No)."

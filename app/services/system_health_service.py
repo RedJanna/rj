@@ -12,6 +12,7 @@ from __future__ import annotations
 import platform
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+from app.services.error_code_service import derive_error_code
 
 # Psutil opsiyonel import
 try:
@@ -33,15 +34,21 @@ MAX_ERROR_LOGS = 100
 # HATA LOGLAMA (satır 5269-5287)
 # ======================================================
 
-def log_error(error_type: str, message: str, details: dict = None):
+def log_error(error_type: str, message: str, details: dict = None, code: str | None = None):
     """
     Hata logla
     Kaynak: kassandra_openai_bot.py satır 5269-5287
     """
     global ERROR_LOGS
     
+    error_code = (code or "").strip() or derive_error_code(
+        event="system.log_error",
+        error_type=error_type,
+        message=message,
+    )
     error_entry = {
         "timestamp": datetime.now().isoformat(),
+        "code": error_code,
         "type": error_type,
         "message": message,
         "details": details or {}
@@ -54,7 +61,7 @@ def log_error(error_type: str, message: str, details: dict = None):
         ERROR_LOGS = ERROR_LOGS[-MAX_ERROR_LOGS:]
     
     # Console'a da yazdır
-    print(f"❌ ERROR [{error_type}]: {message}")
+    print(f"❌ ERROR [{error_code}/{error_type}]: {message}")
 
 
 def get_error_logs(hours: int = 24, error_type: str = None) -> dict:

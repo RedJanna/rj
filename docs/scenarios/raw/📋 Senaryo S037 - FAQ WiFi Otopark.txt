@@ -1,0 +1,49 @@
+📋 Senaryo: S037 - FAQ WiFi Otopark V1
+Senaryo Kodu ve Adı: S037 - FAQ WiFi Otopark V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin Wi-Fi ve otoparkın ücretsiz olup olmadığı sorusuna WhatsApp üzerinden net ve standart bilgi vermek; otopark seçeneklerini kısa ve anlaşılır şekilde açıklamak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Wi-Fi ve otopark ücretsiz mi?"
+
+"İnternet ücretsiz mi?"
+
+"Otopark var mı, ücretli mi?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+FAQ Konusu: (Wi-Fi / Otopark)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Konaklama Tarihi (Opsiyonel): (Gerekirse not edilir)
+
+Takip Sorusu: (Ek destek ihtiyacı için kısa soru)
+
+Kayıt: (Sohbet kaydı/etiketi - ilgili FAQ konusu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin sorusu (intent), mesajın ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+FAQ konusu “Wi-Fi ve otopark” ise sabit bilgi verilir:
+- Otel genelinde ücretsiz Wi-Fi mevcuttur.
+- Ücretsiz otopark imkânı vardır (otel önündeki alan).
+- Otel karşısında ücretli özel otopark alternatifi mevcuttur.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir detay sorarsa (örn: “yer bulamazsak?”), ücretli özel otopark alternatifi tekrar belirtilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Evet, otel genelinde ücretsiz Wi-Fi ve ücretsiz otopark mevcuttur. Araçlarınızı otel önünde bulunan alana park edebilirsiniz; bu alan ücretsizdir. Otel karşısında ayrıca ücretli özel otopark da mevcuttur."
+
+2. Takip Sorusu:
+
+"Başka yardımcı olabileceğim bir konu var mı?"

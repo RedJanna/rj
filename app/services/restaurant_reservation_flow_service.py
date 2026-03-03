@@ -17,9 +17,11 @@ import sqlite3
 from app.services.datetime_parser import extract_time_from_text
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Tuple, Optional, List, Dict
+from typing import Any, Tuple, Optional, List, Dict
 from enum import Enum
 
+from app.flows.flow_contract import FlowContext, FlowResult
+from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 # ======================================================
 # ENUM'LAR
@@ -49,8 +51,9 @@ class ReservationStatus(Enum):
 # DOSYA YOLLARI
 # ======================================================
 
-RESERVATIONS_DB = Path("C:/KassandraOpenAI/data/reservations.db")
-RESERVATION_FLOW_FILE = Path("C:/KassandraOpenAI/data/reservation_flows.json")
+RESERVATIONS_DB = resolve_data_file("reservations.db", env_var="KASSANDRA_RESERVATIONS_DB")
+RESERVATION_FLOW_FILE = resolve_data_file("reservation_flows.json", env_var="KASSANDRA_RESERVATION_FLOW_FILE")
+_RESERVATION_FLOW_STORE = JsonStateRepository(RESERVATION_FLOW_FILE)
 
 
 # ======================================================
@@ -63,7 +66,7 @@ RESTAURANT_SETTINGS = {
     "season_start_day": 10,
     "season_end_month": 11,
     "season_end_day": 10,
-    "max_auto_reservation": 8,  # 8+ kişi için canlı destek
+    "max_auto_reservation": 9,  # 9 kişiye kadar bot akışı, 10+ canlı destek
     "location_url": "google.com/maps/place//data=!4m2!3m1!1s0x14c04131882c8de9:0x40a2254ec58061ec?sa=X&ved=1t:8290&ictx=111",
     "meal_times": {
         "breakfast": {
@@ -448,20 +451,12 @@ def detect_correction_in_message(message: str, current_state: str) -> dict:
 
 def load_reservation_flows() -> dict:
     """Rezervasyon akış durumlarını yükle"""
-    if RESERVATION_FLOW_FILE.exists():
-        try:
-            with open(RESERVATION_FLOW_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            pass
-    return {}
+    return _RESERVATION_FLOW_STORE.load_dict()
 
 
 def save_reservation_flows(flows: dict):
     """Rezervasyon akış durumlarını kaydet"""
-    RESERVATION_FLOW_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(RESERVATION_FLOW_FILE, 'w', encoding='utf-8') as f:
-        json.dump(flows, f, indent=2, ensure_ascii=False)
+    _RESERVATION_FLOW_STORE.save_dict(flows if isinstance(flows, dict) else {})
 
 
 def get_reservation_flow(phone: str) -> dict:
@@ -1031,20 +1026,63 @@ Afiyetle bekleriz. 🍽️"""
 # ======================================================
 
 def detect_language(text: str) -> str:
-    """Basit dil tespiti"""
-    text_lower = text.lower()
-    
-    english_words = ["hello", "hi", "good", "morning", "evening", "please", "thank", 
-                     "yes", "no", "reservation", "book", "table", "people", "person"]
-    turkish_chars = ["ş", "ğ", "ü", "ö", "ç", "ı"]
-    
-    if any(c in text_lower for c in turkish_chars):
-        return "tr"
-    
-    if any(word in text_lower for word in english_words):
-        return "en"
-    
+    """
+    Merkez dil tespit politikasini kullan.
+    Restoran akisi icin unsupported dillerde varsayilan TR davranisi korunur.
+    """
+    from app.utils.message_utils import detect_language as detect_language_global
+
+    detected = (detect_language_global(text or "") or "tr").strip().lower()
+    if detected in {"en", "tr"}:
+        return detected
     return "tr"
+
+
+class RestaurantReservationFlowAdapter:
+    """Minimal orchestrator adapter for restaurant flow contract."""
+
+    flow_name = "restaurant"
+
+    def can_handle(self, context: FlowContext) -> bool:
+        flow_state = (context.state or {}).get(self.flow_name) or {}
+        current_state = flow_state.get("state")
+        if current_state and current_state != ReservationState.IDLE.value:
+            return True
+        msg = (context.message or "").lower()
+        keywords = ("restoran", "restaurant", "masa", "rezervasyon", "reservation")
+        return any(k in msg for k in keywords)
+
+    def handle(self, context: FlowContext) -> FlowResult:
+        user_id = (context.user_id or "").strip()
+        if not user_id:
+            return FlowResult(
+                reply_messages=[],
+                next_state=context.state or {},
+                side_effects=[],
+                handoff={"reason": "missing_user_id", "target": "human"},
+            )
+
+        locale = (context.locale or "tr").lower()
+        lang = "en" if locale.startswith("en") else "tr"
+
+        current_flow = get_reservation_flow(user_id)
+        current_data = (current_flow or {}).get("data") or {}
+        extracted = extract_all_reservation_info(context.message or "")
+        merged = merge_reservation_data(current_data, extracted)
+        reply, next_state_name = generate_smart_response(current_data, extracted, lang=lang)
+        update_reservation_flow(user_id, next_state_name, merged)
+
+        next_state = dict(context.state or {})
+        next_state[self.flow_name] = {
+            "state": next_state_name,
+            "data": merged,
+        }
+        return FlowResult(
+            reply_messages=[reply] if reply else [],
+            next_state=next_state,
+            side_effects=[{"type": "state_update", "flow": self.flow_name}],
+            handoff=None,
+        )
 
 
 # ======================================================
@@ -1098,4 +1136,6 @@ __all__ = [
     # Mesaj
     'format_reservation_confirmation',
     'detect_language',
+    # Orchestrator adapter
+    'RestaurantReservationFlowAdapter',
 ]

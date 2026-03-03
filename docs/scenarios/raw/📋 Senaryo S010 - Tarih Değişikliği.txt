@@ -1,0 +1,53 @@
+📋 Senaryo: S010 - Tarih Değişikliği Aynı Oda Tipi V1
+Senaryo Kodu ve Adı: S010 - Tarih Değişikliği Aynı Oda Tipi V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Rezervasyon tarihlerini değiştirmek isteyen misafir için mevcut oda tipinin yeni tarihlerde müsaitliğini kontrol etmek, varsa fiyat farkını ileterek onay almak ve işlemi tamamlamak üzere canlı destek ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Rezervasyonumu 15 Ağustos yerine 18 Ağustos giriş yapmak istiyorum."
+
+"Tatil tarihlerimizi birkaç gün ileri alabilir miyiz?"
+
+"Giriş günümüzü değiştirmek istiyoruz, aynı odada kalmaya devam edebilir miyiz?"
+
+"Rezervasyon tarihlerimi güncelleyebilir miyim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No: (İşlemi sistemde bulmak ve doğrulamak için zorunludur)
+
+Yeni Tarih Aralığı: (GG/AA/YYYY formatında talep edilen yeni konaklama tarihleri)
+
+Mevcut Oda Tipi: (Aynı odanın yeni tarihlerde müsaitliğinin kontrolü için)
+
+Yetişkin/Çocuk Bilgisi: (Oda kapasitesi ve fiyatlandırma kontrolü için)
+
+Onay Mesajı: (Yeni fiyat ve tarihlerin misafir tarafından kabul edildiğine dair teyit)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin tarih değişikliği talebi (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime, tarih (örneğin 15 Ağustos) veya kalıp bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl talep sistem tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer aynı oda tipi misafirin talep ettiği yeni tarihlerde müsaitse, yeni tarihlerdeki toplam fiyat (veya oluşacak fiyat farkı) hesaplanarak misafirle paylaşılır ve değişiklik için kendisinden "Onay" istenir.
+
+İşlemin başlayabilmesi için öncelikle eksik olan Rezervasyon Numarası misafirden talep edilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Devir): Misafirden yeni tarih ve fiyat için onay alındıktan sonra işlem bot üzerinde sonlandırılmaz; rezervasyonun sisteme işlenmesi için tüm sohbet geçmişiyle birlikte ilgili canlı müşteri temsilcisine aktarılır.
+
+SLA Süresi: Aktarılan bu talebe operasyon ekibi tarafından 20-30 dakika içerisinde müdahale edilmesi hedeflenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İlk Karşılama ve Bilgi Talebi (TR):
+
+"Aynı oda tipinde yeni tarih müsaitliğini kontrol edeceğim. Rezervasyon no bilginizi paylaşır mısınız?"
+
+2. İlk Karşılama ve Bilgi Talebi (EN):
+
+"I will check availability for the same room type on new dates. Please share your reservation number."

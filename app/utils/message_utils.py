@@ -167,6 +167,13 @@ def get_menu_response(selection: int, lang: str = "tr") -> str:
 MONTHS_TR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"]
 MONTHS_EN = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
 MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"]
+MONTHS_DE = ["januar", "februar", "marz", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"]
+MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+MONTHS_FR = ["janvier", "fevrier", "février", "mars", "avril", "mai", "juin", "juillet", "aout", "août", "septembre", "octobre", "novembre", "decembre", "décembre"]
+MONTHS_PT = ["janeiro", "fevereiro", "marco", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "ابريل", "مايو", "يونيو", "يوليو", "أغسطس", "اغسطس", "سبتمبر", "أكتوبر", "اكتوبر", "نوفمبر", "ديسمبر"]
+MONTHS_ZH = [f"{i}月" for i in range(1, 13)]
+MONTHS_HI = ["जनवरी", "फ़रवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"]
 
 def detect_language(text: str) -> str:
     """
@@ -192,9 +199,21 @@ def detect_language(text: str) -> str:
 
     # "ı" harfini "i" ile değiştir (klavye hatası düzeltmesi)
     t_normalized = t.replace("ı", "i")
+    accent_map = {
+        "á": "a", "à": "a", "â": "a", "ã": "a",
+        "é": "e", "è": "e", "ê": "e",
+        "í": "i", "ì": "i", "î": "i",
+        "ó": "o", "ò": "o", "ô": "o", "õ": "o",
+        "ú": "u", "ù": "u", "û": "u",
+        "ç": "c", "ñ": "n",
+        "ä": "a", "ö": "o", "ü": "u", "ß": "ss",
+    }
+    for src, dst in accent_map.items():
+        t_normalized = t_normalized.replace(src, dst)
 
     # EN yapısal kalıplar (öncelikli)
     english_patterns = [
+        r'^hello\b', r'^hi\b', r'^hey\b',
         r'^good\s+(?:morning|afternoon|evening|night)\b',
         r'^can\s+i\b', r'^can\s+you\b', r'^could\s+i\b', r'^could\s+you\b',
         r'^i\s+want\b', r'^i\s+need\b', r'^i\s+would\b', r"^i\'d\s+like\b", r"^i\'m\b",
@@ -210,17 +229,15 @@ def detect_language(text: str) -> str:
     # EN/TR/DE/ES/FR/PT sözlük sinyalleri
     english_only_words = [
         "hello", "hi", "hey", "good morning", "good evening",
-        " i ", "i'm", "i'd", "i've", "i'll", " me ", " my ", " you ", " your ",
-        " we ", " our ", " he ", " she ", " they ", " their ",
-        "can ", "could ", "would ", "should ", "will ",
+        "i'm", "i'd", "i've", "i'll",
         "don't", "didn't", "doesn't", "won't", "wouldn't", "couldn't",
-        "what ", "where ", "when ", "how ", "why ", "which ",
-        " book ", " reserve ", " want ", " need ", " like ",
-        " said ", " told ",
-        " table ", " room ", " person ", " people ", " guest ",
-        " night ", " stay ", " breakfast ", " dinner ", " lunch ",
-        "please", "thank", "thanks",
-        " the ", " a ", " an ",
+        "do you", "can you", "could you", "would you",
+        "what is", "where is", "when is", "how much", "how many",
+        "book", "reserve", "booking", "reservation",
+        "room", "guest", "guests", "adult", "adults", "child", "children",
+        "check-in", "check-out", "between", "from", "to",
+        "breakfast", "dinner", "lunch",
+        "please", "thank you", "thanks",
     ]
 
     turkish_only_words = [
@@ -232,41 +249,94 @@ def detect_language(text: str) -> str:
         "rezervasyon", "restoran",  # Türkçe yazım
         "masa", "giris", "cikis",
         "kahvalti", "yemek", "havuz", "plaj",
+        "cok", "çok", "guzel", "güzel",
         "istiyorum", "isterim", "yapabilir",
         "var mi", "yok mu", "nerede", "nasil",
-        "ben", "biz", "siz", "bu",
+        "ben", "biz", "siz", "bu", "ile", "arasi", "arası", "tarih",
     ]
 
-    german_words = ["hallo", "guten", "danke", "bitte", "zimmer", "preis", "reservierung", "buchung"]
-    spanish_words = ["hola", "gracias", "precio", "reserva", "habitacion", "habitación", "cuanto", "cuánto"]
-    french_words = ["bonjour", "merci", "prix", "reservation", "réservation", "chambre", "s'il", "svp"]
-    portuguese_words = ["olá", "ola", "obrigado", "obrigada", "preço", "preco", "reserva", "quarto"]
+    german_words = [
+        "hallo", "guten", "danke", "bitte", "zimmer", "preis", "reservierung", "buchung",
+        "storno", "stornierung", "erstattbar", "nicht erstattbar",
+        "zwischen", "von", "bis", "erwachsene", "kinder",
+    ]
+    spanish_words = [
+        "hola", "gracias", "precio", "reserva", "habitacion", "habitación", "cuanto", "cuánto",
+        "puede", "tarifa", "tarifas", "reembolsable", "reembolsables", "cancelacion", "cancelación",
+        "entre", "adulto", "adultos", "nino", "niño", "ninos", "niños", "huesped", "huespedes",
+    ]
+    french_words = [
+        "bonjour", "merci", "prix", "reservation", "réservation", "chambre", "s'il", "svp",
+        "pouvez", "tarif", "tarifs", "remboursable", "remboursables", "annulation",
+        "entre", "du", "au", "adultes", "enfants",
+    ]
+    portuguese_words = [
+        "olá", "ola", "obrigado", "obrigada", "preço", "preco", "reserva", "quarto",
+        "pode", "tarifa", "tarifas", "reembolsavel", "reembolsável", "cancelamento",
+        "entre", "adulto", "adultos", "crianca", "criança", "criancas", "crianças", "hospede", "hóspede",
+    ]
 
-    english_count = sum(1 for word in english_only_words if word in t_normalized)
-    turkish_count = sum(1 for word in turkish_only_words if word in t)
-    german_count = sum(1 for word in german_words if word in t_normalized)
-    spanish_count = sum(1 for word in spanish_words if word in t_normalized)
-    french_count = sum(1 for word in french_words if word in t_normalized)
-    portuguese_count = sum(1 for word in portuguese_words if word in t_normalized)
+    def _contains_signal(text: str, signal: str) -> bool:
+        sig = (signal or "").strip()
+        if not sig:
+            return False
+        if " " in sig:
+            return sig in text
+        return bool(re.search(rf"\b{re.escape(sig)}\b", text))
 
-    # Öncelik: EN > TR > RU > DE > AR > ES > FR > ZH > HI > PT
-    if english_count > 0:
+    english_count = sum(1 for word in english_only_words if _contains_signal(t_normalized, word))
+    turkish_count = sum(1 for word in turkish_only_words if _contains_signal(t, word))
+    german_count = sum(1 for word in german_words if _contains_signal(t_normalized, word))
+    spanish_count = sum(1 for word in spanish_words if _contains_signal(t_normalized, word))
+    french_count = sum(1 for word in french_words if _contains_signal(t_normalized, word))
+    portuguese_count = sum(1 for word in portuguese_words if _contains_signal(t_normalized, word))
+
+    # Ay adlari tarih payload'larinda kritik sinyal; ozellikle slot follow-up'larda
+    # diller arasi kaymayi azaltir.
+    month_hits = {
+        "tr": sum(1 for m in MONTHS_TR if _contains_signal(t, m)),
+        "en": sum(1 for m in MONTHS_EN if _contains_signal(t_normalized, m)),
+        "de": sum(1 for m in MONTHS_DE if _contains_signal(t_normalized, m)),
+        "es": sum(1 for m in MONTHS_ES if _contains_signal(t_normalized, m)),
+        "fr": sum(1 for m in MONTHS_FR if _contains_signal(t_normalized, m)),
+        "pt": sum(1 for m in MONTHS_PT if _contains_signal(t_normalized, m)),
+    }
+
+    scores = {
+        "en": english_count + month_hits["en"],
+        "tr": turkish_count + month_hits["tr"],
+        "de": german_count + month_hits["de"],
+        "es": spanish_count + month_hits["es"],
+        "fr": french_count + month_hits["fr"],
+        "pt": portuguese_count + month_hits["pt"],
+    }
+
+    # EN yapisal kaliplari cok guclu sinyal; sozlukte tek kelime EN bias olmasin.
+    if scores["en"] >= 2 and scores["en"] > max(scores["tr"], scores["de"], scores["es"], scores["fr"], scores["pt"]):
         return "en"
-    turkish_chars = ["ş", "ğ", "ı", "ç"]
+    # "ç" diger dillerde de sik goruldugu icin tek basina TR sinyali sayilmaz.
+    turkish_chars = ["ş", "ğ", "ı"]
     has_strong_turkish = any(char in t for char in turkish_chars)
     if has_strong_turkish:
         return "tr"
-    if turkish_count > 0:
+    if scores["tr"] > 0 and scores["tr"] >= max(scores["en"], scores["de"], scores["es"], scores["fr"], scores["pt"]):
         return "tr"
-    latin_scores = {
-        "de": german_count,
-        "es": spanish_count,
-        "fr": french_count,
-        "pt": portuguese_count,
-    }
-    top_lang = max(latin_scores, key=latin_scores.get)
-    if latin_scores[top_lang] > 0:
-        return top_lang
+
+    top_score = max(scores.values())
+    if top_score > 0:
+        tied = [lang for lang, val in scores.items() if val == top_score]
+        if len(tied) == 1:
+            return tied[0]
+        # ES/PT carpisan kaliplarda harf/sozluk ayirici kullan.
+        if "es" in tied and "pt" in tied:
+            if any(ch in t for ch in ("ã", "õ", "ç")) or any(w in t_normalized for w in ("voce", "voces", "hospede", "hospedes")):
+                return "pt"
+            if any(ch in t for ch in ("ñ", "¿", "¡")) or any(w in t_normalized for w in ("usted", "ustedes", "huesped", "huespedes")):
+                return "es"
+        priority = ["en", "tr", "de", "es", "fr", "pt"]
+        for code in priority:
+            if code in tied:
+                return code
 
     # Kısa ASCII mesajlar -> EN
     if t in ["hello", "hi", "hey", "yes", "no", "ok", "okay"]:
@@ -358,19 +428,51 @@ def detect_price_request(text: str, history: List[dict] = None) -> bool:
             if any(kw in recent_text for kw in ["transfer", "dalaman", "antalya", "havalimanı", "airport"]):
                 return False
 
-    price_words = ["fiyat", "ücret", "gecelik", "price", "how much", "rate", "цена", "стоимость", "сколько", "тариф"]
-    date_words = MONTHS_TR + MONTHS_EN + MONTHS_RU
-    guest_words = ["yetişkin", "çocuk", "kişi", "adult", "kid", "person", "взрослый", "взрослых", "ребёнок", "детей", "человек"]
-    availability_words = ["müsait", "musait", "uygun", "available", "availability", "suitable"]
-    room_words = ["oda", "room"]
+    price_words = [
+        "fiyat", "ücret", "gecelik", "price", "how much", "rate", "цена", "стоимость", "сколько", "тариф",
+        "preis", "kosten", "precio", "coste", "prix", "preco", "preço",
+        "价格", "总价", "费用", "多少钱",
+    ]
+    date_words = MONTHS_TR + MONTHS_EN + MONTHS_RU + MONTHS_DE + MONTHS_ES + MONTHS_FR + MONTHS_PT + MONTHS_AR + MONTHS_ZH + MONTHS_HI
+    guest_words = [
+        "yetişkin", "çocuk", "kişi", "adult", "kid", "person", "взрослый", "взрослых", "ребёнок", "детей", "человек",
+        "gast", "gaste", "gäste", "erwachsene", "kinder",
+        "huesped", "huespedes", "huésped", "huéspedes", "adulto", "adultos", "nino", "niño", "ninos", "niños",
+        "adulte", "adultes", "enfant", "enfants",
+        "hospede", "hospedes", "hóspede", "hóspedes", "crianca", "criança", "criancas", "crianças",
+        "شخص", "أشخاص", "اشخاص", "بالغ", "بالغين", "ضيف", "ضيوف", "طفل", "أطفال", "اطفال",
+        "वयस्क", "वयस्कों", "मेहमान", "अतिथि", "बच्चा", "बच्चों", "व्यक्ति",
+        "成人", "大人", "儿童", "小孩", "位",
+    ]
+    availability_words = [
+        "müsait", "musait", "uygun", "available", "availability", "suitable",
+        "verfugbar", "verfügbar", "verfugbarkeit", "verfügbarkeit",
+        "disponible", "disponibilidad", "disponibilite", "disponibilité", "disponivel", "disponível", "disponibilidade",
+        "متاح", "التوفر", "متوفر",
+        "उपलब्ध", "उपलब्धता", "खाली",
+        "可用", "空房", "有房",
+    ]
+    price_words += ["السعر", "تكلفة", "الاجمالي", "الإجمالي", "المجموع", "कीमत", "कुल कीमत", "मूल्य", "दर"]
+    room_words = ["oda", "room", "房间", "客房"]
     has_guest_signal = any(w in t for w in guest_words) or bool(
-        re.search(r"\d+\s*(kişi|yetişkin|çocuk|adult|adults|kid|kids|child|children|person)", t)
+        re.search(
+            r"\d+\s*(?:kişi|yetişkin|çocuk|adult|adults|kid|kids|child|children|person|شخص|أشخاص|اشخاص|بالغ|بالغين|ضيف|ضيوف|طفل|أطفال|اطفال|वयस्क|वयस्कों|मेहमान|अतिथि|व्यक्ति|बच्चा|बच्चों|位|名)\s*(?:成人|大人|儿童|小孩)?",
+            t,
+        )
+    )
+    has_cn_date_range = bool(
+        re.search(
+            r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?\s*(?:到|至|-|—|–)\s*(?:\d{1,2}\s*月\s*)?\d{1,2}\s*日?",
+            t,
+        )
     )
 
     score = 0
     if any(w in t for w in price_words):
         score += 1
     if any(w in t for w in date_words):
+        score += 1
+    if has_cn_date_range:
         score += 1
     if has_guest_signal:
         score += 1

@@ -1,0 +1,44 @@
+📋 Senaryo: S001 - Hotel Rezervasyon Baslangici V1
+Senaryo Kodu ve Adı: S001 - Hotel Rezervasyon Baslangici V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin oda rezervasyonu talebini karşılamak, gerekli olan giriş-çıkış tarihleri, kişi sayısı (yetişkin/çocuk) ve oda tercihi bilgilerini eksiksiz toplayarak, misafire uygun oda seçeneklerini hızlı ve net bir şekilde sunmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+* "Merhaba, oda rezervasyonu yapmak istiyorum."
+* "Otelinizde yer var mı?"
+* "Fiyat almak istiyorum, rezervasyon yapacağım."
+* "Boş odalarınız hakkında bilgi alabilir miyim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1. Giriş Tarihi: (GG/AA/YYYY formatında geliş tarihi)
+2. Çıkış Tarihi: (GG/AA/YYYY formatında ayrılış tarihi)
+3. Yetişkin Sayısı: (Konaklayacak toplam yetişkin sayısı)
+4. Çocuk Sayısı / Yaşları: (Çocuk varsa sayıları ve yaş bilgileri - fiyatlandırma için)
+5. Oda Tipi Tercihi: (Standart, Deniz Manzaralı, Aile Odası vb.)
+
+⚙️ Karar Kuralı (Business Logic):
+* Misafirin rezervasyon yapma niyeti (intent) algılandığında sistem tetiklenir.
+* İlk aşamada en kritik 3 bilgi (Giriş Tarihi, Çıkış Tarihi, Yetişkin Sayısı) kontrol edilir.
+* Eğer bu 3 temel bilgi eksikse, oda seçenekleri sunulmadan önce misafirden bu bilgilerin tamamlanması istenir.
+* Temel bilgiler (Tarih ve Yetişkin sayısı) tamamlandıktan sonra, uygun oda seçenekleri (fiyatlarıyla birlikte) paylaşılır. Varsa çocuk yaşları ve oda tipi tercihi bu aşamada netleştirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+* Otomasyon Yönetimi: Tüm bilgi toplama süreci otomasyon (bot) tarafından yönetilir.
+* İnsan Devri (Eskalasyon): Standart akış içerisinde insan devri (canlı destek) gerekmez. Bot bilgileri toplar ve seçenekleri sunar.
+
+💬 Standart Yanıt Mesajları
+1. İlk Karşılama ve Bilgi Talebi (TR):
+"Elbette yardımcı olurum. Net teklif için giriş-çıkış tarihinizi ve kişi sayınızı paylaşır mısınız?"
+
+2. İlk Karşılama ve Bilgi Talebi (EN):
+"Sure, I can help. Please share your check-in/check-out dates and guest count for a net quote."
+
+3. Eksik Bilgi Varsa (Örnek - Sadece kişi sayısı eksikse):
+"Tarihlerinizi not aldım. Size en uygun oda seçeneklerini listeleyebilmem için kaç yetişkin ve (varsa) kaç çocuk konaklayacağınızı öğrenebilir miyim?"
+
+4. Seçenek Sunumu (Tarih ve Kişi Sayısı toplandığında):
+"Bilgileriniz için teşekkürler. [Giriş Tarihi] - [Çıkış Tarihi] tarihleri arasında [Yetişkin Sayısı] yetişkin için müsait olan oda seçeneklerimiz şunlardır:
+1. [Oda Tipi 1] - [Fiyat]
+2. [Oda Tipi 2] - [Fiyat]
+Hangi oda tipini tercih edersiniz?"

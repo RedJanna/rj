@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import time
+
+PUBLIC_BASE_URL = (os.getenv("PUBLIC_BASE_URL") or "https://api.nexlumeai.com").rstrip("/")
 
 
 async def try_handle_booking_flow_entry(
@@ -58,7 +61,7 @@ async def try_handle_booking_flow_entry(
                     f"🛏️ {bd.get('room_type_display', bd.get('room_type', ''))}\n"
                     f"💰 {price} {bd.get('currency', 'EUR')} ({refund_txt})\n"
                     f"👥 {bd.get('adult_count', 0)} yetişkin{child_txt}\n\n"
-                    f"👉 Admin panel: /admin/hotel-bookings-page"
+                    f"👉 Admin panel: {PUBLIC_BASE_URL}/admin/hotel-bookings-page"
                 )
                 await send_whatsapp_message_fn(admin_phone, admin_msg)
             except Exception as notify_err:

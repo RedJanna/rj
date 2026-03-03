@@ -1,0 +1,101 @@
+📋 Senaryo: S030 - Transfer Rezervasyon Bilgi Toplama V1
+Senaryo Kodu ve Adı: S030 - Transfer Rezervasyon Bilgi Toplama V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin transfer ayarlama talebinde, transfer rezervasyonunu oluşturmak için gerekli bilgileri e-posta üzerinden eksiksiz şekilde toplamak; bilgiler tamamlandığında talebi otomasyon ile oluşturup süreci başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Transfer ayarlayalım, uçuş bilgimi vereceğim."
+
+"Havalimanı transferi ayarlamak istiyorum."
+
+"Uçuş bilgilerimi paylaşayım, transfer organize edelim."
+
+"Transfer için yardımcı olur musunuz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Varış Tarihi ve İniş Saati: (GG/AA/YYYY ve saat formatında)
+
+Uçuş Numarası: (Örn: TK2410)
+
+Kişi ve Bagaj Bilgisi: (Toplam kişi sayısı ve bagaj detayı)
+
+Ad Soyad: (Rezervasyonun oluşturulacağı kişi)
+
+Alınış Noktası (Pickup Lokasyonu): (Misafir nereden alınacak? Örn: Dalaman Havalimanı / başka bir nokta)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin transfer ayarlama talebi (intent), e-posta içeriğinin ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Yukarıdaki temel bilgiler kontrol edilir.
+
+Eksik bilgi varsa, misafire öncelikle eksik alanlar tek e-postada topluca sorulur.
+
+Tüm bilgiler tamamlandığında transfer talebi otomasyon ile oluşturulur ve süreç işleme alınır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon: Bilgiler tamamlandığında transfer talebi otomatik oluşturulur; insan devri/eskalasyon yoktur.
+
+Fallback: Misafir bilgileri eksik veya tutarsız paylaşırsa, eksik alanlar net şekilde yeniden istenir (aynı akış korunur).
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Yanıt ve Bilgi Talebi:
+
+"Memnuniyetle yardımcı olurum. Transferi oluşturabilmem için lütfen varış tarihinizi, iniş saatinizi, uçuş numaranızı, kişi/bagaj bilginizi, ad-soyadınızı ve nereden alınacağınızı paylaşır mısınız?"
+
+2. Eksik Bilgi Varsa (Toplu İsteme):
+
+"Teşekkür ederim. Transfer talebinizi oluşturabilmem için aşağıdaki bilgileri de rica edebilir miyim?
+🗓️ Varış tarihi ve iniş saati
+✈️ Uçuş numarası
+👥 Kişi ve bagaj bilgisi
+👤 Ad-soyad
+📍 Alınış noktası"
+
+3. Teyit Mesajı (Tüm bilgiler toplandığında):
+
+"Bilgileriniz için teşekkür ederim. Hemen kontrol edelim:
+🗓️ Varış: [Varış Tarihi] - [İniş Saati]
+✈️ Uçuş No: [Uçuş Numarası]
+👥 Kişi/Bağaj: [Kişi ve Bagaj Bilgisi]
+👤 Ad Soyad: [Ad Soyad]
+📍 Alınış Noktası: [Alınış Noktası]
+
+Bilgiler doğruysa bu e-postayı onaylayarak yanıtlayabilirsiniz. Değiştirmek istediğiniz bir detay varsa lütfen belirtin."
+
+4. Kapanış / İşlem Bilgilendirmesi:
+
+"Teşekkür ederim. ✅ Talebinizi belirttiğiniz bilgilerle işleme alıyorum. Başka yardımcı olabileceğim bir konu var mı?"
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Reply & Information Request:
+
+"To create the transfer, please share the date, landing time, flight number, guest/luggage details, your full name, and where we will pick you up from."
+
+2. If Details Are Missing (Request All at Once):
+
+"Thank you. To proceed, could you please share:
+🗓️ Arrival date and landing time
+✈️ Flight number
+👥 Guest and luggage details
+👤 Full name
+📍 Pickup location"
+
+3. Summary / Confirmation (When All Details Are Collected):
+
+"Thank you. Please confirm the details:
+🗓️ Arrival: [Date] - [Landing Time]
+✈️ Flight No: [Flight Number]
+👥 Guests/Luggage: [Guest/Luggage Details]
+👤 Full Name: [Full Name]
+📍 Pickup Location: [Pickup Location]
+
+If everything is correct, please confirm by replying to this email. If you’d like to change anything, let me know."
+
+4. Closing / Processing Notice:
+
+"Thank you. ✅ I’m processing your request with the details provided. Is there anything else I can help you with?"

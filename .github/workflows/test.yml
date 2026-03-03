@@ -20,15 +20,58 @@ on:
           - integration
           - smoke
           - golden
+          - golden_extended
           - e2e
 
 env:
   PYTHON_VERSION: '3.11'
 
 jobs:
+  backup-hygiene:
+    name: Backup Hygiene
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == '' || github.event_name != 'workflow_dispatch' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Fail on risky backup files under app/
+        run: |
+          set -euo pipefail
+          echo "Scanning app/ for risky backup files (.bak/.old)..."
+          matches="$(find app -type f \( -name "*.bak" -o -name "*.bak_*" -o -name "*.bak.*" -o -name "*.old" -o -name "*.old.*" \) || true)"
+          if [ -n "${matches}" ]; then
+            echo "ERROR: Risky backup files detected under app/:"
+            echo "${matches}"
+            echo "Move backups to archive/backups/ (ignored) before merging."
+            exit 1
+          fi
+          echo "OK: no risky backup files under app/."
+
+  scenario-sync-check:
+    name: Scenario Artifact Sync Check
+    runs-on: ubuntu-latest
+    needs: backup-hygiene
+    if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == '' || github.event.inputs.test_type == 'golden' || github.event.inputs.test_type == 'golden_extended' || github.event_name != 'workflow_dispatch' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Rebuild scenario artifacts
+        run: |
+          python tools/import_external_scenarios.py
+          python tools/build_intent_examples_from_catalog.py
+          python tools/build_external_golden_set.py
+      - name: Fail if artifacts are out of sync
+        run: |
+          git diff --exit-code -- app/content/scenario_catalog.json app/content/scenario_intent_examples.json tests/golden/scenarios/external_scenarios.json
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    needs: [backup-hygiene, scenario-sync-check]
     if: ${{ github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'unit' || github.event.inputs.test_type == '' }}
     steps:
       - name: Checkout code
@@ -44,6 +87,8 @@ jobs:
           pip install -r requirements.txt
       - name: Run unit tests
         run: pytest tests/unit/ -v -m unit --tb=short -ra
+      - name: Run payment unit regression tests
+        run: pytest -q tests/unit/test_booking_payment_update_retry.py --tb=short -ra
 
   integration-tests:
     name: Integration Tests
@@ -66,6 +111,10 @@ jobs:
         env:
           KASSANDRA_ENV: test
         run: pytest tests/integration/ -v -m integration --tb=short -ra
+      - name: Run payment integration regression test
+        env:
+          KASSANDRA_ENV: test
+        run: pytest -q tests/integration/test_api_routes.py::TestChatEndpoint::test_chat_payment_link_try_flow_with_mocked_bookingapi --tb=short -ra
 
   golden-tests:
     name: Golden Tests
@@ -88,6 +137,30 @@ jobs:
         env:
           KASSANDRA_ENV: test
         run: pytest tests/golden/ -v -m golden --tb=short -ra
+
+  golden-extended-tests:
+    name: Golden Extended Tests (Optional)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.test_type == 'golden_extended' || github.event_name == 'schedule' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Build external golden set
+        run: python tools/build_external_golden_set.py
+      - name: Run external golden tests
+        env:
+          KASSANDRA_ENV: test
+          GOLDEN_EXTERNAL: "1"
+        run: pytest tests/golden/test_external_scenarios.py -v -m "golden and external" --tb=short -ra
 
   smoke-tests:
     name: Smoke Tests
@@ -141,15 +214,18 @@ jobs:
     name: Summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [unit-tests, integration-tests, smoke-tests, golden-tests, e2e-tests]
+    needs: [backup-hygiene, scenario-sync-check, unit-tests, integration-tests, smoke-tests, golden-tests, golden-extended-tests, e2e-tests]
     steps:
       - name: Publish summary
         run: |
           echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Suite | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup Hygiene | ${{ needs.backup-hygiene.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scenario Sync | ${{ needs.scenario-sync-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Smoke | ${{ needs.smoke-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Golden | ${{ needs.golden-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Golden Extended | ${{ needs.golden-extended-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| E2E | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY

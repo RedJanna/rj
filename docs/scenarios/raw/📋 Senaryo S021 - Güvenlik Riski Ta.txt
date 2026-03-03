@@ -1,0 +1,53 @@
+📋 Senaryo: S021 - Güvenlik Riski Talebi V1
+Senaryo Kodu ve Adı: S021 - Güvenlik Riski Talebi V1
+Kanal: E-posta
+
+🎯 Hedef: Kredi kartı bilgisi gibi hassas ve güvenlik riski oluşturan verileri e-posta üzerinden paylaşmaya çalışan misafiri uyarmak, riskli veri kabulünü sistem olarak reddetmek ve gerekli durumlarda işlemi doğrudan güvenlik/operasyon ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"IBAN yerine kart bilgilerimi buradan atayım mı?"
+
+"Kredi kartı numaramı yazsam ödemeyi siz çeker misiniz?"
+
+"Kartın fotoğrafını çekip e-postayla göndersem olur mu?"
+
+"İşlem hızlı olsun diye kart şifremi ve detaylarını iletiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Mesaj İçeriği: (Misafirin ilettiği riskli veya hassas veri teşkil eden metnin bütünü)
+
+Risk Tipi: (Kredi kartı bilgisi, şifre, kimlik görseli vb. güvenlik riski kategorisinin tespiti)
+
+Kanal: (Verinin hangi platformdan iletildiğinin -örn. e-posta- güvenlik takibi için tespiti)
+
+Telefon: (Gerekli durumlarda misafire ulaşıp güvenli ödeme adımlarını anlatabilmek için)
+
+Zaman Damgası: (Riskli talebin veya ihlalin ne zaman gerçekleştiğinin sistem kaydı)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin hassas/riskli veri (özellikle kredi kartı bilgisi) paylaşma niyeti (intent), ilettiği cümlenin veya mesajın genel anlamından (semantik) algılandığında sistem tetiklenir. "Kart", "şifre", "IBAN" gibi kelime bazlı eşleştirmeler kesinlikle yapılmaz; misafir riskli veriyi hangi sözcüklerle iletmeye çalışırsa çalışsın asıl tehlikeli veri paylaşım niyeti bot tarafından kavranır.
+
+Sistem, iletilen içeriği ve risk tipini analiz eder.
+
+Eğer misafirden riskli veya uygunsuz bir veri paylaşımı talebi gelirse, bot bu işlemi (veya kart numarasını alıp işleme koymayı) kural olarak anında reddeder.
+
+Misafire güvenlik uyarısı yapılarak doğrudan resmi ödeme kanallarına (örn. güvenli ödeme linki) yönlendirme yapılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Hard Devir): Güvenlik endişesi (Security_concern) taşıyan bu tür veri ifşalarında, bot uyarı mesajını ilettikten sonra işlemi kendi başına askıda bırakmaz. Sohbet veya e-posta talebi, incelenmesi ve güvenliğin sağlanması adına ilgili ekibe "Hard Devir" (kesin aktarım) yapılarak atanır.
+
+SLA Süresi: Aktarılan bu güvenlik bildirimine ilgili ekip tarafından en geç 10 dakika (SLA hedefi) içerisinde müdahale edilmesi zorunludur.
+
+💬 Standart Yanıt Mesajları
+
+1. Güvenlik Uyarısı ve Yönlendirme (TR):
+
+"Güvenlik nedeniyle kart bilgilerinizi mesajla paylaşmayın. Bu konuda doğrudan resmi ödeme kanallarını kullanın."
+
+2. Güvenlik Uyarısı ve Yönlendirme (EN):
+
+"For security, please do not share card details in chat. Use official payment channels only."

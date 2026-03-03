@@ -109,7 +109,11 @@ class TestCheckLocalFAQ:
     @pytest.mark.parametrize("input_text", [
         "transfer fiyat",
         "transfer ücreti",
+        "transfer ucret",
         "havalimanı transfer",
+        "havalimani transferi",
+        "tek yon transfer",
+        "gidis-donus transfer ucreti",
         "airport transfer",
     ])
     def test_transfer_questions(self, input_text: str):
@@ -119,6 +123,7 @@ class TestCheckLocalFAQ:
         assert category == "transfer", f"Input: {input_text}"
         # 75€ fiyat kontrolü
         assert "75" in answer_tr, f"Transfer fiyatı 75€ olmalı"
+        assert "150" in answer_tr, "Gidiş-dönüş toplam fiyatı 150€ bilgisi olmalı"
         assert "€" in answer_tr or "euro" in answer_tr.lower()
     
     
@@ -160,6 +165,29 @@ class TestCheckLocalFAQ:
         assert category == "adres", f"Input: {input_text}"
         # Ölüdeniz/Fethiye olduğunu doğrula
         assert "ölüdeniz" in answer_tr.lower() or "fethiye" in answer_tr.lower()
+
+    @pytest.mark.unit
+    def test_beach_type_question_matches_plaj_tipi(self):
+        """Kumlu/taşlı plaj sorusu doğru FAQ kategorisine düşmeli."""
+        input_text = "Ölüdeniz kumlu bir plaj mı yoksa taşlı mı?"
+        found, answer_tr, _answer_en, category, _answer_ru = check_local_faq(input_text)
+        assert found is True
+        assert category == "plaj_tipi"
+        assert any(k in answer_tr.lower() for k in ["kum", "taş", "çakıl", "cakil"])
+
+    @pytest.mark.unit
+    def test_sea_view_room_query_does_not_match_beach_faq(self):
+        """Deniz manzaralı oda/fiyat sorusu plaj FAQ'ına yanlış düşmemeli."""
+        input_text = "Aynı tarihlerde deniz manzaralı oda müsait mi, fiyat farkı ne kadar?"
+        found, _answer_tr, _answer_en, category, _answer_ru = check_local_faq(input_text)
+        assert found is False or category not in {"plaj", "plaj_tipi"}
+
+    @pytest.mark.unit
+    def test_email_payload_must_not_trigger_pet_faq(self):
+        """E-posta içindeki 'pet' alt dizisi evcil hayvan FAQ'ını tetiklememeli."""
+        found, _answer_tr, _answer_en, category, _answer_ru = check_local_faq("ivan.petrov.test@example.com")
+        assert found is False
+        assert category == ""
     
     
     # ==========================================
@@ -189,10 +217,29 @@ class TestCheckLocalFAQ:
     @pytest.mark.unit
     def test_word_limit_exceeded(self):
         """Kelime sınırı aşıldığında LOCAL FAQ çalışmamalı"""
-        # LOCAL_MAX_WORDS = 5, bu yüzden 6+ kelime LOCAL'a gitmemeli
+        # Varsayılan LOCAL_MAX_WORDS altında/üstünde davranış korunmalı.
         long_message = "Ben yarın sabah kahvaltı için rezervasyon yapmak istiyorum acaba"
         found, _, _, _, _ = check_local_faq(long_message)
         assert found == False, "Uzun mesajlar LOCAL FAQ'a gitmemeli"
+
+
+    @pytest.mark.unit
+    def test_word_limit_exceeded_but_contact_question_is_still_captured(self):
+        long_contact_message = "Merhaba resepsiyon ile nasıl iletişime geçebilirim bugün yardımcı olur musunuz?"
+        found, answer_tr, _answer_en, category, _answer_ru = check_local_faq(long_contact_message)
+        assert found is True
+        assert category == "telefon"
+        assert "+90 533 250 32 77" in answer_tr
+
+    @pytest.mark.unit
+    def test_long_mixed_booking_message_with_whatsapp_does_not_fall_to_contact_faq(self):
+        long_mixed_message = (
+            "Do you have availability for 14-18 August 2026 for 2 adults, total price for standard room, "
+            "sea view difference, refundable and non-refundable rules, transfer fee, payment method, "
+            "deposit and can you send booking confirmation on WhatsApp?"
+        )
+        found, _answer_tr, _answer_en, category, _answer_ru = check_local_faq(long_mixed_message)
+        assert found is False or category not in {"telefon", "transfer"}
     
     
     @pytest.mark.unit
@@ -223,6 +270,21 @@ class TestCheckLocalFAQ:
         # Bu sorular FAQ'da yok, found=False olmalı
         # Not: Bazıları kelime sınırı nedeniyle de False dönebilir
         assert found == False or category == "", f"Input: {input_text} should not match FAQ"
+
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("input_text", [
+        "rez id nedir",
+        "rezervasyon no nedir",
+        "rezervasyon id",
+    ])
+    def test_rez_id_questions(self, input_text: str):
+        """Rez ID açıklaması sorularını test et"""
+        found, answer_tr, answer_en, category, _answer_ru = check_local_faq(input_text)
+        assert found is True, f"Input: {input_text}"
+        assert category == "rez_id_bilgisi", f"Input: {input_text}, Got category: {category}"
+        assert "konfirmasyon" in answer_tr.lower()
+        assert "rezervasyon numarası" in answer_tr.lower()
     
     
     # ==========================================

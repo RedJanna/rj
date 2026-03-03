@@ -54,3 +54,66 @@ Amac: Calisan kodu dondurmak, runtime veriyi repo disina almak.
 - Kod degisikligi -> test -> commit.
 - Runtime dosya degisiklikleri commit kapsaminda olmamali.
 - Uretimden alinan veri dogrudan repoya yazilmaz; gerekirse anonim fixture uretilir.
+
+## 6) Test profilleri (PowerShell)
+
+### 6.1 Legacy kontrat testi (orchestrator kapali)
+```powershell
+cd C:\KassandraOpenAI
+.\venv\Scripts\Activate.ps1
+$env:FLOW_ORCHESTRATOR_MODE = "off"
+
+pytest tests\golden\ -v -m golden --tb=short -ra
+pytest tests\integration\test_api_routes.py -v --tb=short -ra
+```
+
+### 6.2 Gercekci kontrat testi (orchestrator aktif)
+```powershell
+cd C:\KassandraOpenAI
+.\venv\Scripts\Activate.ps1
+$env:FLOW_ORCHESTRATOR_MODE = "active"
+
+pytest tests\golden\ -v -m golden --tb=short -ra
+pytest tests\integration\test_api_routes.py -v --tb=short -ra
+```
+
+Not:
+- `FLOW_ORCHESTRATOR_MODE` PowerShell oturumu kapaninca sifirlanir.
+- Ayni terminalde degeri kontrol etmek icin: `echo $env:FLOW_ORCHESTRATOR_MODE`
+
+## 7) Yedekleme politikasi (.bak temizligi)
+
+Amac: `.bak` dosyalarinin "guncel kaynak dosya" sanilmasini engellemek.
+
+### 7.1 Tehlikeli .bak sinifi
+- Entrypoint veya aktif kaynakla ayni isim kokune sahip olanlar:
+  - Ornek: `app/web/admin_pages.py.bak_...` (aktif `admin_pages.py` ile karisabilir)
+- `app/`, `routes/`, `core/`, `services/` altindaki tum `*.bak*` dosyalari.
+
+### 7.2 Onerilen strateji
+1. Calisan kaynak agacindan tasima:
+   - `.bak` dosyalari `archive/backups/` altina tasinir.
+2. Git ignore:
+   - `archive/backups/**` ignore edilir (repo sismez).
+3. Uzun sureli saklama:
+   - Gerekirse harici zip/artifact deposuna alin.
+
+### 7.3 Operasyon proseduru (PowerShell)
+Repo icindeki `.bak` dosyalarini bul:
+```powershell
+Get-ChildItem -Recurse -File | Where-Object { $_.Name -match '\.bak(_|\.|$)' } | Select-Object FullName
+```
+
+`archive/backups/` altina tasi:
+```powershell
+$target = "C:\KassandraOpenAI\archive\backups"
+New-Item -ItemType Directory -Force -Path $target | Out-Null
+Get-ChildItem -Recurse -File | Where-Object { $_.Name -match '\.bak(_|\.|$)' } | ForEach-Object {
+  Move-Item $_.FullName -Destination (Join-Path $target $_.Name) -Force
+}
+```
+
+Son kontrol:
+```powershell
+Get-ChildItem app,routes,core,services -Recurse -File | Where-Object { $_.Name -match '\.bak(_|\.|$)' }
+```

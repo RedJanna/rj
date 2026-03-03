@@ -1,0 +1,95 @@
+{
+  "version": "1.0.0",
+  "date": "2026-02-24",
+  "business_hours": {
+    "start_hour": 7,
+    "end_hour": 2,
+    "timezone_note": "server local time"
+  },
+  "defaults": {
+    "hard_sla_minutes": 10,
+    "soft_sla_minutes": 30
+  },
+  "hard_triggers": [
+    {
+      "category": "acil_durum",
+      "min_priority": "critical",
+      "sla_minutes": 10,
+      "note": "Mesai dışı da kritik"
+    },
+    {
+      "category": "sikayet",
+      "min_priority": "high",
+      "sla_minutes": 10
+    },
+    {
+      "category": "iptal_iade",
+      "min_priority": "high",
+      "sla_minutes": 15
+    },
+    {
+      "category": "security_concern",
+      "min_priority": "critical",
+      "sla_minutes": 10
+    },
+    {
+      "category": "fiyat_sistemi_hatasi",
+      "min_priority": "high",
+      "sla_minutes": 15
+    }
+  ],
+  "soft_triggers": [
+    {
+      "category": "canli_destek",
+      "min_priority": "medium",
+      "sla_minutes": 20
+    },
+    {
+      "category": "restoran_rezervasyon",
+      "min_priority": "medium",
+      "sla_minutes": 20
+    },
+    {
+      "category": "fiyat_handoff",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    },
+    {
+      "category": "fiyat_pazarlik",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    },
+    {
+      "category": "ozel_istek",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    },
+    {
+      "category": "quiet_room_live_required",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    },
+    {
+      "category": "antalya_transfer",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    },
+    {
+      "category": "flow_orchestrator_handoff",
+      "min_priority": "medium",
+      "sla_minutes": 30
+    }
+  ],
+  "handoff_packet_required_fields": [
+    "packet_id",
+    "source",
+    "category",
+    "priority",
+    "customer_phone",
+    "customer_message",
+    "detected_intent",
+    "trigger_type",
+    "sla_target_minutes",
+    "within_business_hours"
+  ]
+}

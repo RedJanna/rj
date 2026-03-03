@@ -1,10 +1,6 @@
-"""Thin entrypoint for the legacy Kassandra app.
+"""Thin runtime entrypoint for the app."""
 
-This file stays intentionally small.
-The full application lives in app/legacy/kassandra_app_legacy.py.
-"""
-
-from app.legacy.kassandra_app_legacy import *  # noqa: F401,F403
+from app.main import app
 
 
 if __name__ == "__main__":

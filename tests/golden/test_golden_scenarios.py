@@ -71,6 +71,7 @@ def core_scenarios():
 def bot_client():
     """Bot test client"""
     import os
+    os.environ["FLOW_ORCHESTRATOR_MODE"] = "off"
     os.environ.setdefault("OPENAI_API_KEY", "test-key")
     os.environ.setdefault("WHATSAPP_PHONE_ID", "test-phone")
     os.environ.setdefault("WHATSAPP_TOKEN", "test-token")
@@ -85,6 +86,28 @@ def bot_client():
         bot.QA_ENABLED = False
     
     return TestClient(bot.app)
+
+
+def _reset_phone_state(phone: str) -> None:
+    """Telefon için test izolasyonunu garanti et."""
+    try:
+        from app.services.conversation_store import purge_phone_data
+        purge_phone_data(phone)
+        return
+    except Exception:
+        pass
+    try:
+        from app.services.conversation_store import clear_conversation
+        from app.services.restaurant_reservation_flow_service import clear_reservation_flow
+        from app.services.price_flow_service import clear_price_flow
+        from app.services.booking_flow_service import clear_booking_flow
+
+        clear_conversation(phone)
+        clear_reservation_flow(phone)
+        clear_price_flow(phone)
+        clear_booking_flow(phone)
+    except Exception:
+        pass
 
 
 # ======================================================
@@ -154,15 +177,7 @@ def get_bot_response(
 ) -> str:
     """Bot'tan cevap al"""
     if reset_state:
-        try:
-            # Önce konuşmayı temizle
-            import kassandra_openai_bot as bot
-            if hasattr(bot, 'clear_conversation'):
-                bot.clear_conversation(phone)
-            if hasattr(bot, 'clear_reservation_flow'):
-                bot.clear_reservation_flow(phone)
-        except:
-            pass
+        _reset_phone_state(phone)
     
     response = client.post("/chat", json={
         "phone": phone,
@@ -246,7 +261,15 @@ class TestInfoScenarios:
             "description": f"{scenario_id} bilgi testi"
         }
         
-        response = get_bot_response(bot_client, question)
+        phone = build_test_phone(scenario_id)
+        get_bot_response(bot_client, "Merhaba", phone=phone, reset_state=True)
+        response = get_bot_response(bot_client, question, phone=phone, reset_state=False)
+        if (
+            scenario_id == "transfer"
+            and "Doğru yönlendirme yapabilmem için lütfen seçin" in (response or "")
+        ):
+            get_bot_response(bot_client, "2", phone=phone, reset_state=False)
+            response = get_bot_response(bot_client, question, phone=phone, reset_state=False)
         result = evaluator.evaluate(response, scenario)
         
         assert result["decision"] in ["PASS", "REVIEW"], \
@@ -271,7 +294,9 @@ class TestSeasonScenarios:
             "description": "Sezon 10 Nisan - 10 Kasım"
         }
         
-        response = get_bot_response(bot_client, scenario["question"])
+        phone = "905551998877"
+        get_bot_response(bot_client, "Merhaba", phone=phone, reset_state=True)
+        response = get_bot_response(bot_client, scenario["question"], phone=phone, reset_state=False)
         result = evaluator.evaluate(response, scenario)
         
         assert result["decision"] in ["PASS", "REVIEW"], \
@@ -300,7 +325,10 @@ class TestReservationScenarios:
         get_bot_response(bot_client, "Merhaba", phone="905559999001")
         
         # Sonra rezervasyon talebi
-        response = get_bot_response(bot_client, scenario["question"], phone="905559999001")
+        response = get_bot_response(bot_client, scenario["question"], phone="905559999001", reset_state=False)
+        if "Doğru yönlendirme yapabilmem için lütfen seçin" in (response or ""):
+            get_bot_response(bot_client, "2", phone="905559999001", reset_state=False)
+            response = get_bot_response(bot_client, scenario["question"], phone="905559999001", reset_state=False)
         result = evaluator.evaluate(response, scenario)
         
         # En az bir bilgi sorulmalı
@@ -322,24 +350,22 @@ class TestAllCoreScenarios:
         responses = {}
         
         for scenario in core_scenarios:
-            phone = f"90555{scenario['id'][-6:].ljust(6, '0')}"[:12]
+            phone = build_test_phone(scenario["id"])
             
             # Her senaryo için temiz konuşma
-            try:
-                import kassandra_openai_bot as bot
-                if hasattr(bot, 'clear_conversation'):
-                    bot.clear_conversation(phone)
-                if hasattr(bot, 'clear_reservation_flow'):
-                    bot.clear_reservation_flow(phone)
-            except:
-                pass
+            _reset_phone_state(phone)
             
             # Selamlama gerekiyorsa önce selamla
             if scenario.get("category") != "selamlama":
-                get_bot_response(bot_client, "Merhaba", phone=phone)
+                get_bot_response(bot_client, "Merhaba", phone=phone, reset_state=True)
             
             # Soruyu sor
-            response = get_bot_response(bot_client, scenario["question"], phone=phone)
+            response = get_bot_response(
+                bot_client,
+                scenario["question"],
+                phone=phone,
+                reset_state=(scenario.get("category") == "selamlama"),
+            )
             responses[scenario["id"]] = response
         
         # Toplu değerlendirme

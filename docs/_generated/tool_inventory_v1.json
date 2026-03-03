@@ -1,0 +1,155 @@
+{
+  "version": "1.0.0",
+  "date": "2026-02-24",
+  "authority_levels": {
+    "L0_READ_ONLY": "Salt okuma/bilgilendirme. Islem olusturmaz/degistirmez.",
+    "L1_CHAT_ACTION_GUARDED": "Chat akisinda eylem var; slot/intent guard zorunlu.",
+    "L2_ADMIN_WRITE": "Sadece admin endpointlerinden yazma/guncelleme.",
+    "L3_CRITICAL_DESTRUCTIVE": "Iptal/silme/purge/blocked-state gibi kritik etkiler."
+  },
+  "runtime_surfaces": [
+    {
+      "surface": "public_chat",
+      "entrypoints": ["POST /chat"],
+      "auth": "none",
+      "boundary": "Intent+slot+policy guard"
+    },
+    {
+      "surface": "public_system",
+      "entrypoints": ["GET /", "GET /health"],
+      "auth": "none",
+      "boundary": "Read only"
+    },
+    {
+      "surface": "auth",
+      "entrypoints": ["/auth/*", "/admin/login", "/admin/verify-2fa", "/admin/setup-2fa"],
+      "auth": "login+2fa",
+      "boundary": "Session based"
+    },
+    {
+      "surface": "admin",
+      "entrypoints": ["/admin/*", "/metrics/*", "/reminders/*", "/pytest/*", "/flow/*", "/local-faq/*"],
+      "auth": "require_admin",
+      "boundary": "Full operational control"
+    }
+  ],
+  "tool_inventory": [
+    {
+      "tool_id": "openai_chat_completion",
+      "files": ["app/handlers/openai_fallback_handler.py", "app/routes/chat_routes.py", "app/services/qa_agent_service.py"],
+      "capability": "LLM response/classification",
+      "authority": "L0_READ_ONLY",
+      "allowed_from": ["public_chat", "admin_monitoring_test"],
+      "critical_guards": ["safe_mode", "rate_limit", "suspicious/critical precheck"]
+    },
+    {
+      "tool_id": "whatsapp_send_message",
+      "files": ["app/services/whatsapp_sender.py", "app/services/notification_service.py"],
+      "capability": "Outbound WhatsApp send",
+      "authority": "L1_CHAT_ACTION_GUARDED",
+      "allowed_from": ["public_chat", "scheduler", "admin"],
+      "critical_guards": ["phone normalization", "error handling", "admin-only manual send endpoint"]
+    },
+    {
+      "tool_id": "elektra_price_read",
+      "files": ["app/services/elektraweb_booking_service.py", "app/handlers/price_flow_handler.py"],
+      "capability": "Price/availability read",
+      "authority": "L1_CHAT_ACTION_GUARDED",
+      "allowed_from": ["public_chat", "admin_monitoring"],
+      "critical_guards": ["season guard", "intent/slot guard", "handoff fallback"]
+    },
+    {
+      "tool_id": "elektra_reservation_create",
+      "files": ["app/services/elektraweb_booking_service.py", "app/routes/hotel_bookings_routes.py"],
+      "capability": "Create reservation in supplier",
+      "authority": "L2_ADMIN_WRITE",
+      "allowed_from": ["admin", "guarded_booking_flow"],
+      "critical_guards": ["booking context validation", "manual approval path", "idempotency expected"]
+    },
+    {
+      "tool_id": "elektra_reservation_update",
+      "files": ["app/services/elektraweb_booking_service.py", "app/handlers/booking_flow_handler.py", "app/routes/hotel_bookings_routes.py"],
+      "capability": "Update supplier reservation",
+      "authority": "L2_ADMIN_WRITE",
+      "allowed_from": ["admin", "guarded_booking_flow"],
+      "critical_guards": ["existing reservation lookup", "state checks"]
+    },
+    {
+      "tool_id": "elektra_reservation_cancel",
+      "files": ["app/services/elektraweb_booking_service.py", "app/routes/hotel_bookings_routes.py"],
+      "capability": "Cancel supplier reservation",
+      "authority": "L3_CRITICAL_DESTRUCTIVE",
+      "allowed_from": ["admin"],
+      "critical_guards": ["admin auth", "booking lookup", "audit trail advised"]
+    },
+    {
+      "tool_id": "hoteladvisor_select",
+      "files": ["app/services/elektra_hoteladvisor_service.py", "app/handlers/booking_flow_handler.py"],
+      "capability": "Supplier select/read endpoints",
+      "authority": "L1_CHAT_ACTION_GUARDED",
+      "allowed_from": ["public_chat", "admin"],
+      "critical_guards": ["endpoint allowlist", "timeout"]
+    },
+    {
+      "tool_id": "hoteladvisor_execute_update",
+      "files": ["app/services/elektra_hoteladvisor_service.py", "app/handlers/booking_flow_handler.py", "app/routes/hotel_bookings_routes.py"],
+      "capability": "Supplier write/execute/update",
+      "authority": "L2_ADMIN_WRITE",
+      "allowed_from": ["admin", "guarded_booking_flow"],
+      "critical_guards": ["policy check", "fallback disabled by default profile"]
+    },
+    {
+      "tool_id": "payment_link_builder",
+      "files": ["app/handlers/booking_flow_handler.py", "app/routes/chat_routes.py", "app/services/intent_policy_service.py"],
+      "capability": "Generate payment URL",
+      "authority": "L1_CHAT_ACTION_GUARDED",
+      "allowed_from": ["public_chat"],
+      "critical_guards": ["booking reference mandatory for all users", "booking lookup before link"]
+    },
+    {
+      "tool_id": "local_faq_kb",
+      "files": ["app/content/local_faq_data.py", "app/handlers/canonical_local_handler.py"],
+      "capability": "Static/local info response",
+      "authority": "L0_READ_ONLY",
+      "allowed_from": ["public_chat", "admin test"],
+      "critical_guards": ["word limit", "intent scope"]
+    },
+    {
+      "tool_id": "admin_access_control",
+      "files": ["app/routes/access_control_routes.py", "app/services/access_control_service.py"],
+      "capability": "Blacklist/pause/purge",
+      "authority": "L3_CRITICAL_DESTRUCTIVE",
+      "allowed_from": ["admin"],
+      "critical_guards": ["require_admin", "manual invocation"]
+    },
+    {
+      "tool_id": "conversation_state_store",
+      "files": ["app/services/conversation_store.py", "app/services/state_store_service.py"],
+      "capability": "Persist conversation and flow state",
+      "authority": "L2_ADMIN_WRITE",
+      "allowed_from": ["public_chat", "admin", "scheduler"],
+      "critical_guards": ["safe file paths", "expiry cleanup"]
+    },
+    {
+      "tool_id": "decision_trace",
+      "files": ["app/services/decision_trace_service.py"],
+      "capability": "Append decision logs",
+      "authority": "L0_READ_ONLY",
+      "allowed_from": ["public_chat runtime"],
+      "critical_guards": ["non-blocking write"]
+    },
+    {
+      "tool_id": "active_learning_capture",
+      "files": ["app/services/active_learning_service.py", "app/routes/chat_routes.py"],
+      "capability": "Capture low-confidence/ambiguous samples",
+      "authority": "L0_READ_ONLY",
+      "allowed_from": ["public_chat runtime"],
+      "critical_guards": ["pending label state", "non-blocking write"]
+    }
+  ],
+  "known_constraints": [
+    "Public chat is the only unauthenticated transactional entrypoint.",
+    "Admin routes are protected by require_admin middleware in legacy_wiring.",
+    "Granular role-based scopes (beyond admin/non-admin) are not yet enforced."
+  ]
+}

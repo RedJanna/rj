@@ -78,13 +78,13 @@ def build_reservation_flow_handler(
             data["time"] = extracted["time"]
             data["meal_type"] = get_meal_type_from_time_fn(extracted["time"])
 
-        if data.get("guest_count") and data["guest_count"] > 8:
+        if data.get("guest_count") and data["guest_count"] > 9:
             clear_reservation_flow_fn(phone)
             await notify_admin_handoff_fn(
                 "grup_rezervasyon", "medium", phone, f"Grup rezervasyon: {data['guest_count']} kişi"
             )
             msg = (
-                f"{data['guest_count']} ve üzeri kişilik rezervasyonlar için ekibimiz size yardımcı olacaktır."
+                f"{data['guest_count']} kişilik rezervasyonlar için ekibimiz size yardımcı olacaktır."
                 if lang == "tr"
                 else f"For groups of {data['guest_count']}+, our team will assist you."
             )
@@ -186,23 +186,27 @@ def build_reservation_flow_handler(
                     lang=lang,
                 )
                 clear_reservation_flow_fn(phone)
-                confirm_message = format_reservation_confirmation_fn(reservation, lang)
-                asyncio.create_task(send_reservation_pdf_fn(phone, reservation))
-
-                try:
-                    reservation_datetime = datetime.strptime(f"{data['date']} {data['time']}", "%Y-%m-%d %H:%M")
-                    schedule_restaurant_reminder_fn(
-                        phone=phone,
-                        reservation_id=reservation.get("id", str(int(datetime.now().timestamp()))),
-                        reservation_datetime=reservation_datetime,
-                        guest_name=data.get("customer_name", "Misafir"),
-                        guest_count=data.get("guest_count", 2),
-                        language=lang,
+                await notify_admin_handoff_fn(
+                    "restoran_rezervasyon",
+                    "medium",
+                    phone,
+                    (
+                        f"Kesin onay bekleyen restoran rezervasyonu: "
+                        f"#{reservation.get('id')} | {reservation.get('date')} {reservation.get('time')} | "
+                        f"{reservation.get('guest_count')} kisi | {reservation.get('customer_name')}"
+                    ),
+                )
+                if lang == "tr":
+                    confirm_message = (
+                        f"Talebinizi aldım ve ön rezervasyonunuzu oluşturdum (No: #{reservation.get('id')}).\n"
+                        "Kesin onay için canlı müşteri temsilcimiz kısa süre içinde sizinle iletişime geçecek."
                     )
-                except Exception as e:
-                    print(f"⚠️ Hatırlatma planlanamadı: {e}")
-
-                return confirm_message, "ok"
+                else:
+                    confirm_message = (
+                        f"I've created your preliminary reservation request (No: #{reservation.get('id')}).\n"
+                        "Our live representative will contact you shortly for final confirmation."
+                    )
+                return confirm_message, "handoff"
 
             if msg_lower in ["hayır", "no", "iptal", "vazgeç"]:
                 clear_reservation_flow_fn(phone)

@@ -284,6 +284,8 @@ def build_hotel_bookings_router(
             if lang == "en":
                 msg = (
                     f"Great news, {guest_name}! Your reservation is confirmed.\n\n"
+                    f"🆔 Reservation number: {elektra_res_id or '-'}\n"
+                    f"🎫 Voucher No: {voucher_no or '-'}\n"
                     f"Room: {booking.get('room_type_display', booking.get('room_type', ''))}\n"
                     f"Check-in: {check_in}\n"
                     f"Check-out: {booking.get('check_out', '')}\n"
@@ -297,6 +299,8 @@ def build_hotel_bookings_router(
             else:
                 msg = (
                     f"✅ Sayın {guest_name}, rezervasyonunuz oluşturuldu.\n\n"
+                    f"🆔 Rezervasyon numarası: {elektra_res_id or '-'}\n"
+                    f"🎫 Voucher No: {voucher_no or '-'}\n"
                     f"🛏️ Oda: {booking.get('room_type_display', booking.get('room_type', ''))}\n"
                     f"📅 Giriş: {check_in}\n"
                     f"📅 Çıkış: {booking.get('check_out', '')}\n"

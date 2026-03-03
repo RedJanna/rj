@@ -1,0 +1,53 @@
+📋 Senaryo: S020 - Acil Transfer Gecikmesi V1
+Senaryo Kodu ve Adı: S020 - Acil Transfer Gecikmesi V1
+Kanal: Telefon
+
+🎯 Hedef: Uçuşu rötar yapan veya transferinde gecikme yaşayan misafirlerden yeni iniş saati ve uçuş bilgileri gibi gerekli detayları hızlıca toplayarak, durumu "acil" koduyla doğrudan transfer ve operasyon ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Uçuşum rötar yaptı, transferimi acil günceller misiniz?"
+
+"Uçağım gecikti, transfer aracı beni bekleyecek mi?"
+
+"Rötar yedik, otele transfer saatimi ileri alabilir miyiz?"
+
+"Havalimanı transferim için varış saatim değişti, bilgi vermek istedim."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Transfer Tarihi: (GG/AA/YYYY formatında transferin planlandığı gün)
+
+Yeni İniş Saati: (Rötar sonrası güncel varış saati - şoförün bekleme süresinin ayarlanması için)
+
+Uçuş Numarası: (Ekibin terminal ve uçuş durumunu anlık takip edebilmesi için)
+
+İsim: (Misafirin sistemde doğrulanması ve karşılama panosu için)
+
+Telefon: (Acil durumlarda şoförün veya operasyonun misafire hemen ulaşabilmesi için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin transfer gecikmesi veya uçuş rötarı bildirme niyeti (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. "Rötar", "gecikme", "acil" gibi kelime veya kalıp bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle ifade ederse etsin asıl durum bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) toplanır ve eksik varsa misafirden hızlıca talep edilir.
+
+Eğer bir transfer gecikmesi bildirilmişse, sistem süreci kural olarak anında "Acil" olarak etiketler.
+
+Tüm gerekli bilgiler (özellikle yeni iniş saati ve uçuş numarası) alındığında, sistem otonom işlem yapmayı bırakır ve operasyon ekibini bilgilendirir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Hard Devir): Havalimanı transfer gecikmesi operasyonel bir aciliyet (Acil_durum) taşıdığından, bot ön bilgileri aldıktan sonra işlemi kendi başına sonlandırmaz. Sohbet, tüm detaylarla birlikte doğrudan transfer operasyon ekibine "Hard Devir" (kesin aktarım) yapılarak atanır.
+
+SLA Süresi: Aktarılan bu acil duruma operasyon ekibi tarafından en geç 10 dakika (SLA hedefi) içerisinde müdahale edilmesi ve aksiyon alınması zorunludur.
+
+💬 Standart Yanıt Mesajları
+
+1. Bilgilendirme ve Acil Aktarım (TR):
+
+"Bilgiyi aldım. Şoför ekibimizi acil bilgilendiriyorum, en kısa sürede geri döneceğiz. Talebinizi acil olarak ekibe iletiyorum."
+
+2. Bilgilendirme ve Acil Aktarım (EN):
+
+"Received. I am urgently informing the driver team and we will update you shortly."

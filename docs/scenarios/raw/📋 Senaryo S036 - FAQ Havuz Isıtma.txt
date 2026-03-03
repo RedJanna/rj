@@ -1,0 +1,50 @@
+📋 Senaryo: S036 - FAQ Havuz Isıtma V1
+Senaryo Kodu ve Adı: S036 - FAQ Havuz Isıtma V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin havuzun ısıtmalı olup olmadığı sorusuna e-posta üzerinden hızlı ve net şekilde yanıt vermek; gerekiyorsa mevsim/tarih bağlamını not ederek ek sorular için doğru yönlendirme yapmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Havuz ısıtmalı mı?"
+
+"Havuzunuz ısıtılıyor mu?"
+
+"Isıtmalı havuz var mı?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+FAQ Konusu: (Havuz ısıtma durumu)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Mevsim Bilgisi: (Misafirin planladığı dönem/tarih - varsa)
+
+Takip Sorusu: (Ek destek ihtiyacı için kısa soru)
+
+Kayıt: (E-posta kaydı/etiketi - ilgili FAQ konusu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin sorusu (intent), mesajın ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+FAQ konusu “havuz ısıtma” ise sabit ve net bilgi verilir:
+- Açık havuz mevcuttur.
+- Havuz ısıtmasızdır.
+
+Misafir dönem/mevsim belirtiyorsa not edilir; ek operasyonel detay istenirse ilgili birime yönlendirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir aynı soruyu farklı şekilde tekrar ederse aynı net bilgi tekrar edilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Evet, açık havuzumuz var; fakat havuzumuz ısıtmasızdır."
+
+2. Takip Sorusu:
+
+"Başka yardımcı olabileceğim bir konu var mı?"

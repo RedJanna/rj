@@ -1,0 +1,55 @@
+📋 Senaryo: S018 - Şikayet Kaydı V1
+Senaryo Kodu ve Adı: S018 - Şikayet Kaydı V1
+Kanal: E-posta
+
+🎯 Hedef: Şikayet bildirmek veya hizmetten memnuniyetsizliğini dile getirmek isteyen misafirden gerekli detayları hızlıca toplayarak durumu yüksek öncelikli (high priority) olarak ilgili ekibe aktarmak ve çözüm sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Hizmetten memnun değilim, şikayet oluşturmak istiyorum."
+
+"Yaşadığım olumsuz deneyimi bildirmek istiyorum."
+
+"Otelinizle ilgili ciddi bir şikayetim var."
+
+"Bu konuyla ilgili yetkililere şikayette bulunacağım."
+
+"Hizmetinizden hiç memnun kalmadım, nereye yazabilirim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Şikayet Metni: (Yaşanan olumsuz durumun veya memnuniyetsizliğin detaylı açıklaması)
+
+Rez ID (Rezervasyon No): (Varsa, konaklama kaydını ve misafir geçmişini tespit etmek için)
+
+Konu Lokasyonu: (Oda, restoran, resepsiyon vb. sorunun yaşandığı spesifik alan veya departman)
+
+İletişim Telefonu: (Çözüm sürecinde yetkililerin misafire hızlıca ulaşabilmesi için)
+
+Geri Dönüş Tercihi: (Telefonla arama veya e-posta yoluyla bilgilendirme isteği)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin şikayet veya memnuniyetsizlik bildirme niyeti (intent), ilettiği mesajın veya e-postanın genel anlamından (semantik) algılandığında sistem tetiklenir. "Şikayet", "memnun değilim", "rezalet" gibi spesifik kelime veya kalıp eşleştirmesi kesinlikle yapılmaz; misafir olumsuz deneyimini hangi sözcüklerle veya nasıl ifade ederse etsin asıl şikayet niyeti bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) toplanıp kontrol edilir.
+
+Eğer mesaj içeriğinde şikayet veya ciddi bir memnuniyetsizlik algılanırsa, sistem standart otonom akışları durdurur ve kural olarak anında "High Priority Handoff" (Yüksek Öncelikli Aktarım) sürecini başlatır.
+
+Şikayetin incelenebilmesi için eksik olan detaylar (özellikle iletişim bilgisi ve şikayet detayı) misafirden empati kurularak talep edilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Hard Devir): Şikayet süreçleri yüksek hassasiyet taşıdığından, bot ön bilgileri aldıktan sonra kesinlikle otonom çözüm üretmeye çalışmaz. Sohbet, tüm detaylarla birlikte doğrudan misafir ilişkileri veya ilgili operasyon ekibine "Hard Devir" (kesin aktarım) yapılarak atanır.
+
+SLA Süresi: Aktarılan bu yüksek öncelikli şikayet kaydına, ilgili ekip tarafından en geç 10 dakika (SLA hedefi) içerisinde müdahale edilmesi zorunludur.
+
+💬 Standart Yanıt Mesajları
+
+1. Şikayet Alındı ve Aktarım Bilgisi (TR):
+
+"Üzgünüz. Şikayetinizi öncelikli olarak ilgili ekibimize iletiyorum ve hızlı dönüş sağlayacağız."
+
+2. Şikayet Alındı ve Aktarım Bilgisi (EN):
+
+"We are sorry. I am escalating your complaint to the relevant team with high priority."

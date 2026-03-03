@@ -10,16 +10,18 @@ v2.1 — 2026-02-12: last_query kaydi eklendi (currency re-query)
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from app.flows.flow_contract import FlowContext, FlowResult
+from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 # ============================
 # State & Config
 # ============================
 
-PRICE_FLOW_FILE = Path("data/price_flows.json")
+PRICE_FLOW_FILE = resolve_data_file("price_flows.json", env_var="KASSANDRA_PRICE_FLOW_FILE")
+_PRICE_FLOW_STORE = JsonStateRepository(PRICE_FLOW_FILE)
 PRICE_FLOW_TIMEOUT_MINUTES = 15  # 15 dk sonra state silinir
 LAST_QUERY_TIMEOUT_MINUTES = 60  # Son sorgu 60 dk gecerli (currency degisikligi icin)
 LAST_SEEN_TIMEOUT_MINUTES = 180  # Son gorulen tarih/konuk bilgisi (3 saat)
@@ -38,19 +40,11 @@ class PriceFlowState:
 # ============================
 
 def _load_flows() -> Dict[str, Any]:
-    if not PRICE_FLOW_FILE.exists():
-        return {}
-    try:
-        with open(PRICE_FLOW_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return _PRICE_FLOW_STORE.load_dict()
 
 
 def _save_flows(data: Dict[str, Any]) -> None:
-    PRICE_FLOW_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(PRICE_FLOW_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    _PRICE_FLOW_STORE.save_dict(data)
 
 
 # ============================
@@ -260,3 +254,43 @@ def cleanup_stale_price_flows() -> int:
         _save_flows(data)
         print(f"🧹 {len(to_delete)} stale price flow temizlendi")
     return len(to_delete)
+
+
+class PriceFlowAdapter:
+    """Minimal orchestrator adapter for price flow contract."""
+
+    flow_name = "price"
+
+    def can_handle(self, context: FlowContext) -> bool:
+        flow_state = (context.state or {}).get(self.flow_name) or {}
+        current_state = flow_state.get("state")
+        if current_state and current_state != PriceFlowState.IDLE:
+            return True
+        msg = (context.message or "").lower()
+        keywords = ("fiyat", "price", "oda", "room", "ücret", "ucret")
+        return any(k in msg for k in keywords)
+
+    def handle(self, context: FlowContext) -> FlowResult:
+        user_id = (context.user_id or "").strip()
+        if not user_id:
+            return FlowResult(
+                reply_messages=[],
+                next_state=context.state or {},
+                side_effects=[],
+                handoff={"reason": "missing_user_id", "target": "human"},
+            )
+
+        flow = get_price_flow(user_id) or {}
+        state_name = flow.get("state") or PriceFlowState.ASK_DATES
+        data = flow.get("data") or {}
+        if not flow:
+            save_price_flow(user_id, state_name, data)
+
+        next_state = dict(context.state or {})
+        next_state[self.flow_name] = {"state": state_name, "data": data}
+        return FlowResult(
+            reply_messages=[],
+            next_state=next_state,
+            side_effects=[{"type": "state_update", "flow": self.flow_name}],
+            handoff=None,
+        )

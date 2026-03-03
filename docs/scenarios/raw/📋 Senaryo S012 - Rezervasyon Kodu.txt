@@ -1,0 +1,53 @@
+📋 Senaryo: S012 - Rezervasyon Kodu Sorusu V1
+Senaryo Kodu ve Adı: S012 - Rezervasyon Kodu Sorusu V1
+Kanal: E-posta
+
+🎯 Hedef: Rezervasyon sürecinde onay kodunun veya teyit mesajının ne zaman iletileceğini soran misafiri e-posta üzerinden bilgilendirmek ve işlem akışına dair güven vermek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Rezervasyon kesinleşince kodu ne zaman paylaşıyorsunuz?"
+
+"Onay numaram bana ne zaman ulaşır?"
+
+"Rezervasyon kodumu ne zaman alacağım?"
+
+"İşlem bittikten sonra teyit mesajı veya kodu gönderiyor musunuz?"
+
+"Rezervasyonum onaylandığında bana nasıl bilgi verilecek?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Talep Konusu: (Teyit kodu, onay numarası veya rezervasyon belgesi sorgusu)
+
+Rezervasyon Durumu: (İşlemin henüz taslak aşamasında mı yoksa kesinleşmiş mi olduğunun kontrolü)
+
+İletişim Kanalı: (Kodun hangi kanal üzerinden -örn. E-posta- iletileceği)
+
+Telefon: (Alternatif bilgilendirme veya olası SMS gönderimi için)
+
+Tercih Dili: (Bilgilendirme mesajının misafirin anladığı dilde gönderilebilmesi için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin rezervasyon kodunu veya teyit mesajını öğrenme talebi (intent), ilettiği cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. "Kod", "ne zaman", "kesinleşince" gibi kelime bazlı eşleştirmeler kesinlikle yapılmaz; misafir niyetini hangi ifadelerle dile getirirse getirsin asıl sorunun "onay bildirim zamanı" olduğu bot tarafından kavranır.
+
+Sistem, sorunun rezervasyon teyit kodu ile ilgili olduğunu doğruladıktan sonra, kodun gönderilmesi için "rezervasyonun kesinleşmesi" koşulunun arandığını kural olarak işletir.
+
+Otomasyon, rezervasyon işleminin tamamlanmasının (kesinleşmesinin) ardından ilgili kodun ve teyit mesajının iletileceği bilgisini misafire sunar.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Bilgi Cevabı: Bu senaryo tamamen bir sıkça sorulan soru (SSS) / bilgilendirme akışıdır. 
+
+Eskalasyon Yok: Standart süreç bilgisi verildiğinden canlı desteğe aktarıma veya insan müdahalesine (eskalasyon) gerek duyulmaz; bot yanıtı ileterek süreci tamamlar.
+
+💬 Standart Yanıt Mesajları
+
+1. Bilgilendirme Yanıtı (TR):
+
+"Rezervasyon kesinleştiğinde rezervasyon no ve teyit mesajı tarafınıza iletilir."
+
+2. Bilgilendirme Yanıtı (EN):
+
+"Once the booking is finalized, your reservation number and confirmation message will be sent to you."

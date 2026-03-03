@@ -1,4 +1,19 @@
-$healthUrl = "http://127.0.0.1:8000/admin/health"
+$utf8Bootstrap = Join-Path $PSScriptRoot "tools\Enable-Utf8Console.ps1"
+if (Test-Path $utf8Bootstrap) {
+    . $utf8Bootstrap
+}
+
+$baseUrl = $env:PUBLIC_BASE_URL
+if ([string]::IsNullOrWhiteSpace($baseUrl)) {
+    $baseUrl = "https://api.nexlumeai.com"
+}
+$baseUrl = $baseUrl.TrimEnd("/")
+if ($baseUrl.EndsWith("/admin")) {
+    $healthUrl = "$baseUrl/health"
+}
+else {
+    $healthUrl = "$baseUrl/admin/health"
+}
 
 try {
     $response = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 5

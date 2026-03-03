@@ -1,0 +1,64 @@
+📋 Senaryo: S044 - Geç Çıkış Talebi V1
+Senaryo Kodu ve Adı: S044 - Geç Çıkış Talebi V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin geç check-out talebini telefon görüşmesinde netleştirmek, gerekli ön bilgileri hızlıca toplamak, check-out saatini standart şekilde paylaşmak ve talebi müsaitlik kontrolü için canlı ekibe soft devir ile ileterek geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Geç check-out yapabilir miyiz?"
+
+"Çıkışı biraz geciktirebilir miyiz?"
+
+"Bugün geç çıkış mümkün mü?"
+
+"Check-out saatini uzatmak istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Çıkış Tarihi: (GG/AA/YYYY)
+
+İstenen Çıkış Saati: (Örn: 14:00)
+
+Rezervasyon ID / İsim: (Rezervasyon numarası veya ad-soyad)
+
+Telefon: (İletişim numarası)
+
+Talep Notu: (Geç çıkış isteği ve varsa kısa açıklama)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin geç çıkış talebi, ifadenin anlamından algılandığında senaryo tetiklenir.
+
+Standart check-out saatinin 12:00 olduğu bilgisi misafire net şekilde verilir.
+
+Geç çıkış talebinin oda müsaitliğine bağlı olduğu belirtilir.
+
+Gerekli bilgiler (çıkış tarihi, istenen saat, rezervasyon bilgisi ve telefon) mümkün olduğunca görüşme sırasında toplanır.
+
+Talep, müsaitlik değerlendirmesi için “canlı_destek” ekibine soft devir ile iletilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Geç check-out talepleri “canlı_destek” ekibine iletilir.
+
+SLA: 20 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir rezervasyon ID paylaşamazsa, isim + telefon + çıkış tarihi ile kontrol edilerek süreç başlatılır.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi + Devir Bilgilendirmesi:
+
+"Check-out saatimiz 12:00’dir. Geç çıkış talebinizi müsaitliğe göre değerlendirmek için ekibimize iletiyorum."
+
+2. Bilgi Toplama (Gerekirse):
+
+"Talebinizi iletebilmem için çıkış tarihinizi, istediğiniz çıkış saatini, rezervasyon numaranızı (yoksa ad-soyadınızı) ve telefon numaranızı paylaşır mısınız?"
+
+3. SLA Bilgilendirmesi / Kapanış:
+
+"Teşekkür ederim. Talebiniz ekibimize iletildi. En geç 20 dakika içinde dönüş sağlayacağız."
+
+4. English (If Needed):
+
+"Our check-out time is 12:00. I am forwarding your late check-out request for availability review."

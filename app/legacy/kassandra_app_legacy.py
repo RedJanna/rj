@@ -3,8 +3,10 @@ import builtins
 from datetime import datetime as _dt
 _orig_print = builtins.print
 import sys
+from app.services.request_context_service import get_current_correlation_id
 def _ts_print(*a, **k):
-    prefix = f"[{_dt.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+    correlation_id = str(get_current_correlation_id() or "").strip() or "n/a"
+    prefix = f"[{_dt.now().strftime('%Y-%m-%d %H:%M:%S')} cid={correlation_id}]"
     try:
         _orig_print(prefix, *a, **k)
     except UnicodeEncodeError:
@@ -67,12 +69,14 @@ from app.handlers.suspicious_handler import (
 )
 from app.core.settings_service import (
     load_settings, save_settings,
-    is_automation_enabled, is_followup_enabled, get_followup_minutes
+    is_automation_enabled, is_followup_enabled, is_operational_rules_enabled, get_followup_minutes
 )
 from app.services.followup_service import (
     load_followups, save_followups,
-    schedule_followup, cancel_followup, mark_followup_sent,
+    schedule_followup, cancel_followup, mark_followup_sent, mark_followup_closed,
+    save_last_followup_cycle,
     get_pending_followups, get_followup_message,
+    get_expired_followups,
     FOLLOWUP_FILE, FOLLOWUP_GRACE_SECONDS, FOLLOWUP_MAX_AGE_MINUTES
 )
 from app.services.qa_agent_service import QAAgentService
@@ -105,6 +109,7 @@ from app.services.elektra_hoteladvisor_service import (
 )
 from app.services.booking_flow_service import (
     BookingStatus,
+    BookingFlowAdapter,
     init_hotel_bookings_db,
     create_hotel_booking,
     get_hotel_booking,
@@ -116,7 +121,6 @@ from app.services.booking_flow_service import (
     cleanup_stale_booking_flows,
 )
 from app.handlers.booking_flow_handler import handle_booking_flow
-from app.handlers.canonical_local_handler import try_handle_canonical_and_local
 from app.handlers.openai_fallback_handler import handle_openai_fallback
 from app.handlers.restaurant_start_handler import try_start_restaurant_reservation_flow
 from app.handlers.elektra_price_entry_handler import try_handle_elektra_price_entry
@@ -126,6 +130,7 @@ from app.handlers.chat_precheck_handler import run_chat_prechecks
 from app.handlers.handoff_reservation_handler import try_handle_handoff_and_reservation_flow
 from app.handlers.late_message_checks_handler import try_handle_late_message_checks
 from app.services.price_flow_service import (
+    PriceFlowAdapter,
     save_price_flow,
     get_price_flow,
     clear_price_flow,
@@ -138,6 +143,7 @@ from app.handlers.price_flow_handler import (
     handle_price_flow,
 )
 from app.services.restaurant_reservation_flow_service import (
+    RestaurantReservationFlowAdapter,
     ReservationState,
     ReservationStatus,
     get_reservation_flow,
@@ -174,6 +180,7 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.admin_stats_routes import build_admin_stats_router
 from app.routes.admin_safety_routes import build_admin_safety_router
 from app.routes.admin_reservations_routes import build_admin_reservations_router
+from app.routes.admin_transfer_reservations_routes import build_admin_transfer_reservations_router
 from app.routes.admin_ops_routes import build_admin_ops_router
 from app.routes.admin_monitoring_routes import build_admin_monitoring_router
 from app.routes.hotel_bookings_routes import build_hotel_bookings_router
@@ -195,6 +202,7 @@ from app.bootstrap.runtime_entities import (
 )
 from app.bootstrap.legacy_wiring import configure_http, get_system_test_router, wire_routes
 from app.flows.chat_flow_service import ChatFlowService
+from app.flows.flow_orchestrator import FlowOrchestrator
 from app.flows.reservation_flow_runtime import build_reservation_flow_handler
 from app.flows.reservation_parsing import (
     is_hotel_open,
@@ -206,6 +214,7 @@ from app.flows.reservation_parsing import (
 )
 from app.bootstrap.admin_bootstrap import ensure_initial_admin_user
 from app.web.reminder_page import REMINDER_PAGE_HTML
+from app.web.transfer_reservations_page import TRANSFER_RESERVATIONS_HTML
 from app.web.login_page import LOGIN_PAGE_HTML
 from app.core.auth_service import initialize_admin_user, get_session, get_user
 from app.services.system_health_service import (
@@ -226,7 +235,7 @@ from app.services.conversation_store import (
     load_conversation, save_message, save_conversation,
     get_conversation_history, add_to_history,
     clear_conversation, schedule_conversation_cleanup,
-    CONVERSATIONS_DIR,
+    CONVERSATIONS_DIR, hydrate_active_conversations_from_disk,
 )
 from app.services.routing_state_service import (
     get_active_flow,
@@ -235,12 +244,15 @@ from app.services.routing_state_service import (
     get_domain_lock,
     set_domain_lock,
     clear_domain_lock,
+    resolve_flow_order_for_context,
 )
 from app.services.message_id_service import (
     is_processed_message_id,
     mark_message_id_processed,
 )
 from app.services.decision_trace_service import trace_decision
+from app.services.active_learning_service import capture_active_learning_sample
+from app.services.daily_learning_report_service import build_daily_learning_report
 from app.services.cancel_service import handle_cancel_flow_v2, init_cancel_service, _notify_admin_cancel_v2
 from app.services.pdf_service import generate_reservation_pdf
 import psutil
@@ -258,19 +270,29 @@ from app.content.chat_keywords import (
     PRICE_NATURAL_DATE_KEYWORDS,
     PRICE_INQUIRY_KEYWORDS,
     PRICE_GUEST_KEYWORDS,
-    CANONICAL_GREETING_KEYWORDS,
-    KANONIK_FIYAT_EXCLUSIONS,
-    ERKEN_GIRIS_KEYWORDS,
-    GEC_CIKIS_KEYWORDS,
 )
 from app.content.system_prompt import INFO_SYSTEM_PROMPT
 BOT_START_TIME = datetime.now()
+FLOW_ORCHESTRATOR_MODE = os.getenv("FLOW_ORCHESTRATOR_MODE", "shadow").strip().lower() or "shadow"
+FLOW_ORCHESTRATOR = FlowOrchestrator(
+    flows=[
+        ("restaurant", RestaurantReservationFlowAdapter()),
+        ("price", PriceFlowAdapter()),
+        ("booking", BookingFlowAdapter()),
+    ],
+    mode=FLOW_ORCHESTRATOR_MODE,
+    flow_selector=lambda context, available_flow_names: resolve_flow_order_for_context(
+        message=context.message,
+        state=context.state or {},
+        available_flow_names=available_flow_names,
+    ),
+)
 # >>> ADD_START: QA_AGENT_CLASS
 # ======================================================
 # QA AGENT - Cevap Kalitesi Değerlendirme
 # ======================================================
 QA_ENABLED = True
-QA_LOG_FILE = "C:/KassandraOpenAI/data/qa_evaluations.json"
+QA_LOG_FILE = str(_PROJECT_ROOT / "data" / "qa_evaluations.json")
 _qa_fail_notifications = []  # QA FAIL bildirim spam önleme için
 # <<< ADD_END: QA_AGENT_CLASS
 # ======================================================
@@ -326,9 +348,17 @@ notify_admin_reservation_change = build_notify_admin_reservation_change(
 # 13. FastAPI APP
 # ======================================================
 app = FastAPI(title="Kassandra WhatsApp Bot")
-app.include_router(build_system_router())
 configure_http(app, require_admin)
 system_test_router = get_system_test_router()
+try:
+    recovery_limit = int(os.getenv("ACTIVE_CONVERSATION_RECOVERY_LIMIT", "300"))
+except Exception:
+    recovery_limit = 300
+_recovery = hydrate_active_conversations_from_disk(limit=max(1, recovery_limit))
+print(
+    "[ACTIVE-CONV] Startup recovery done | "
+    f"scanned={_recovery.get('scanned', 0)} restored={_recovery.get('restored', 0)}"
+)
 def _get_openai_model_runtime() -> str:
     return OPENAI_MODEL
 def _set_openai_model_runtime(new_model: str) -> None:
@@ -351,6 +381,70 @@ scheduler = BackgroundScheduler()
 # <<< ADD_END: COALESCE_BACKGROUND_JOB
 # Stale flow temizliği: Her 1 saatte bir (24 saatten düşürüldü)
 scheduler.add_job(cleanup_stale_reservation_flows, 'interval', hours=1)
+
+
+def _split_whatsapp_report(message: str, limit: int = 3200) -> list[str]:
+    text = (message or "").strip()
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+    chunks: list[str] = []
+    lines = text.splitlines()
+    current = ""
+    for line in lines:
+        candidate = f"{current}\n{line}".strip() if current else line
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+        current = line
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _run_daily_learning_report():
+    """Günlük aktif öğrenme raporunu admin'e gönderir."""
+    try:
+        report_text = build_daily_learning_report()
+        parts = _split_whatsapp_report(report_text)
+        for idx, part in enumerate(parts, start=1):
+            header = f"[{idx}/{len(parts)}]\n" if len(parts) > 1 else ""
+            asyncio.run(send_whatsapp_message(ADMIN_PHONE, f"{header}{part}"))
+        print("📘 Günlük öğrenme raporu gönderildi")
+    except Exception as e:
+        print(f"❌ Günlük öğrenme raporu hatası: {e}")
+
+
+def _run_followup_cycle():
+    """10.dk hatırlatma gönder, 30.dk yanıtsız sohbetleri otomatik kapat/temizle."""
+    if not is_followup_enabled():
+        return
+    try:
+        pending = get_pending_followups()
+        for phone in pending:
+            ok = asyncio.run(send_whatsapp_message(phone, get_followup_message()))
+            if ok:
+                mark_followup_sent(phone)
+                save_message(phone, "[FOLLOW-UP]", get_followup_message())
+                print(f"✅ Follow-up gönderildi (scheduler): {phone}")
+
+        expired = get_expired_followups()
+        for phone in expired:
+            schedule_conversation_cleanup(phone, delay_minutes=0)
+            mark_followup_closed(phone)
+            print(f"🧹 Sohbet otomatik kapatıldı/temizlendi (scheduler): {phone}")
+        save_last_followup_cycle(sent=len(pending), closed=len(expired))
+    except Exception as e:
+        print(f"❌ Follow-up cycle hatası: {e}")
+
+
+# Follow-up kontrolü: dakikada 1
+scheduler.add_job(_run_followup_cycle, 'interval', minutes=1)
+# Günlük öğrenme raporu: her gün 09:00
+scheduler.add_job(_run_daily_learning_report, 'cron', hour=9, minute=0, id='daily_learning_report_job')
 register_scheduler_lifecycle(
     app=app,
     scheduler=scheduler,

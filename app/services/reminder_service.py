@@ -8,20 +8,22 @@ Otel (İptal Edilemez): 7 gün önce
 Otel (Ücretsiz İptal): 5 gün önce
 """
 
-import json
 import asyncio
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
+
+from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 # ======================================================
 # CONFIGURATION
 # ======================================================
 
-REMINDERS_FILE = Path("data/reminders.json")
-REMINDER_LOG_FILE = Path("data/reminder_logs.json")
+REMINDERS_FILE = resolve_data_file("reminders.json", env_var="KASSANDRA_REMINDERS_FILE")
+REMINDER_LOG_FILE = resolve_data_file("reminder_logs.json", env_var="KASSANDRA_REMINDER_LOG_FILE")
+_REMINDER_STORE = JsonStateRepository(REMINDERS_FILE)
+_REMINDER_LOG_STORE = JsonStateRepository(REMINDER_LOG_FILE)
 
 class ReminderType(str, Enum):
     RESTAURANT_15MIN = "restaurant_15min"      # Restoran: 15 dk önce
@@ -100,30 +102,23 @@ class ReminderLog:
 
 def load_reminders() -> Dict[str, dict]:
     """Planlanmış hatırlatmaları yükle"""
-    if REMINDERS_FILE.exists():
-        try:
-            with open(REMINDERS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            pass
-    return {"scheduled": [], "settings": {}}
+    default_data = {"scheduled": [], "settings": {}}
+    data = _REMINDER_STORE.load_json(default=default_data)
+    return data if isinstance(data, dict) else default_data
 
 
 def save_reminders(data: dict) -> None:
     """Hatırlatmaları kaydet"""
-    REMINDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REMINDERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _REMINDER_STORE.save_json(data if isinstance(data, dict) else {})
 
 
 def load_reminder_logs() -> List[dict]:
     """Hatırlatma loglarını yükle"""
-    if REMINDER_LOG_FILE.exists():
-        try:
-            with open(REMINDER_LOG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            pass
+    data = _REMINDER_LOG_STORE.load_json(default=[])
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("logs"), list):
+        return data["logs"]
     return []
 
 
@@ -136,9 +131,7 @@ def save_reminder_log(log: ReminderLog) -> None:
     if len(logs) > 1000:
         logs = logs[-1000:]
     
-    REMINDER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REMINDER_LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(logs, f, ensure_ascii=False, indent=2)
+    _REMINDER_LOG_STORE.save_json(logs)
 
 
 # ======================================================

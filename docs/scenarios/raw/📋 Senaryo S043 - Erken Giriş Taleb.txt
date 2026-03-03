@@ -1,0 +1,75 @@
+📋 Senaryo: S043 - Erken Giriş Talebi V1
+Senaryo Kodu ve Adı: S043 - Erken Giriş Talebi V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin erken giriş (check-in) talebinde, gerekli ön bilgileri sohbet akışı içinde eksiksiz toplamak, erken girişin müsaitliğe bağlı olduğunu net şekilde aktarmak ve talebi resepsiyona not olarak ileterek misafire geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Sabah erken gelebilir miyiz?"
+
+"Erken giriş yapabilir miyiz?"
+
+"Check-in saatinden önce odaya girebilir miyim?"
+
+"Sabah erken varacağız, erken giriş mümkün mü?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş Tarihi: (GG/AA/YYYY)
+
+Tahmini Varış Saati: (Örn: 09:30)
+
+Rezervasyon ID / İsim: (Rezervasyon numarası veya ad-soyad)
+
+Telefon: (İletişim numarası)
+
+Talep Notu: (Erken giriş isteği ve varsa ek kısa detay)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin erken giriş talebi (intent) farklı ifadelerle, yazım hatalarıyla veya dolaylı anlatımla gelse bile mesajın ANLAMINDAN (semantik) algılanır; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Erken giriş talebi algılandığında sistem tetiklenir.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eksik bilgi varsa, misafiri yormayacak şekilde tek mesajda topluca istenir.
+
+Misafire standart check-in saatinin 14:00 olduğu bilgisi verilir.
+
+Erken girişin oda müsaitliğine/odanın hazır olma durumuna göre değerlendirileceği net şekilde belirtilir.
+
+Gerekli bilgiler toplandığında talep resepsiyona not olarak iletilir ve misafire bilgilendirme yapılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Eskalasyon): * Resepsiyonun müsaitlik teyidi gerektiren durumlarda veya misafirin rezervasyon kaydı doğrulanamadığında.
+
+SLA: 20 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir rezervasyon bilgisini paylaşamıyorsa, isim + telefon + giriş tarihi ile kontrol edilerek aynı akış sürdürülür.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Bilgilendirme ve Bilgi Talebi:
+
+"Elbette yardımcı olurum. Check-in saatimiz normalde 14:00’dır. Eğer odanız hazırsa erken giriş yapabilirsiniz. Erken giriş talebinizi resepsiyona not geçebilmem için lütfen giriş tarihinizi, tahmini varış saatinizi, rezervasyon numaranızı (yoksa ad-soyadınızı) ve telefon numaranızı paylaşır mısınız?"
+
+2. Eksik Bilgi Varsa (Örnek - Rezervasyon bilgisi eksikse):
+
+"Teşekkür ederim. Talebinizi iletebilmem için rezervasyon numaranızı (varsa) veya ad-soyad bilginizi de paylaşabilir misiniz?"
+
+3. Teyit Mesajı (Tüm bilgiler toplandığında):
+
+"Bilgileriniz için teşekkür ederim. Hemen kontrol edelim:
+🗓️ Giriş Tarihi: [Giriş Tarihi]
+🕒 Tahmini Varış Saati: [Tahmini Varış Saati]
+👤 Rezervasyon: [Rezervasyon ID / İsim]
+📞 Telefon: [Telefon]
+📝 Talep: Erken giriş (müsaitlik durumuna göre)
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya düzeltmek istediğiniz bir detay varsa bana yazabilirsiniz."
+
+4. Kapanış / Not Geçildi:
+
+"Harika, teşekkürler. ✅ Erken giriş talebinizi resepsiyona not geçtim. Odanın hazır olma durumuna göre en geç 20 dakika içinde size buradan bilgi vereceğiz."

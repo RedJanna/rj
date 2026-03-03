@@ -1,0 +1,51 @@
+📋 Senaryo: S008 - Rezervasyon Iptal Fiyat Tipi Onayi V1
+Senaryo Kodu ve Adı: S008 - Rezervasyon Iptal Fiyat Tipi Onayi V1
+Kanal: Telefon
+
+🎯 Hedef: Rezervasyon iptal sürecinde fiyat tipi tercihini belirten misafirin ilettiği bilgileri derleyerek, hassas olan iptal ve iade sürecini yüksek öncelikli olarak canlı temsilciye aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"2 numara, ücretsiz iptal tarifesiydi."
+
+"İptal edilemez şartıyla almıştım."
+
+"Ücretsiz iptal hakkımı kullanmak istiyorum."
+
+"Fiyat tipi olarak birinci seçeneği seçmiştim."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No / Voucher No: (İptal edilecek kaydı sistemde bulmak ve doğrulamak için zorunludur)
+
+Seçilen Fiyat Tipi: (1- İptal Edilemez veya 2- Ücretsiz İptal - iade koşullarının uygulanması için)
+
+Ad Soyad: (Rezervasyon sahibi doğrulaması için)
+
+Telefon: (İletişim ve gerekli durumlarda teyit için)
+
+Talep Zamanı: (İptal kuralı süre kısıtlamalarının -örn. son 24 saat- kontrolü için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin fiyat tipini belirtme durumu (intent), ilettiği cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya sadece rakam bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi ifadelerle dile getirirse getirsin asıl bildirim kavranır.
+
+Yukarıdaki temel bilgiler (slotlar) toplanıp kontrol edilir.
+
+Eğer misafir fiyat tipini başarılı bir şekilde sisteme iletmişse, işlem otomasyonda sonlandırılmaz; bilet oluşturularak doğrudan canlı ekibe yönlendirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Yüksek Öncelik): İptal_iade kategorisindeki bu işlem maddi hassasiyet taşıdığından sohbet "High Priority" (Yüksek Öncelik) etiketiyle canlı müşteri temsilcisine aktarılır.
+
+SLA Süresi: Aktarılan bu acil talebe operasyon ekibi tarafından en geç 15 dakika (SLA hedefi) içerisinde müdahale edilmesi hedeflenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İşlem Onayı ve Yönlendirme (TR):
+
+"Teşekkür ederim, talebinizi öncelikli olarak canlı müşteri temsilcimize iletiyorum."
+
+2. İşlem Onayı ve Yönlendirme (EN):
+
+"Thank you, I am forwarding your cancellation request to our live team with priority."

@@ -1,0 +1,7 @@
+Senaryo Başlığı: {topic_title}
+Örnek Mesaj: {sample_message}
+Tahmini Intent: {predicted_intent}
+Dil: {language}
+Güven Skoru: {confidence}
+Neden Yeni Konu?: {reason}
+Önerilen Aksiyon: {suggested_action}

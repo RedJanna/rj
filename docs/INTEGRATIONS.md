@@ -29,6 +29,14 @@
   - `ELEKTRA_LIST_RESERVATIONS_PATHS`
   - `ELEKTRA_UPDATE_RESERVATION_PATHS`
   - `ELEKTRA_CANCEL_RESERVATION_PATHS`
+- Odeme update profil env:
+  - `PAYMENT_SUPPLIER_MODE` (`bookingapi` onerilen)
+  - `PAYMENT_SUPPLIER_FALLBACK_HOTELADVISOR` (`false` onerilen; sadece acil fallback)
+  - `PAYMENT_UPDATE_PROFILE` (`auto`, `tenant_21966`, `default`)
+- Odeme update metrik eventleri (SQLite metrics):
+  - `payment_update_ok`
+  - `payment_pax_remap_ok`
+  - `payment_quote_remap_ok`
 - Not:
   - `ELEKTRA_WALKIN_AGENCY_ID` yoksa sistem, fiyat teklifinden gelen `price-agency-id` ile devam etmeyi dener.
   - Proje kokundeki `.env` dosyasi otomatik yuklenir.

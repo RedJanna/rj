@@ -26,6 +26,30 @@ def try_handle_late_message_checks(
     response_factory,
 ):
     msg_lower = (user_message or "").lower()
+    gratitude_markers = [
+        "teşekkür", "tesekkur", "teşekkürler", "tesekkurler",
+        "sağol", "sagol", "sağolun", "sagolun",
+        "thanks", "thank you", "thank u", "thx",
+        "ok thanks", "ok thank you", "great thanks", "perfect thanks",
+        "thanks a lot", "many thanks", "much appreciated", "appreciate it",
+        "anladım teşekkürler", "tamam teşekkürler", "oldu teşekkürler",
+    ]
+    is_gratitude_only = any(g in msg_lower for g in gratitude_markers)
+
+    recent_context = ""
+    if history:
+        recent_context = " ".join(
+            [(m.get("content") or "") for m in history[-8:]]
+        ).lower()
+    recent_transactional_context = any(
+        k in recent_context
+        for k in [
+            "eur", "€", "fiyat", "price", "oda", "room",
+            "rezerv", "reservation", "book", "kahvalt", "breakfast",
+            "check-in", "check in", "check-out", "check out",
+        ]
+    )
+
     has_active_intent = (
         ("?" in (user_message or ""))
         or any(
@@ -55,7 +79,18 @@ def try_handle_late_message_checks(
         )
     )
     if is_conversation_ending_fn(user_message) and not has_active_intent:
-        reply = get_closing_message_fn(detect_language_fn(user_message))
+        lang = detect_language_fn(user_message)
+        # Fiyat/rezervasyon bağlamında gelen "teşekkür" mesajlarında konuşmayı
+        # gereksiz yere kapatmak yerine bir sonraki adımı teklif et.
+        if is_gratitude_only and recent_transactional_context:
+            if lang == "en":
+                reply = "You're welcome. If you'd like, I can help you proceed with the reservation now."
+            elif lang == "ru":
+                reply = "Пожалуйста. Если хотите, я могу помочь сразу перейти к оформлению бронирования."
+            else:
+                reply = "Rica ederim. Dilerseniz rezervasyon işlemini şimdi birlikte başlatabiliriz."
+        else:
+            reply = get_closing_message_fn(lang)
         add_to_history_fn(phone, "user", user_message)
         add_to_history_fn(phone, "assistant", reply)
         save_message_fn(phone, user_message, reply)
@@ -109,19 +144,16 @@ def try_handle_late_message_checks(
             return response_factory(reply=reply, status="season_blocked")
 
     if not history or len(history) == 0:
-        msg = (user_message or "").strip()
-        msg_clean = msg.lower().strip("!?. ,\n\t")
-        plain_greetings = {"merhaba", "selam", "hi", "hello", "hey"}
-        if msg_clean in plain_greetings or len(msg_clean) <= 2:
-            first_msg_lang = detect_language_fn(msg)
-            welcome_message = get_welcome_message_fn(first_msg_lang)
-            add_to_history_fn(phone, "user", user_message)
-            add_to_history_fn(phone, "assistant", welcome_message)
-            save_message_fn(phone, user_message, welcome_message)
-            schedule_followup_fn(phone)
-            elapsed = time.time() - start_time
-            record_metric_fn("first_message", response_time=elapsed)
-            return response_factory(reply=welcome_message, status="first_message")
+        # İlk temas kuralı: Kullanıcının ilk mesajı ne olursa olsun sabit karşılama menüsünü gönder.
+        first_msg_lang = detect_language_fn(user_message or "")
+        welcome_message = get_welcome_message_fn(first_msg_lang)
+        add_to_history_fn(phone, "user", user_message)
+        add_to_history_fn(phone, "assistant", welcome_message)
+        save_message_fn(phone, user_message, welcome_message)
+        schedule_followup_fn(phone)
+        elapsed = time.time() - start_time
+        record_metric_fn("first_message", response_time=elapsed)
+        return response_factory(reply=welcome_message, status="first_message")
 
     greeting_check, greeting_lang = is_greeting_fn(user_message)
     if greeting_check and (user_message or "").strip().lower() in {"merhaba", "selam", "hi", "hello", "hey"}:

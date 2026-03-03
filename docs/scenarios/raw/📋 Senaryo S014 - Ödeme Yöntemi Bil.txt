@@ -1,0 +1,53 @@
+📋 Senaryo: S014 - Ödeme Yöntemi Bilgisi V1
+Senaryo Kodu ve Adı: S014 - Ödeme Yöntemi Bilgisi V1
+Kanal: Telefon
+
+🎯 Hedef: Rezervasyon işlemleri için ödeme yöntemlerini öğrenmek isteyen misafire sunulan ödeme seçenekleri (link, havale, nakit) hakkında eksiksiz bilgi vermek ve ödeme linki talep edilmesi durumunda süreci güvenli bir şekilde canlı satış ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Hangi ödeme yöntemleri var?"
+
+"Rezervasyon ödemesini nasıl yapabilirim?"
+
+"Kredi kartıyla online ödeme alıyor musunuz?"
+
+"Havale seçeneğiniz bulunuyor mu?"
+
+"Ön ödemeyi nereye göndermem gerekiyor?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon Bağlamı: (Ön ödeme mi yoksa kalan bakiye mi olduğunun anlaşılması için)
+
+Para Birimi Tercihi: (TL, EUR, USD, GBP vb. - doğru banka bilgisi veya tutar sunumu için)
+
+Ödeme Zamanı: (İşlemin hemen mi yapılacağı yoksa otele girişte mi ödeneceğinin tespiti için)
+
+İletişim Bilgisi: (Ödeme linkinin güvenle gönderilebilmesi için telefon veya e-posta)
+
+Tercih Edilen Yöntem: (Link, havale veya nakit seçeneklerinden misafirin hangisini seçtiği)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin ödeme yöntemlerini öğrenme talebi (intent), ilettiği cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Belirli kelimelere ("ödeme", "yöntem", "nasıl") veya kalıplara bağlı kelime eşleştirmesi kesinlikle yapılmaz; misafir sorusunu hangi ifadelerle dile getirirse getirsin asıl bilgi talebi bot tarafından kavranır.
+
+Sistem ödeme yöntemleri sorulduğunda, kural olarak misafire ödeme linki, banka havalesi ve nakit ödeme seçeneklerinin mevcut olduğunu belirtir.
+
+Eğer misafir "Ödeme Linki" (kredi kartı ile online ödeme) seçeneğiyle ilerlemek isterse, bu linkin otomasyon tarafından değil, canlı satış ekibi tarafından gönderildiği bilgisi kural olarak misafire iletilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Bilgi Yanıtı: Misafir sadece ödeme yöntemlerini öğrenmek istiyorsa veya havale/nakit seçenekleriyle ilgili genel bilgi soruyorsa, bot standart bilgiyi iletir ve süreç otomasyonda kalır (eskalasyon yapılmaz).
+
+Canlı Desteğe Aktarma (Devir): Misafir ödemesini online "Ödeme Linki" aracılığıyla yapmayı talep ettiği an, sohbet güvenli ödeme bağlantısının oluşturulup iletilmesi için ilgili canlı satış ekibine devredilir.
+
+💬 Standart Yanıt Mesajları
+
+1. Ödeme Seçenekleri Bilgilendirmesi (TR):
+
+"Ön ödeme için ödeme linki, havale veya nakit seçeneklerimiz bulunur. Ödeme linki canlı satış ekibimiz tarafından iletilir."
+
+2. Ödeme Seçenekleri Bilgilendirmesi (EN):
+
+"For prepayment, payment link, bank transfer, or cash options are available. Payment links are sent by our live sales team."

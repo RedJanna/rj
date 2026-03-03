@@ -12,6 +12,39 @@ from fastapi.responses import Response, FileResponse
 from pydantic import BaseModel
 
 
+class RestaurantTable(BaseModel):
+    table_id: str
+    x_cm: float
+    y_cm: float
+    seats: int = 4
+    size_cm: Optional[int] = None
+
+
+class RestaurantLayout(BaseModel):
+    plan_width_cm: int = 1738
+    plan_height_cm: int = 975
+    table_size_cm: int = 80
+    tables: List[RestaurantTable] = []
+
+
+class AssignTableRequest(BaseModel):
+    date: str
+    table_id: str
+    reservation_id: int
+    ends_at: Optional[str] = None
+
+
+class UnassignTableRequest(BaseModel):
+    date: str
+    reservation_id: int
+
+
+class RestaurantPlanSaveRequest(BaseModel):
+    svg: str
+    date: str | None = None
+    scope: str = "date"
+
+
 def build_restaurant_plan_router(
     project_root: Path,
     restaurant_staff: Dict[str, Dict[str, Any]],
@@ -38,34 +71,6 @@ def build_restaurant_plan_router(
     def _write_json(path: Path, payload) -> None:
         _ensure_data_dir()
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    class RestaurantTable(BaseModel):
-        table_id: str
-        x_cm: float
-        y_cm: float
-        seats: int = 4
-        size_cm: Optional[int] = None
-
-    class RestaurantLayout(BaseModel):
-        plan_width_cm: int = 1738
-        plan_height_cm: int = 975
-        table_size_cm: int = 80
-        tables: List[RestaurantTable] = []
-
-    class AssignTableRequest(BaseModel):
-        date: str
-        table_id: str
-        reservation_id: int
-        ends_at: Optional[str] = None
-
-    class UnassignTableRequest(BaseModel):
-        date: str
-        reservation_id: int
-
-    class RestaurantPlanSaveRequest(BaseModel):
-        svg: str
-        date: str | None = None
-        scope: str = "date"
 
     @router.get("/admin/restaurant-staff")
     async def get_restaurant_staff():

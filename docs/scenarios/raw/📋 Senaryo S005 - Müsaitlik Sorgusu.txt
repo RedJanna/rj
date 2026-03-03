@@ -1,0 +1,53 @@
+📋 Senaryo: S005 - Müsaitlik Sorgusu V1
+Senaryo Kodu ve Adı: S005 - Müsaitlik Sorgusu V1
+Kanal: Telefon
+
+🎯 Hedef: Rezervasyon işlemi için oda müsaitliği sorgulayan misafirden gerekli ön bilgileri eksiksiz toplayarak uygun oda tiplerinin durumunu kontrol etmek ve listelemek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Aynı tarihlerde oda müsait mi?"
+
+"Bu hafta sonu için boş yeriniz var mı?"
+
+"Otelinizde yer var mı?"
+
+"Müsaitlik durumunuz nedir?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş Tarihi: (GG/AA/YYYY formatında konaklama başlangıç tarihi)
+
+Çıkış Tarihi: (GG/AA/YYYY formatında konaklama bitiş tarihi)
+
+Yetişkin Sayısı: (Oda kapasitesi ve müsaitlik için)
+
+Çocuk Bilgisi: (Çocuk sayısı ve yaşları - uygun yatak ve oda planlaması için)
+
+Oda Tipi Tercihi: (Standart, Aile, Suit vb. - doğru odayı filtrelemek için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin oda müsaitliği sorgulama talebi (intent), kurulan cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya kalıp eşleştirme kesinlikle yapılmaz; misafir talebini hangi ifadelerle dile getirirse getirsin asıl niyet kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer tarih (giriş-çıkış) ve kişi sayısı eksiksiz ise, otomasyon müsait oda tiplerini filtreler ve listeler.
+
+Eksik bilgi olması durumunda, tarih aralığı ve kişi sayısı netleşmeden müsaitlik yanıtı verilmez ve misafire bu eksik bilgiler sorulur.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon İşleyişi: Sistem müsaitliği otonom olarak kontrol eder ve sonuçları misafire iletir.
+
+Zorunlu Devir Yok: Bu aşamada zorunlu bir insan müdahalesine veya canlı desteğe eskalasyona gerek yoktur; süreç otomasyon içerisinde tamamlanır.
+
+💬 Standart Yanıt Mesajları
+
+1. İlk Karşılama ve Eksik Bilgi Talebi (TR):
+
+"Müsaitliği kontrol ediyorum. Tarih aralığı ve kişi sayısını net yazar mısınız?"
+
+2. İlk Karşılama ve Eksik Bilgi Talebi (EN):
+
+"I am checking availability. Please confirm the exact date range and guest count."

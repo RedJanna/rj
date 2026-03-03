@@ -5,6 +5,10 @@ import threading
 from datetime import datetime
 
 
+def _normalize_phone(phone: str) -> str:
+    return "".join(ch for ch in str(phone or "") if ch.isdigit())
+
+
 def maybe_start_qa_background(
     *,
     qa_enabled: bool,
@@ -47,6 +51,10 @@ def maybe_start_qa_background(
 {reply[:200]}
 ⚠️ Sorunlar:
 {chr(10).join(['• ' + i for i in issues[:3]]) if issues else '• Belirtilmedi'}"""
+                # Admin numarası test edilen müşteri ile aynıysa müşteri sohbetini kirletme.
+                if _normalize_phone(admin_phone) and _normalize_phone(admin_phone) == _normalize_phone(phone):
+                    print("⚠️ QA bildirimi atlandı: admin_phone müşteri telefonu ile aynı")
+                    return
                 loop.run_until_complete(send_whatsapp_message_fn(admin_phone, notify_msg))
                 qa_fail_notifications.append(now)
                 print(f"📤 QA {level} bildirimi gönderildi ({len(qa_fail_notifications)}/5)")

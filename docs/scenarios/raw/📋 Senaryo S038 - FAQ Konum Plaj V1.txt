@@ -1,0 +1,55 @@
+📋 Senaryo: S038 - FAQ Konum Plaj V1
+Senaryo Kodu ve Adı: S038 - FAQ Konum Plaj V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin otelin konumu ve plaja uzaklığı sorusuna telefon görüşmesi sırasında hızlı ve net bilgi vermek; gerekirse konum linkini paylaşmak için uygun kanala yönlendirmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Otel nerede, plaja uzaklık ne kadar?"
+
+"Konumunuz neresi?"
+
+"Plaja yürüyerek kaç dakika?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+FAQ Konusu: (Konum / Plaj uzaklığı)
+
+Dil: (TR/EN vb. - misafirin ifadesinin anlamından algılanır)
+
+Konum Linki: (Varsa WhatsApp/SMS ile paylaşım için not edilir)
+
+Takip Sorusu: (Ek destek ihtiyacı için kısa soru)
+
+Kayıt: (Görüşme kaydı/etiketi - ilgili FAQ konusu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin sorusu (intent), ifadenin ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+FAQ konusu “konum / plaj uzaklığı” ise sabit bilgi verilir:
+- Konum: Fethiye / Ölüdeniz (merkez)
+- Plaj uzaklığı: Yaklaşık 300 metre
+
+Misafir konum linki isterse, link paylaşımı için WhatsApp/SMS yönlendirmesi yapılır (kanal tercihi alınır).
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir “tam adres” isterse, aynı bilgi korunur ve konum linki paylaşımı teklif edilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Otelimiz Fethiye/Ölüdeniz merkezindedir; plaj yaklaşık 300 metre uzaklıktadır."
+
+2. Takip / Link Teklifi:
+
+"Dilerseniz konum linkini de WhatsApp veya SMS ile paylaşabilirim. Hangi kanaldan iletmemi istersiniz?"
+
+💬 Standart Yanıt Mesajları (EN)
+1. Information Reply:
+
+"Our hotel is in central Fethiye/Oludeniz; the beach is about 300 meters away."

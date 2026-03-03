@@ -12,9 +12,11 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import httpx
+from app.core.settings_service import get_quiet_room_policy
 
 
 # =========================
@@ -105,6 +107,46 @@ MONTHS_RU = {
     "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
 }
 
+MONTHS_DE = {
+    "januar": 1, "februar": 2, "marz": 3, "märz": 3, "april": 4,
+    "mai": 5, "juni": 6, "juli": 7, "august": 8,
+    "september": 9, "oktober": 10, "november": 11, "dezember": 12,
+}
+
+MONTHS_ES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+    "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+
+MONTHS_FR = {
+    "janvier": 1, "fevrier": 2, "février": 2, "mars": 3, "avril": 4,
+    "mai": 5, "juin": 6, "juillet": 7, "aout": 8, "août": 8,
+    "septembre": 9, "octobre": 10, "novembre": 11, "decembre": 12, "décembre": 12,
+}
+
+MONTHS_PT = {
+    "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3, "abril": 4,
+    "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+    "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+}
+
+MONTHS_AR = {
+    "يناير": 1, "فبراير": 2, "مارس": 3,
+    "أبريل": 4, "ابريل": 4,
+    "مايو": 5, "يونيو": 6, "يوليو": 7,
+    "أغسطس": 8, "اغسطس": 8,
+    "سبتمبر": 9,
+    "أكتوبر": 10, "اكتوبر": 10,
+    "نوفمبر": 11, "ديسمبر": 12,
+}
+
+MONTHS_HI = {
+    "जनवरी": 1, "फ़रवरी": 2, "फरवरी": 2, "मार्च": 3, "अप्रैल": 4,
+    "मई": 5, "जून": 6, "जुलाई": 7, "अगस्त": 8,
+    "सितंबर": 9, "अक्टूबर": 10, "नवंबर": 11, "दिसंबर": 12,
+}
+
 MONTHS_TR_REVERSE = {
     1: 'Ocak', 2: 'Subat', 3: 'Mart', 4: 'Nisan',
     5: 'Mayis', 6: 'Haziran', 7: 'Temmuz', 8: 'Agustos',
@@ -123,19 +165,79 @@ MONTHS_EN_REVERSE = {
 # =========================
 
 ROOM_TYPE_MAP = {
-    "DELUXE": {"tr": "Deluxe (25m2)", "en": "Deluxe (25m2)", "key": "deluxe"},
-    "SUPERIOR": {"tr": "Superior (30m2)", "en": "Superior (30 m2)", "key": "superior"},
-    "EXCLUSIVE LAND": {"tr": "Exclusive Sokak Manzarali (40m2)", "en": "Exclusive Street View (40 m2)", "key": "exclusiveLand"},
-    "EXCLUSIVE LAND VIEW": {"tr": "Exclusive Sokak Manzarali (40m2)", "en": "Exclusive Street View (40 m2)", "key": "exclusiveLand"},
-    "EXCLUSIVE STREET": {"tr": "Exclusive Sokak Manzarali (40m2)", "en": "Exclusive Street View (40 m2)", "key": "exclusiveLand"},
-    "EXCLUSIVE POOL": {"tr": "Exclusive Havuz Manzarali (40m2)", "en": "Exclusive Pool View (40m2)", "key": "exclusivePool"},
-    "EXCLUSIVE POOL VIEW": {"tr": "Exclusive Havuz Manzarali (40m2)", "en": "Exclusive Pool View (40m2)", "key": "exclusivePool"},
+    "DELUXE": {
+        "tr": "Deluxe (25m2)",
+        "en": "Deluxe (25m2)",
+        "ru": "Делюкс (25 м²)",
+        "key": "deluxe",
+    },
+    "SUPERIOR": {
+        "tr": "Superior (30m2)",
+        "en": "Superior (30 m2)",
+        "ru": "Супериор (30 м²)",
+        "key": "superior",
+    },
+    "EXCLUSIVE LAND": {
+        "tr": "Exclusive Sokak Manzarali (40m2)",
+        "en": "Exclusive Street View (40 m2)",
+        "ru": "Эксклюзив с видом на улицу (40 м²)",
+        "key": "exclusiveLand",
+    },
+    "EXCLUSIVE LAND VIEW": {
+        "tr": "Exclusive Sokak Manzarali (40m2)",
+        "en": "Exclusive Street View (40 m2)",
+        "ru": "Эксклюзив с видом на улицу (40 м²)",
+        "key": "exclusiveLand",
+    },
+    "EXCLUSIVE STREET": {
+        "tr": "Exclusive Sokak Manzarali (40m2)",
+        "en": "Exclusive Street View (40 m2)",
+        "ru": "Эксклюзив с видом на улицу (40 м²)",
+        "key": "exclusiveLand",
+    },
+    "EXCLUSIVE POOL": {
+        "tr": "Exclusive Havuz Manzarali (40m2)",
+        "en": "Exclusive Pool View (40m2)",
+        "ru": "Эксклюзив с видом на бассейн (40 м²)",
+        "key": "exclusivePool",
+    },
+    "EXCLUSIVE POOL VIEW": {
+        "tr": "Exclusive Havuz Manzarali (40m2)",
+        "en": "Exclusive Pool View (40m2)",
+        "ru": "Эксклюзив с видом на бассейн (40 м²)",
+        "key": "exclusivePool",
+    },
     # Daha spesifik oda adlarini genel "PENTHOUSE"tan once koy.
-    "PENTHOUSE LAND JAKUZILI": {"tr": "Penthouse Land - Jakuzili (25m2)", "en": "Penthouse Land with Jacuzzi (25m2)", "key": "penthouseLand"},
-    "PENTHOUSE LAND JACUZZI": {"tr": "Penthouse Land - Jakuzili (25m2)", "en": "Penthouse Land with Jacuzzi (25m2)", "key": "penthouseLand"},
-    "PENTHOUSE LAND": {"tr": "Penthouse Land - Jakuzili (25m2)", "en": "Penthouse Land with Jacuzzi (25m2)", "key": "penthouseLand"},
-    "PENTHOUSE": {"tr": "Penthouse - Jakuzili (45m2)", "en": "Penthouse with Jacuzzi (45m2)", "key": "penthouse"},
-    "PREMIUM": {"tr": "Premium - Jakuzili (45m2)", "en": "Premium (45m2)", "key": "premium"},
+    "PENTHOUSE LAND JAKUZILI": {
+        "tr": "Penthouse Land - Jakuzili (25m2)",
+        "en": "Penthouse Land with Jacuzzi (25m2)",
+        "ru": "Пентхаус с джакузи (вид на сушу, 25 м²)",
+        "key": "penthouseLand",
+    },
+    "PENTHOUSE LAND JACUZZI": {
+        "tr": "Penthouse Land - Jakuzili (25m2)",
+        "en": "Penthouse Land with Jacuzzi (25m2)",
+        "ru": "Пентхаус с джакузи (вид на сушу, 25 м²)",
+        "key": "penthouseLand",
+    },
+    "PENTHOUSE LAND": {
+        "tr": "Penthouse Land - Jakuzili (25m2)",
+        "en": "Penthouse Land with Jacuzzi (25m2)",
+        "ru": "Пентхаус с джакузи (вид на сушу, 25 м²)",
+        "key": "penthouseLand",
+    },
+    "PENTHOUSE": {
+        "tr": "Penthouse - Jakuzili (45m2)",
+        "en": "Penthouse with Jacuzzi (45m2)",
+        "ru": "Пентхаус с джакузи (45 м²)",
+        "key": "penthouse",
+    },
+    "PREMIUM": {
+        "tr": "Premium - Jakuzili (45m2)",
+        "en": "Premium (45m2)",
+        "ru": "Премиум с джакузи (45 м²)",
+        "key": "premium",
+    },
 }
 
 MONTHS_RU_REVERSE = {
@@ -386,6 +488,27 @@ def _child_pax_buckets(child_ages: List[int]) -> Dict[str, int]:
     }
 
 
+def _clear_child_age_payload_fields(payload: Dict[str, Any]) -> None:
+    """Payload icindeki child age alanlarini temizler; count alanlarini korur."""
+    if not isinstance(payload, dict):
+        return
+
+    for key in (
+        "childage",
+        "child-age",
+        "child-ages",
+        "child-age-list",
+        "child-age-arr",
+        "children-ages",
+    ):
+        payload.pop(key, None)
+
+    for key in list(payload.keys()):
+        k = str(key).strip().lower()
+        if re.fullmatch(r"child-\d+-age", k) or re.fullmatch(r"child-age-\d+", k):
+            payload.pop(key, None)
+
+
 def _normalize_room_type(api_room_type: str) -> Optional[Dict[str, str]]:
     """API'den gelen oda ismini sablon formatina cevir"""
     if not api_room_type:
@@ -442,6 +565,36 @@ def _normalize_turkish_chars(text: str) -> str:
     """Turkce karakterleri normalize et"""
     if not text:
         return ""
+    # Bazi kanallarda UTF-8 metin mojibake olarak gelebiliyor
+    # (örn: "AÄŸustos", "â€“"). Tarih parse kaçırmamak için önce onar.
+    mojibake_replacements = {
+        "Ã§": "ç",
+        "Ã‡": "Ç",
+        "ã§": "ç",
+        "ÄŸ": "ğ",
+        "Äž": "Ğ",
+        "äÿ": "ğ",
+        "Ä±": "ı",
+        "Ä°": "İ",
+        "ä±": "ı",
+        "Ã¶": "ö",
+        "Ã–": "Ö",
+        "ã¶": "ö",
+        "Ã¼": "ü",
+        "Ãœ": "Ü",
+        "ã¼": "ü",
+        "ÅŸ": "ş",
+        "Åž": "Ş",
+        "åÿ": "ş",
+        "â€“": "-",
+        "â€”": "-",
+        "â€‘": "-",
+        "â€™": "'",
+        "â€˜": "'",
+        "â€œ": '"',
+        "â€": '"',
+        "Â": "",
+    }
     replacements = {
         'ş': 's', 'Ş': 'S',
         'ğ': 'g', 'Ğ': 'G',
@@ -451,6 +604,16 @@ def _normalize_turkish_chars(text: str) -> str:
         'ç': 'c', 'Ç': 'C'
     }
     result = text
+    # "EKİM" lower() sonrasi "eki̇m" (i + combining dot) olabilir.
+    # Bu form regex eslesmesini bozdugu icin yalnizca bu isareti temizle.
+    result = result.replace("i\u0307", "i").replace("I\u0307", "I")
+    for bad, good in mojibake_replacements.items():
+        result = result.replace(bad, good)
+    # Arabic/Persian digits -> ASCII digits
+    result = result.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    result = result.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+    # Tarih araligi separator'larini normalize et (23–26 gibi)
+    result = re.sub(r"[–—−]", "-", result)
     for tr_char, en_char in replacements.items():
         result = result.replace(tr_char, en_char)
     return result
@@ -461,11 +624,17 @@ def _normalize_turkish_chars(text: str) -> str:
 # =========================
 
 def _get_all_months() -> Dict[str, int]:
-    """Tum ay isimlerini birlestir (TR + EN + RU + normalize edilmis)"""
+    """Tum ay isimlerini birlestir (TR + EN + RU + DE + ES + FR + PT + AR + HI + normalize edilmis)"""
     all_months = {}
     all_months.update(MONTHS_TR)
     all_months.update(MONTHS_EN)
     all_months.update(MONTHS_RU)
+    all_months.update(MONTHS_DE)
+    all_months.update(MONTHS_ES)
+    all_months.update(MONTHS_FR)
+    all_months.update(MONTHS_PT)
+    all_months.update(MONTHS_AR)
+    all_months.update(MONTHS_HI)
     # Turkce karakterli versiyonlari da ekle
     all_months["şubat"] = 2
     all_months["mayıs"] = 5
@@ -498,6 +667,7 @@ def _extract_date_range_natural(text: str) -> List[str]:
     year = today.year
     
     all_months = _get_all_months()
+    range_connectors = "ile|to|ve|and|arasi|arasında|between|tarihleri|al|a|au|bis|hasta|ate|até|à|الى|إلى|من|حتى|से|तक"
     
     # Pattern 1: "4 haziran giris, 9 haziran cikis" veya "4 haziran giris 9 haziran cikis"
     for month_name, month_num in all_months.items():
@@ -525,7 +695,7 @@ def _extract_date_range_natural(text: str) -> List[str]:
     # Pattern 2: "4 haziran ile 9 haziran", "4 haziran - 9 haziran"
     for month_name, month_num in all_months.items():
         month_normalized = _normalize_turkish_chars(month_name)
-        pattern = rf'(\d{{1,2}})\s*{month_normalized}\s*(?:ile|[-–—]|to|ve|and|arası|arasında|between|tarihleri)\s*(\d{{1,2}})\s*(\w+)?'
+        pattern = rf'(\d{{1,2}})\.?\s*{month_normalized}\s*(?:{range_connectors}|[-–—])\s*(\d{{1,2}})\.?\s*(?:de\s+)?(\w+)?'
         match = re.search(pattern, text_normalized)
         if match:
             day1 = int(match.group(1))
@@ -550,7 +720,7 @@ def _extract_date_range_natural(text: str) -> List[str]:
     # Pattern 3: "4-9 haziran", "4 - 9 haziran"
     for month_name, month_num in all_months.items():
         month_normalized = _normalize_turkish_chars(month_name)
-        pattern = rf'(\d{{1,2}})\s*[-–—]\s*(\d{{1,2}})\s*{month_normalized}'
+        pattern = rf'(\d{{1,2}})\.?\s*[-–—]\s*(\d{{1,2}})\.?\s*(?:de\s+)?{month_normalized}'
         match = re.search(pattern, text_normalized)
         if match:
             day1 = int(match.group(1))
@@ -569,7 +739,7 @@ def _extract_date_range_natural(text: str) -> List[str]:
     # Pattern 4: "4 ile 9 haziran arasi"
     for month_name, month_num in all_months.items():
         month_normalized = _normalize_turkish_chars(month_name)
-        pattern = rf'(\d{{1,2}})\s*(?:ile|[-–—]|to|ve|and)\s*(\d{{1,2}})\s*{month_normalized}'
+        pattern = rf'(\d{{1,2}})\.?\s*(?:{range_connectors}|[-–—])\s*(\d{{1,2}})\.?\s*(?:de\s+)?{month_normalized}'
         match = re.search(pattern, text_normalized)
         if match:
             day1 = int(match.group(1))
@@ -616,6 +786,49 @@ def _extract_date_range_natural(text: str) -> List[str]:
     return []
 
 
+def _extract_date_range_chinese(text: str) -> List[str]:
+    """
+    Çince tarih aralığı desteği.
+    Örnek:
+    - 2026年8月14日至18日
+    - 2026年8月14日到2026年8月18日
+    - 2026年8月14日-8月18日
+    """
+    if not text:
+        return []
+    low = (text or "").strip()
+    patterns = [
+        # 2026年8月14日到2026年8月18日
+        r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:到|至|-|—|–)\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?",
+        # 2026年8月14日到8月18日
+        r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:到|至|-|—|–)\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?",
+        # 2026年8月14日至18日
+        r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:到|至|-|—|–)\s*(\d{1,2})\s*日?",
+    ]
+    for idx, pattern in enumerate(patterns):
+        m = re.search(pattern, low)
+        if not m:
+            continue
+        try:
+            if idx == 0:
+                y1, mo1, d1, y2, mo2, d2 = [int(x) for x in m.groups()]
+            elif idx == 1:
+                y1, mo1, d1, mo2, d2 = [int(x) for x in m.groups()]
+                y2 = y1
+            else:
+                y1, mo1, d1, d2 = [int(x) for x in m.groups()]
+                y2, mo2 = y1, mo1
+
+            date1 = datetime(y1, mo1, d1)
+            date2 = datetime(y2, mo2, d2)
+            if date2 <= date1:
+                return []
+            return [date1.strftime("%Y-%m-%d"), date2.strftime("%Y-%m-%d")]
+        except Exception:
+            continue
+    return []
+
+
 def _extract_all_dates(text: str) -> List[str]:
     """
     Hem ISO formati hem dogal dili destekleyen tarih cikarici.
@@ -628,6 +841,11 @@ def _extract_all_dates(text: str) -> List[str]:
     iso_dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
     if len(iso_dates) >= 2:
         return iso_dates[:2]
+
+    # Çince tarih aralığı
+    chinese_dates = _extract_date_range_chinese(text)
+    if len(chinese_dates) >= 2:
+        return chinese_dates[:2]
     
     # Dogal dil tarih araligi dene
     natural_dates = _extract_date_range_natural(text)
@@ -771,6 +989,74 @@ async def fetch_price(
             f"/price returned success:false | params={json.dumps(params, ensure_ascii=False)} | response={snippet}"
         )
 
+    return data
+
+
+async def fetch_availability(
+    *,
+    hotel_id: str,
+    from_date: str,
+    to_date: str,
+    adult: int,
+    currency: Optional[str] = None,
+    child_ages: Optional[List[int]] = None,
+    timeout_sec: int = 15,
+) -> Union[Dict[str, Any], List[Any]]:
+    """
+    GET /hotel/{hotel_id}/availability
+    Booking API availability data.
+    """
+    api_key = _normalize_token(os.getenv("Elektra_Booking", ""))
+    if not api_key:
+        raise ElektrawebConfigError("Eksik config: Elektra_Booking ortam degiskeni bos.")
+    if not hotel_id:
+        raise ElektrawebConfigError("Eksik config: hotel_id bos.")
+
+    jwt = await _login_get_jwt(api_key, timeout_sec=timeout_sec)
+    url = f"{ELEKTRA_API_BASE_URL}/hotel/{hotel_id}/availability"
+    cur = (currency or DEFAULT_CURRENCY).strip().upper()
+    params: Dict[str, Any] = {
+        "fromdate": from_date,
+        "todate": to_date,
+        "adult": int(adult),
+        "currency": cur,
+    }
+    if child_ages:
+        normalized_child_ages = [
+            int(a)
+            for a in child_ages
+            if str(a).strip().isdigit() and 0 <= int(a) <= 16
+        ]
+        if normalized_child_ages:
+            child_age_csv = ",".join(str(a) for a in normalized_child_ages)
+            params["childage"] = child_age_csv
+            params["child-age"] = child_age_csv
+            params["child-ages"] = child_age_csv
+            params["child"] = len(normalized_child_ages)
+    headers = _elektra_auth_headers(jwt)
+
+    async with httpx.AsyncClient(timeout=timeout_sec, follow_redirects=True) as client:
+        resp = await client.get(url, headers=headers, params=params)
+
+    if resp.status_code >= 400:
+        ctype = resp.headers.get("content-type", "")
+        body = _safe_snippet(resp.text, 800)
+        raise ElektrawebAuthError(
+            f"/availability failed: HTTP {resp.status_code} | content-type={ctype} | params={json.dumps(params, ensure_ascii=False)} | body={body}"
+        )
+
+    try:
+        data = resp.json()
+    except Exception:
+        body = _safe_snippet(resp.text, 800)
+        raise ElektrawebAuthError(
+            f"/availability bad json | params={json.dumps(params, ensure_ascii=False)} | body={body}"
+        )
+    if isinstance(data, dict) and data.get("success") is False:
+        snippet = json.dumps(data, ensure_ascii=False)[:800]
+        raise ElektrawebAuthError(
+            f"/availability returned success:false | params={json.dumps(params, ensure_ascii=False)} | response={snippet}"
+        )
     return data
 
 
@@ -1697,6 +1983,33 @@ def _strip_dates(text: str, dates: List[str]) -> str:
     return out
 
 
+def _parse_simple_chinese_number(token: str) -> Optional[int]:
+    if not token:
+        return None
+    if token.isdigit():
+        try:
+            return int(token)
+        except Exception:
+            return None
+
+    mapping = {
+        "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+        "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+    }
+    s = token.strip()
+    if s in mapping:
+        return mapping[s]
+    # 十一 / 二十 / 二十三
+    if "十" in s:
+        parts = s.split("十")
+        left = parts[0]
+        right = parts[1] if len(parts) > 1 else ""
+        tens = mapping.get(left, 1) if left else 1
+        ones = mapping.get(right, 0) if right else 0
+        return tens * 10 + ones
+    return mapping.get(s)
+
+
 def _extract_adult_count(text: str) -> Optional[int]:
     """Yetiskin sayisini cikar"""
     low = _normalize_turkish_chars((text or "").lower())
@@ -1715,13 +2028,83 @@ def _extract_adult_count(text: str) -> Optional[int]:
     }
     for word, num in ru_number_words.items():
         low = re.sub(rf"\b{word}\b", num, low)
+
+    # Arapça sayi kelimelerini rakama çevir
+    ar_number_words = {
+        "واحد": "1", "واحدة": "1",
+        "اثنين": "2", "إثنين": "2", "اثنان": "2", "اتنين": "2",
+        "ثلاثة": "3", "ثلاث": "3",
+        "أربعة": "4", "اربعة": "4", "أربع": "4", "اربع": "4",
+        "خمسة": "5", "خمس": "5",
+        "ستة": "6", "ست": "6",
+        "سبعة": "7", "سبع": "7",
+        "ثمانية": "8", "ثمان": "8",
+        "تسعة": "9", "تسع": "9",
+        "عشرة": "10", "عشر": "10",
+    }
+    for word, num in ar_number_words.items():
+        low = re.sub(rf"\b{word}\b", num, low)
+
+    # Hintçe sayi kelimelerini rakama çevir
+    hi_number_words = {
+        "एक": "1",
+        "दो": "2",
+        "तीन": "3",
+        "चार": "4",
+        "पांच": "5",
+        "पाँच": "5",
+        "छह": "6",
+        "सात": "7",
+        "आठ": "8",
+        "नौ": "9",
+        "दस": "10",
+    }
+    for word, num in hi_number_words.items():
+        low = re.sub(rf"\b{word}\b", num, low)
     
-    # Pattern 1: "3 yetiskin", "2 kisi", "2 adults"
-    m = re.search(r"(\d+)\s*(yetiskin|kisi|adult|people|guest|kisilik|взросл\w*|человек|гост\w*)", low)
+    # Pattern 0: Çince (2位成人 / 两位成人)
+    raw = (text or "").lower()
+    cn_match = re.search(r"([0-9一二两三四五六七八九十]+)\s*(?:位|名)?\s*(?:成人|大人|成年人)", raw)
+    if cn_match:
+        cn_value = _parse_simple_chinese_number(cn_match.group(1))
+        if cn_value is not None:
+            return int(cn_value)
+
+    # Pattern 1: "3 yetiskin", "2 kisi", "2 adults", "2 erwachsene"
+    m = re.search(
+        r"(\d+)\s*(yetiskin|kisi|adults?|people|guests?|kisilik|взросл\w*|человек|гост\w*|erwachsene\w*)",
+        low,
+    )
     if m:
         try:
             return int(m.group(1))
         except:
+            pass
+
+    # Pattern 1.5: Arapça (2 بالغين / 2 أشخاص / ٢ شخص)
+    m = re.search(
+        r"([0-9]+)\s*(بالغ(?:ين)?|شخص(?:ين)?|اشخاص|أشخاص|ضيف(?:ين|ان)?|ضيوف)",
+        low,
+    )
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            pass
+
+    # Pattern 1.6: İkili Arapça biçimler (sayı yazılmadan)
+    if re.search(r"(شخصين|بالغين|ضيفين|زوجين)", low):
+        return 2
+
+    # Pattern 1.7: Hintçe (2 वयस्क / 2 वयस्कों / 2 मेहमान)
+    m = re.search(
+        r"(\d+)\s*(वयस्क(?:ों)?|मेहमान(?:ों)?|अतिथि(?:यों)?|व्यक्ति(?:यों)?)",
+        low,
+    )
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
             pass
     
     return None
@@ -1742,7 +2125,10 @@ def _extract_child_ages(text: str) -> List[int]:
     ages: List[int] = []
     low = _normalize_turkish_chars((text or "").lower())
 
-    child_keywords = ["cocuk", "child", "children", "kid", "kids", "bebek", "baby", "infant"]
+    child_keywords = [
+        "cocuk", "child", "children", "kid", "kids", "bebek", "baby", "infant",
+        "बच्चा", "बच्चों", "शिशु",
+    ]
     has_child_context = any(k in low for k in child_keywords)
     has_month_age = bool(re.search(r"\b\d{1,2}\s*ay\w*\b", low))
 
@@ -1752,7 +2138,7 @@ def _extract_child_ages(text: str) -> List[int]:
 
     # Mesajdan çocuk sayısı (örn: "2 cocuk")
     child_count: Optional[int] = None
-    m_cnt = re.search(r"(\d+)\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant)", low)
+    m_cnt = re.search(r"(\d+)\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant|बच्चा|बच्चों|शिशु)", low)
     if m_cnt:
         try:
             child_count = int(m_cnt.group(1))
@@ -1813,6 +2199,24 @@ def _extract_child_ages(text: str) -> List[int]:
             ages.extend([age] * min(count, 4))
             return ages[:4]
 
+    # Pattern 2.5: "cocuk yasi 7" / "child age 7" / "children ages 7 and 10"
+    m_age_label = re.search(
+        r"(?:cocuk|child|children|kid|kids|bebek|baby|infant)\w*"
+        r"(?:\s+\w+){0,3}\s*(?:yasi|yaslari|age|ages)\s*[:=\-]?\s*"
+        r"((?:\d{1,2}\s*(?:,|ve|and)\s*)*\d{1,2})",
+        low,
+    )
+    if m_age_label:
+        seq = m_age_label.group(1)
+        seq_ages = [int(n) for n in re.findall(r"\d{1,2}", seq)]
+        seq_ages = [a for a in seq_ages if 0 <= a <= 16]
+        if seq_ages:
+            if child_count and len(seq_ages) == 1 and child_count > 1:
+                return [seq_ages[0]] * min(child_count, 4)
+            if child_count and len(seq_ages) >= child_count:
+                return seq_ages[: min(child_count, 4)]
+            return seq_ages[:4]
+
     # Pattern 3: "5 yasinda cocuk" veya "5 yas cocuk"
     m = re.search(r"(\d+)\s*yas\w*\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant)", low)
     if m:
@@ -1820,8 +2224,12 @@ def _extract_child_ages(text: str) -> List[int]:
         if 0 <= age <= 16:
             ages.append(age)
 
-    # Pattern 3.5: "9 aylik bebek" vb. -> 0 yas
-    month_matches = list(re.finditer(r"(\d{1,2})\s*ay\w*", low))
+    # Pattern 3.5: "9 aylik bebek", "6 ay", "12 aylık" -> 0 yas.
+    # NOT: "2 ayrı oda ayarlayabilir..." gibi metinlerdeki "ay..." kelimelerine
+    # yanlis pozitif dusmemesi icin sadece ay birimi sekillerini kabul et.
+    month_matches = list(
+        re.finditer(r"\b(\d{1,2})\s*(?:ay|aylik|aylık|aylik\b|aylık\b)\b", low)
+    )
     if month_matches:
         month_zero_count = len(month_matches)
         if child_count and child_count > month_zero_count:
@@ -1837,6 +2245,15 @@ def _extract_child_ages(text: str) -> List[int]:
                     ages.append(a)
             except:
                 pass
+        # EN: "7 years old", "8 yr old", "6 y/o"
+        if not ages:
+            for mm in re.finditer(r"\b(\d{1,2})\s*(?:years?\s*old|yrs?\s*old|y\/o)\b", low):
+                try:
+                    a = int(mm.group(1))
+                    if 0 <= a <= 16:
+                        ages.append(a)
+                except Exception:
+                    pass
         if child_count and len(ages) >= child_count:
             return ages[: min(child_count, 4)]
 
@@ -1891,6 +2308,109 @@ def _infer_nationality(text: str) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
+def _collect_exchange_rows(node: Any, out: List[Dict[str, Any]]) -> None:
+    if isinstance(node, dict):
+        has_rate_key = any(k in node for k in ("RATE", "rate"))
+        has_currency_key = any(
+            k in node for k in ("CURRENCY", "currency", "CURCODE", "curcode", "CURRENCYCODE", "currencycode")
+        )
+        if has_rate_key and has_currency_key:
+            out.append(node)
+        for v in node.values():
+            if isinstance(v, (dict, list)):
+                _collect_exchange_rows(v, out)
+    elif isinstance(node, list):
+        for item in node:
+            if isinstance(item, (dict, list)):
+                _collect_exchange_rows(item, out)
+
+
+async def _fetch_exchange_rates_map(hotel_id: int, rate_date: str) -> Dict[str, float]:
+    from app.services.elektra_hoteladvisor_service import hoteladvisor_function
+
+    payload = {"DATE": rate_date, "HOTELID": int(hotel_id)}
+    raw = await hoteladvisor_function("FN_HOTEL_EXCHANGERATES_ALL", payload=payload, timeout_sec=15)
+    rows: List[Dict[str, Any]] = []
+    _collect_exchange_rows(raw, rows)
+    rates: Dict[str, float] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(
+            row.get("CURRENCY")
+            or row.get("currency")
+            or row.get("CURCODE")
+            or row.get("curcode")
+            or row.get("CURRENCYCODE")
+            or row.get("currencycode")
+            or ""
+        ).strip().upper()
+        try:
+            rate = float(row.get("RATE") if row.get("RATE") is not None else row.get("rate"))
+        except Exception:
+            continue
+        if code and rate > 0:
+            rates[code] = rate
+    return rates
+
+
+def _convert_amount_with_rates(amount: float, from_currency: str, to_currency: str, rates: Dict[str, float]) -> Optional[float]:
+    from_cur = (from_currency or "").strip().upper()
+    to_cur = (to_currency or "").strip().upper()
+    if amount <= 0:
+        return amount
+    if not from_cur or not to_cur:
+        return None
+    if from_cur == to_cur:
+        return amount
+    if from_cur not in rates or to_cur not in rates:
+        return None
+    amount_try = float(amount) * float(rates[from_cur])
+    return amount_try / float(rates[to_cur])
+
+
+async def _coerce_offer_currency(
+    offers: List[Dict[str, Any]],
+    *,
+    requested_currency: str,
+    hotel_id: str,
+    rate_date: str,
+) -> List[Dict[str, Any]]:
+    target = (requested_currency or "").strip().upper()
+    if not offers or not target:
+        return offers
+
+    # TRY/EUR/USD/GBP disinda bir hedefte otomatik donusum yapma.
+    if target not in {"TRY", "EUR", "USD", "GBP"}:
+        return offers
+
+    rates = await _fetch_exchange_rates_map(int(hotel_id or 0), rate_date)
+    if not rates:
+        return offers
+
+    converted: List[Dict[str, Any]] = []
+    for offer in offers:
+        if not isinstance(offer, dict):
+            converted.append(offer)
+            continue
+        row = dict(offer)
+        src = str(row.get("currency") or row.get("currency-code") or DEFAULT_CURRENCY).strip().upper() or DEFAULT_CURRENCY
+        for key in ("discounted-price", "price", "total-price"):
+            if row.get(key) is None:
+                continue
+            try:
+                original = float(row.get(key))
+            except Exception:
+                continue
+            conv = _convert_amount_with_rates(original, src, target, rates)
+            if conv is not None:
+                row[key] = _normalize_price_value(conv)
+        row["currency"] = target
+        row["currency-code"] = target
+        converted.append(row)
+    return converted
+
+
 def _is_price_inquiry(text: str) -> bool:
     """Mesajin fiyat/musaitlik sorgusu olup olmadigini kontrol et"""
     low = _normalize_turkish_chars((text or "").lower())
@@ -1901,6 +2421,610 @@ def _is_price_inquiry(text: str) -> bool:
         "giris", "cikis", "check", "konaklama"
     ]
     return any(kw in low for kw in price_keywords)
+
+
+def _to_int_or_none(value: Any) -> Optional[int]:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return int(value)
+        return int(str(value).strip())
+    except Exception:
+        return None
+
+
+def _is_offer_bookable(offer: Dict[str, Any]) -> bool:
+    """Offer rezervasyona uygun mu? (müsaitlik/satış durumu)"""
+    if not isinstance(offer, dict):
+        return False
+
+    falsey_availability_keys = (
+        "is-available", "is_available", "available", "bookable", "is-saleable", "is_saleable",
+    )
+    for key in falsey_availability_keys:
+        if key in offer:
+            val = offer.get(key)
+            if isinstance(val, bool) and not val:
+                return False
+            sval = str(val).strip().lower()
+            if sval in {"false", "0", "no", "none", "yok"}:
+                return False
+
+    count_keys = (
+        "room-count", "room_count", "available-room-count", "available_room_count",
+        "availability", "quota", "remaining", "room-to-sell", "room_to_sell",
+    )
+    for key in count_keys:
+        iv = _to_int_or_none(offer.get(key))
+        if iv is not None and iv <= 0:
+            return False
+
+    # Elektra /price yanitinda gece bazli stok listesi gelebilir.
+    arr = offer.get("availability-arr")
+    if isinstance(arr, list) and arr:
+        for v in arr:
+            iv = _to_int_or_none(v)
+            if iv is not None and iv <= 0:
+                return False
+
+    # Bazi tenantlarda stop-sell nested rate-rules altinda tutulur.
+    rr = offer.get("rate-rules")
+    if isinstance(rr, dict):
+        if _to_bool(rr.get("stop-sell")):
+            return False
+
+    status = str(offer.get("status") or offer.get("availability-status") or "").strip().lower()
+    if status in {"soldout", "sold_out", "full", "closed", "unavailable", "not_available", "pasif"}:
+        return False
+
+    return True
+
+
+BASE_ROOM_REQUEST_TAGS: Dict[str, set] = {
+    "deluxe": set(),
+    "superior": set(),
+    "exclusiveLand": {"street_view", "noisy"},
+    "exclusivePool": {"pool_view", "noisy"},
+    "penthouseLand": {"jacuzzi"},
+    "penthouse": {"jacuzzi"},
+    "premium": {"jacuzzi"},
+}
+
+
+def _resolve_room_key_from_label(label: str) -> Optional[str]:
+    normalized = _normalize_turkish_chars(str(label or "")).strip()
+    if not normalized:
+        return None
+
+    # First try canonical room normalization used by API room-type mapping.
+    room_info = _normalize_room_type(normalized)
+    if room_info and room_info.get("key"):
+        return str(room_info["key"])
+
+    low = normalized.lower()
+    mapping = (
+        ("exclusive pool", "exclusivePool"),
+        ("exclusive havuz", "exclusivePool"),
+        ("exclusive land", "exclusiveLand"),
+        ("exclusive sokak", "exclusiveLand"),
+        ("exclusive cadde", "exclusiveLand"),
+        ("exclusive street", "exclusiveLand"),
+        ("penthouse land", "penthouseLand"),
+        ("penthouse", "penthouse"),
+        ("superior", "superior"),
+        ("deluxe", "deluxe"),
+        ("premium", "premium"),
+    )
+    for hint, room_key in mapping:
+        if hint in low:
+            return room_key
+    return None
+
+
+@lru_cache(maxsize=1)
+def _automation_room_view_tags() -> Dict[str, set]:
+    """
+    Oda manzara etiketlerini otel veri dosyasindan (automation_info) turetir.
+    Bu sayede sabit hardcode yerine otel bilgisindeki gercek manzara tanimi kullanilir.
+    """
+    try:
+        from app.content.automation_info import OTOMASYON_INFO_TEXT_V2
+    except Exception:
+        return {}
+
+    text = str(OTOMASYON_INFO_TEXT_V2 or "")
+    if not text:
+        return {}
+
+    tags: Dict[str, set] = {}
+    blocks = re.split(r"\[ODA T[İI]P[İI]\s*#\d+\]", text, flags=re.IGNORECASE)
+    for block in blocks:
+        room_m = re.search(
+            r"Oda\s*ad[ıi]\s*\(TR\s*/\s*EN\)\s*:\s*([^\n\r]+)",
+            block,
+            flags=re.IGNORECASE,
+        )
+        view_m = re.search(
+            r"Manzara\s*/\s*konum\s*:\s*([^\n\r]+)",
+            block,
+            flags=re.IGNORECASE,
+        )
+        if not room_m or not view_m:
+            continue
+        room_key = _resolve_room_key_from_label(room_m.group(1))
+        if not room_key:
+            continue
+
+        view_low = _normalize_turkish_chars(view_m.group(1).lower())
+        room_tags: set = set()
+        if any(k in view_low for k in ("havuz manzara", "havuz taraf", "pool view", "poolside", "pool-side")):
+            room_tags.add("pool_view")
+        if any(k in view_low for k in ("cadde manzara", "sokak manzara", "street view", "city view")):
+            room_tags.add("street_view")
+        if any(k in view_low for k in ("deniz manzara", "sea view", "ocean view")):
+            room_tags.add("sea_view")
+        if room_tags:
+            tags.setdefault(room_key, set()).update(room_tags)
+
+    return tags
+
+
+def _room_request_tags() -> Dict[str, set]:
+    tags: Dict[str, set] = {k: set(v) for k, v in BASE_ROOM_REQUEST_TAGS.items()}
+    for room_key, dynamic_tags in _automation_room_view_tags().items():
+        tags.setdefault(room_key, set()).update(dynamic_tags)
+    policy = get_quiet_room_policy()
+    for key in policy.get("quiet_auto_room_keys", []):
+        tags.setdefault(key, set()).add("quiet_preferred")
+    for key in policy.get("quiet_handoff_room_keys", []):
+        tags.setdefault(key, set()).add("quiet_human_only")
+    for key in policy.get("standard_room_keys", []):
+        tags.setdefault(key, set()).add("standard_preferred")
+    return tags
+
+
+def _extract_room_request_filters(text: str) -> Dict[str, set]:
+    low = _normalize_turkish_chars((text or "").lower())
+    required: set = set()
+    forbidden: set = set()
+
+    if any(k in low for k in ("sessiz", "sakin", "quiet", "no noise", "less noise")):
+        required.add("quiet_preferred")
+        forbidden.add("noisy")
+    if any(k in low for k in ("deniz manzara", "sea view", "ocean view")):
+        required.add("sea_view")
+    if any(k in low for k in ("havuz manzara", "pool view")):
+        required.add("pool_view")
+    if any(k in low for k in ("sokak manzara", "street view", "city view")):
+        required.add("street_view")
+    if any(k in low for k in ("jakuz", "jakuzi", "jacuzzi")):
+        required.add("jacuzzi")
+    if (
+        "standart oda" in low
+        or "standard room" in low
+        or "standart room" in low
+        or ("standart" in low and "oda" in low)
+    ):
+        required.add("standard_preferred")
+
+    return {"required": required, "forbidden": forbidden}
+
+
+def _room_tag_supported_globally(tag: str) -> bool:
+    if not tag:
+        return False
+    room_tags = _room_request_tags()
+    return any(tag in tags for tags in room_tags.values())
+
+
+def _offer_matches_room_request(offer: Dict[str, Any], filters: Dict[str, set]) -> bool:
+    room_tags = _room_request_tags()
+    room_info = _normalize_room_type(offer.get("room-type", ""))
+    if not room_info:
+        return False
+    tags = room_tags.get(room_info["key"], set())
+    required = filters.get("required", set())
+    forbidden = filters.get("forbidden", set())
+    if required and not required.issubset(tags):
+        return False
+    if forbidden and tags.intersection(forbidden):
+        return False
+    return True
+
+
+def _extract_offers_from_api_json(api_json: Union[Dict[str, Any], List[Any]]) -> Tuple[List[Dict[str, Any]], bool]:
+    offers: List[Dict[str, Any]] = []
+    explicit_list_seen = False
+    if isinstance(api_json, list):
+        explicit_list_seen = True
+        offers = [x for x in api_json if isinstance(x, dict)]
+    elif isinstance(api_json, dict):
+        for key in ("data", "result", "offers", "prices"):
+            if key in api_json and isinstance(api_json.get(key), list):
+                explicit_list_seen = True
+                offers = [x for x in api_json.get(key) if isinstance(x, dict)]
+                break
+    return offers, explicit_list_seen
+
+
+def _normalize_roomtype_code(raw: str) -> str:
+    return re.sub(r"\s+", " ", str(raw or "").strip()).upper()
+
+
+def _normalize_row_date(raw: Any) -> str:
+    txt = str(raw or "").strip()
+    if len(txt) >= 10:
+        return txt[:10]
+    return txt
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    sval = str(value).strip().lower()
+    return sval in {"1", "true", "yes", "y", "evet"}
+
+
+def _stay_night_dates(from_date: str, to_date: str) -> List[str]:
+    try:
+        start = datetime.strptime(from_date, "%Y-%m-%d")
+        end = datetime.strptime(to_date, "%Y-%m-%d")
+    except Exception:
+        return []
+    if end <= start:
+        return []
+    out: List[str] = []
+    cur = start
+    while cur < end:
+        out.append(cur.strftime("%Y-%m-%d"))
+        cur += timedelta(days=1)
+    return out
+
+
+def _extract_hoteladvisor_rows(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    if not isinstance(raw, dict):
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    result_sets = raw.get("ResultSets")
+    if isinstance(result_sets, list):
+        for rs in result_sets:
+            if isinstance(rs, list):
+                rows.extend(x for x in rs if isinstance(x, dict))
+
+    data = raw.get("data")
+    if isinstance(data, list):
+        rows.extend(x for x in data if isinstance(x, dict))
+
+    result = raw.get("result")
+    if isinstance(result, list):
+        rows.extend(x for x in result if isinstance(x, dict))
+
+    return rows
+
+
+def _extract_booking_availability_rows(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    if not isinstance(raw, dict):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for key in ("data", "result", "items", "rows", "availability"):
+        val = raw.get(key)
+        if isinstance(val, list):
+            rows.extend(x for x in val if isinstance(x, dict))
+    return rows
+
+def _extract_room_stock_from_availability_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    from_date: str,
+    to_date: str,
+    room_type_id_to_key: Optional[Dict[int, str]] = None,
+) -> Dict[str, int]:
+    """
+    Her oda tipi icin tum gece araliginda satilabilir adet (minimum ROOMTOSELL) hesaplar.
+    - stop-sell olan gece varsa o gece adet 0 kabul edilir.
+    - Bir oda tipinin tum gecelerde kaydi yoksa sonuca dahil edilmez.
+    """
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return {}
+    required_dates = set(nights)
+    id_to_key = room_type_id_to_key or {}
+
+    per_key_per_date: Dict[str, Dict[str, int]] = {}
+
+    for row in rows:
+        date_key = _normalize_row_date(row.get("date") if "date" in row else row.get("DATE"))
+        if date_key not in required_dates:
+            continue
+
+        room_key = ""
+        room_type_raw = (
+            row.get("room-type")
+            or row.get("room_type")
+            or row.get("ROOMTYPE")
+            or row.get("ROOMTYPECODE")
+            or row.get("room-type-code")
+            or ""
+        )
+        room_info = _normalize_room_type(str(room_type_raw))
+        if room_info:
+            room_key = room_info["key"]
+        if not room_key:
+            rid = _to_int_or_none(row.get("room-type-id") if "room-type-id" in row else row.get("room_type_id"))
+            if rid is not None and rid in id_to_key:
+                room_key = id_to_key[rid]
+        if not room_key:
+            continue
+
+        room_to_sell = _to_int_or_none(
+            row.get("ROOMTOSELL")
+            if "ROOMTOSELL" in row
+            else row.get("room-to-sell")
+        )
+        stop_sell = _to_bool(row.get("STOPSELL") if "STOPSELL" in row else row.get("stop-sell"))
+        current = 0 if stop_sell else max(int(room_to_sell or 0), 0)
+
+        day_map = per_key_per_date.setdefault(room_key, {})
+        prev = day_map.get(date_key)
+        # Ayni gun/oda icin birden fazla satir varsa en yuksek satilabilir adedi kullan.
+        day_map[date_key] = current if prev is None else max(prev, current)
+
+    out: Dict[str, int] = {}
+    for room_key, day_map in per_key_per_date.items():
+        if set(day_map.keys()) != required_dates:
+            continue
+        out[room_key] = min(day_map[d] for d in nights)
+    return out
+
+
+def _derive_stay_eligible_room_keys(
+    rows: List[Dict[str, Any]],
+    *,
+    from_date: str,
+    to_date: str,
+) -> set[str]:
+    """
+    Rule:
+    - Her gece (check-in dahil, check-out haric) icin ROOMTOSELL > 0 olmali
+    - Her gece icin STOPSELL true olmamali
+    """
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return set()
+    required_dates = set(nights)
+
+    seen_dates_by_key: Dict[str, set[str]] = {}
+    good_dates_by_key: Dict[str, set[str]] = {}
+
+    for row in rows:
+        date_key = _normalize_row_date(row.get("DATE") or row.get("date"))
+        if date_key not in required_dates:
+            continue
+
+        room_code = _normalize_roomtype_code(row.get("ROOMTYPECODE") or row.get("room-type-code"))
+        room_info = _normalize_room_type(room_code)
+        if not room_info:
+            continue
+        room_key = room_info["key"]
+
+        seen_dates_by_key.setdefault(room_key, set()).add(date_key)
+
+        room_to_sell = _to_int_or_none(
+            row.get("ROOMTOSELL")
+            if "ROOMTOSELL" in row
+            else row.get("room-to-sell")
+        )
+        stop_sell = _to_bool(row.get("STOPSELL") if "STOPSELL" in row else row.get("stop-sell"))
+
+        if (room_to_sell is not None and room_to_sell > 0) and not stop_sell:
+            good_dates_by_key.setdefault(room_key, set()).add(date_key)
+
+    eligible: set[str] = set()
+    for room_key, seen_dates in seen_dates_by_key.items():
+        if seen_dates == required_dates and good_dates_by_key.get(room_key, set()) == required_dates:
+            eligible.add(room_key)
+    return eligible
+
+
+def _derive_stay_eligible_room_type_ids_from_availability(
+    rows: List[Dict[str, Any]],
+    *,
+    from_date: str,
+    to_date: str,
+) -> set[int]:
+    """
+    Booking API /availability fallback:
+    Bir room-type-id'nin tum gece araliginda (check-in dahil, check-out haric)
+    her gece ROOMTOSELL > 0 ve STOPSELL != true olmasi gerekir.
+    """
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return set()
+    required_dates = set(nights)
+    seen_by_room_id: Dict[int, set[str]] = {}
+    good_by_room_id: Dict[int, set[str]] = {}
+
+    for row in rows:
+        rid = _to_int_or_none(row.get("room-type-id") if "room-type-id" in row else row.get("room_type_id"))
+        if rid is None or rid <= 0:
+            continue
+        date_key = _normalize_row_date(row.get("date") if "date" in row else row.get("DATE"))
+        if date_key not in required_dates:
+            continue
+        rid_i = int(rid)
+        seen_by_room_id.setdefault(rid_i, set()).add(date_key)
+
+        has_capacity_signal = ("ROOMTOSELL" in row) or ("room-to-sell" in row) or ("STOPSELL" in row) or ("stop-sell" in row)
+        room_to_sell = _to_int_or_none(
+            row.get("ROOMTOSELL")
+            if "ROOMTOSELL" in row
+            else row.get("room-to-sell")
+        )
+        stop_sell = _to_bool(row.get("STOPSELL") if "STOPSELL" in row else row.get("stop-sell"))
+        if not has_capacity_signal:
+            # Bazi payload'larda room-to-sell/stop-sell alanlari olmayabiliyor.
+            # Bu durumda "tum gecelerde satir var" kuralina geri don.
+            good_by_room_id.setdefault(rid_i, set()).add(date_key)
+        elif (room_to_sell is not None and room_to_sell > 0) and not stop_sell:
+            good_by_room_id.setdefault(rid_i, set()).add(date_key)
+
+    return {
+        rid
+        for rid, dates in seen_by_room_id.items()
+        if dates == required_dates and good_by_room_id.get(rid, set()) == required_dates
+    }
+
+
+async def _fetch_stay_eligibility(
+    *,
+    hotel_id: str,
+    from_date: str,
+    to_date: str,
+    adult: int,
+    currency: Optional[str] = None,
+    child_ages: Optional[List[int]] = None,
+    timeout_sec: int = 20,
+) -> Dict[str, Any]:
+    """
+    Returns:
+    {
+      "source": "hoteladvisor_vw" | "bookingapi_availability",
+      "room_keys": set[str],
+      "room_type_ids": set[int],
+    }
+    """
+    # Kullanici talebi: 4001.hoteladvisor.net kullanma.
+    # Musaitlik kontrolu yalnizca bookingapi.elektraweb.com /availability ile yapilir.
+    print(
+        f"[ELEKTRA][AVAILABILITY] source=bookingapi_only hotel_id={hotel_id} {from_date}->{to_date}"
+    )
+
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return {"source": "bookingapi_availability", "room_keys": set(), "room_type_ids": set()}
+
+    raw = await fetch_availability(
+        hotel_id=hotel_id,
+        from_date=from_date,
+        to_date=to_date,
+        adult=int(adult),
+        currency=(currency or DEFAULT_CURRENCY),
+        child_ages=child_ages or None,
+        timeout_sec=timeout_sec,
+    )
+    rows = _extract_booking_availability_rows(raw)
+    room_type_ids = _derive_stay_eligible_room_type_ids_from_availability(
+        rows,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    return {"source": "bookingapi_availability", "room_keys": set(), "room_type_ids": room_type_ids}
+
+
+async def _fetch_stay_eligible_room_keys_from_hoteladvisor(
+    *,
+    hotel_id: str,
+    from_date: str,
+    to_date: str,
+    timeout_sec: int = 20,
+) -> set[str]:
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return set()
+    last_night = nights[-1]
+
+    # Local import to avoid import cycle at module import time.
+    from app.services.elektra_hoteladvisor_service import hoteladvisor_select
+
+    payload: Dict[str, Any] = {
+        # HAR uyumlulugu: bu endpoint tenant bazli secili kolonlari reddedebilir.
+        # Extranet ekraninda Select:["*"] ile cagriliyor.
+        "Select": ["*"],
+        "Where": [
+            {"Column": "DATE", "Operator": ">=", "Value": from_date},
+            {"Column": "DATE", "Operator": "<=", "Value": last_night},
+            {"Column": "ROOMTYPECODE", "Operator": "IS NOT NULL", "Value": ""},
+            {},
+            {"Column": "HOTELID", "Operator": "=", "Value": int(hotel_id)},
+        ],
+        "Paging": {"Current": 1, "ItemsPerPage": 9999},
+    }
+    raw = await hoteladvisor_select("VW_EASYPMS_AVAILABILITY", payload=payload, timeout_sec=timeout_sec)
+    rows = _extract_hoteladvisor_rows(raw)
+    return _derive_stay_eligible_room_keys(rows, from_date=from_date, to_date=to_date)
+
+async def fetch_room_stock_by_type_from_availability(
+    *,
+    hotel_id: str,
+    from_date: str,
+    to_date: str,
+    adult: int,
+    currency: Optional[str] = None,
+    child_ages: Optional[List[int]] = None,
+    room_type_id_to_key: Optional[Dict[int, str]] = None,
+    timeout_sec: int = 20,
+) -> Dict[str, int]:
+    """
+    Booking API /availability verisinden oda tipi bazinda satilabilir adet dondurur.
+    Donen deger: {"premium": 2, "superior": 1, ...}
+    """
+    nights = _stay_night_dates(from_date, to_date)
+    if not nights:
+        return {}
+    raw = await fetch_availability(
+        hotel_id=hotel_id,
+        from_date=from_date,
+        to_date=to_date,
+        adult=int(adult),
+        currency=(currency or DEFAULT_CURRENCY),
+        child_ages=child_ages or None,
+        timeout_sec=timeout_sec,
+    )
+    rows = _extract_booking_availability_rows(raw)
+    return _extract_room_stock_from_availability_rows(
+        rows,
+        from_date=from_date,
+        to_date=to_date,
+        room_type_id_to_key=room_type_id_to_key or {},
+    )
+
+
+def _filter_offers_for_customer_request(
+    offers: List[Dict[str, Any]],
+    request_text: str,
+) -> Tuple[List[Dict[str, Any]], Dict[str, set], Dict[str, bool]]:
+    filters = _extract_room_request_filters(request_text)
+    filtered = [o for o in offers if _is_offer_bookable(o)]
+    meta: Dict[str, bool] = {
+        "quiet_human_only_found": False,
+        "unsupported_sea_view_request": False,
+    }
+
+    # Otelde hiç bulunmayan oda özelliği istenirse bunu availability yokmuş gibi
+    # göstermeyelim; deterministik olarak "özellik mevcut değil" cevabı üretelim.
+    if "sea_view" in filters.get("required", set()) and not _room_tag_supported_globally("sea_view"):
+        meta["unsupported_sea_view_request"] = True
+        return [], filters, meta
+
+    if "quiet_preferred" in filters.get("required", set()):
+        room_tags = _room_request_tags()
+        for offer in filtered:
+            room_info = _normalize_room_type(offer.get("room-type", ""))
+            if not room_info:
+                continue
+            tags = room_tags.get(room_info["key"], set())
+            if "quiet_human_only" in tags:
+                meta["quiet_human_only_found"] = True
+
+    if filters.get("required") or filters.get("forbidden"):
+        filtered = [o for o in filtered if _offer_matches_room_request(o, filters)]
+    return filtered, filters, meta
 
 
 # =========================
@@ -1915,6 +3039,7 @@ def _format_price_reply(
     adult: int,
     child_count: int = 0,
     child_ages: Optional[List[int]] = None,
+    request_context_text: str = "",
 ) -> Tuple[str, bool]:
     """
     API response'unu sablona uygun formatta dondur.
@@ -1922,22 +3047,61 @@ def _format_price_reply(
     success=False ise handoff gerekli
     """
     
-    offers: List[Dict[str, Any]] = []
-    explicit_list_seen = False
-
-    if isinstance(api_json, list):
-        explicit_list_seen = True
-        offers = [x for x in api_json if isinstance(x, dict)]
-    elif isinstance(api_json, dict):
-        for key in ("data", "result", "offers", "prices"):
-            if key in api_json and isinstance(api_json.get(key), list):
-                explicit_list_seen = True
-                offers = [x for x in api_json.get(key) if isinstance(x, dict)]
-                break
+    offers, explicit_list_seen = _extract_offers_from_api_json(api_json)
+    filtered_offers, request_filters, filter_meta = _filter_offers_for_customer_request(
+        offers,
+        request_context_text or "",
+    )
+    offers = filtered_offers
 
     # ✅ Boş liste geldiyse: handoff değil, "müsait yok" mesajı dön
     if not offers:
         if explicit_list_seen:
+            had_request_filter = bool(request_filters.get("required") or request_filters.get("forbidden"))
+            if had_request_filter:
+                if filter_meta.get("unsupported_sea_view_request"):
+                    if lang == "en":
+                        return (
+                            "Hello, thank you for your interest.\n\n"
+                            "Our hotel does not have sea-view rooms. "
+                            "However, we do have pool-view and street-view room options.\n\n"
+                            "Would you like me to share suitable alternative room types?\n\n"
+                            "I will be happy to assist."
+                        , True)
+                    if lang == "ru":
+                        return (
+                            "Здравствуйте, спасибо за ваш интерес.\n\n"
+                            "В нашем отеле нет номеров с видом на море. "
+                            "Однако у нас есть варианты с видом на бассейн и на улицу.\n\n"
+                            "Хотите, я подберу для вас подходящие альтернативные типы номеров?\n\n"
+                            "С радостью помогу."
+                        , True)
+                    return (
+                        "Merhaba, ilginiz için teşekkür ederim.\n\n"
+                        "Otelimizde deniz manzaralı oda bulunmamaktadır. Ancak havuz manzaralı ve cadde manzaralı odalarımız mevcuttur.\n\n"
+                        "Size uygun alternatif oda tipleri hakkında bilgi vermemi ister misiniz?\n\n"
+                        "Nazikçe cevabınızı bekliyorum."
+                    , True)
+                if lang == "en":
+                    date_range = _format_date_range_en(from_date, to_date)
+                    return (
+                        f"For {date_range}, I couldn't find rooms that match your requested room preference. "
+                        f"If you share an alternative preference, I can check again.",
+                        True
+                    )
+                if lang == "ru":
+                    date_range = _format_date_range_ru(from_date, to_date)
+                    return (
+                        f"На даты {date_range} не нашлось номеров, соответствующих вашему запросу по типу/расположению комнаты. "
+                        f"Если укажете альтернативу, проверю снова.",
+                        True
+                    )
+                date_range = _format_date_range_tr(from_date, to_date)
+                return (
+                    f"{date_range} tarihleri için talep ettiğiniz oda özelliğine uygun müsait oda bulunamadı. "
+                    f"Alternatif tercih paylaşırsanız tekrar kontrol edebilirim.",
+                    True
+                )
             if lang == "en":
                 date_range = _format_date_range_en(from_date, to_date)
                 return (
@@ -1970,44 +3134,63 @@ def _format_price_reply(
     }
     _PRICE_ALLOWED_RATE_TYPES_LOWER = {x.lower() for x in _PRICE_ALLOWED_RATE_TYPES}
 
-    room_prices: Dict[str, Dict[str, Optional[float]]] = {}
-    currency = "EUR"
+    def _build_room_prices(source_offers: List[Dict[str, Any]], *, strict_rate_type: bool) -> Tuple[Dict[str, Dict[str, Optional[float]]], str]:
+        out: Dict[str, Dict[str, Optional[float]]] = {}
+        cur = "EUR"
+        for offer in source_offers:
+            room_type_raw = offer.get("room-type", "")
+            room_info = _normalize_room_type(room_type_raw)
+            if not room_info:
+                continue
 
-    for offer in offers:
-        room_type_raw = offer.get("room-type", "")
-        room_info = _normalize_room_type(room_type_raw)
+            # Rate-type filtresi: Kontrat, Balayi, SPA vb. gosterme
+            rate_type_name = (offer.get("rate-type") or "").strip().lower()
+            if strict_rate_type and rate_type_name and rate_type_name not in _PRICE_ALLOWED_RATE_TYPES_LOWER:
+                continue
 
-        if not room_info:
-            continue
+            room_key = room_info["key"]
+            if room_key not in out:
+                out[room_key] = {"refundable": None, "non_refundable": None}
 
-        # Rate-type filtresi: Kontrat, Balayi, SPA vb. gosterme
-        rate_type_name = (offer.get("rate-type") or "").strip().lower()
-        if rate_type_name and rate_type_name not in _PRICE_ALLOWED_RATE_TYPES_LOWER:
-            continue
+            raw_price = offer.get("discounted-price") or offer.get("price") or 0
+            price = _normalize_price_value(float(raw_price))
+            cur = offer.get("currency", "EUR")
 
-        room_key = room_info["key"]
-        if room_key not in room_prices:
-            room_prices[room_key] = {"refundable": None, "non_refundable": None}
+            cancel_info = offer.get("cancellation-penalty", {})
+            is_refundable = cancel_info.get("is-refundable", False)
+            if is_refundable:
+                if out[room_key]["refundable"] is None or price < out[room_key]["refundable"]:
+                    out[room_key]["refundable"] = price
+            else:
+                if out[room_key]["non_refundable"] is None or price < out[room_key]["non_refundable"]:
+                    out[room_key]["non_refundable"] = price
+        return out, cur
 
-        # Fiyati oldugu gibi koru (musteri mesaji ile rezervasyon fiyat tutarli kalsin)
-        raw_price = offer.get("discounted-price") or offer.get("price") or 0
-        price = _normalize_price_value(float(raw_price))
-        currency = offer.get("currency", "EUR")
-
-        # Iade durumunu kontrol et
-        cancel_info = offer.get("cancellation-penalty", {})
-        is_refundable = cancel_info.get("is-refundable", False)
-
-        if is_refundable:
-            if room_prices[room_key]["refundable"] is None or price < room_prices[room_key]["refundable"]:
-                room_prices[room_key]["refundable"] = price
-        else:
-            if room_prices[room_key]["non_refundable"] is None or price < room_prices[room_key]["non_refundable"]:
-                room_prices[room_key]["non_refundable"] = price
+    room_prices, currency = _build_room_prices(offers, strict_rate_type=True)
+    if not room_prices:
+        # Fallback: Bazi acentalarda sadece "Kontrat" rate-type donuyor.
+        # Musaitlik dogruyken "müsait yok" dememek icin bookable odalardan fiyat olustur.
+        room_prices, currency = _build_room_prices(offers, strict_rate_type=False)
 
     # Hic oda bulunamadi - HANDOFF
     if not room_prices:
         return ("", False)
+
+    lang_norm = (lang or "en").lower()
+    if lang_norm not in {"tr", "en", "ru", "de", "ar", "es", "fr", "zh", "hi", "pt"}:
+        lang_norm = "en"
+
+    currency_upper = (currency or "").strip().upper()
+    if lang_norm == "tr" and currency_upper == "TRY":
+        display_currency = "₺"
+    elif lang_norm == "ru":
+        display_currency = {
+            "EUR": "евро",
+            "USD": "долл. США",
+            "TRY": "тур. лир",
+        }.get(currency_upper, currency)
+    else:
+        display_currency = currency
 
     # Tarihleri formatla
     nights = _calculate_nights(from_date, to_date)
@@ -2015,14 +3198,17 @@ def _format_price_reply(
     # Cocuk metni
     child_text_tr = ""
     child_text_en = ""
+    child_text_zh = ""
     if child_count > 0:
         ages_txt_tr = " ve ".join(f"{a} yaş" for a in (child_ages or []))
         ages_txt_en = ", ".join(f"age {a}" for a in (child_ages or []))
+        ages_txt_zh = "、".join(f"{a}岁" for a in (child_ages or []))
         child_text_tr = f" + {child_count} çocuk ({ages_txt_tr})" if ages_txt_tr else f" + {child_count} çocuk"
         child_text_en = f" + {child_count} children ({ages_txt_en})" if ages_txt_en else f" + {child_count} children"
+        child_text_zh = f" + {child_count}名儿童（{ages_txt_zh}）" if ages_txt_zh else f" + {child_count}名儿童"
     
     # Sablona gore mesaj olustur
-    if lang == "en":
+    if lang_norm == "en":
         date_range = _format_date_range_en(from_date, to_date)
         lines = [
             f"Thank you very much for your interest in our hotel.",
@@ -2051,8 +3237,8 @@ def _format_price_reply(
             nr_price = prices.get("non_refundable")
             r_price = prices.get("refundable")
             
-            lines.append(f"Non refundable: {_format_price(nr_price)} {currency}" if nr_price is not None else "Non refundable: -")
-            lines.append(f"Free Cancellation: {_format_price(r_price)} {currency}" if r_price is not None else "Free Cancellation: -")
+            lines.append(f"Non refundable: {_format_price(nr_price)} {display_currency}" if nr_price is not None else "Non refundable: -")
+            lines.append(f"Free Cancellation: {_format_price(r_price)} {display_currency}" if r_price is not None else "Free Cancellation: -")
             lines.append("")
         
         lines.extend([
@@ -2064,7 +3250,13 @@ def _format_price_reply(
             "",
             "For reservation confirmation we charge 1 night price."
         ])
-    elif lang == "ru":
+
+        if filter_meta.get("quiet_human_only_found") and "quiet_preferred" in request_filters.get("required", set()):
+            lines.extend([
+                "",
+                "Note: Superior rooms are also quiet, but booking for Superior is handled by our live representative."
+            ])
+    elif lang_norm == "ru":
         date_range = _format_date_range_ru(from_date, to_date)
         child_text_ru = ""
         if child_count > 0:
@@ -2093,14 +3285,14 @@ def _format_price_reply(
             if not room_map:
                 continue
 
-            room_name = room_map["en"]
+            room_name = room_map.get("ru", room_map.get("en", ""))
             lines.append(room_name)
 
             nr_price = prices.get("non_refundable")
             r_price = prices.get("refundable")
 
-            lines.append(f"Невозвратный тариф: {_format_price(nr_price)} {currency}" if nr_price is not None else "Невозвратный тариф: -")
-            lines.append(f"Бесплатная отмена: {_format_price(r_price)} {currency}" if r_price is not None else "Бесплатная отмена: -")
+            lines.append(f"Невозвратный тариф: {_format_price(nr_price)} {display_currency}" if nr_price is not None else "Невозвратный тариф: -")
+            lines.append(f"Бесплатная отмена: {_format_price(r_price)} {display_currency}" if r_price is not None else "Бесплатная отмена: -")
             lines.append("")
 
         lines.extend([
@@ -2113,10 +3305,172 @@ def _format_price_reply(
             "Для подтверждения бронирования взимается стоимость 1 ночи."
         ])
 
+        if filter_meta.get("quiet_human_only_found") and "quiet_preferred" in request_filters.get("required", set()):
+            lines.extend([
+                "",
+                "Примечание: номера Superior тоже тихие, но бронирование Superior оформляется через живого менеджера."
+            ])
+    elif lang_norm == "zh":
+        date_range = f"{from_date} 至 {to_date}"
+        lines = [
+            "感谢您对我们酒店的关注。",
+            "",
+            f"{date_range}（{nights}晚）{adult}位成人{child_text_zh}（含早餐）价格如下：",
+            "",
+        ]
+
+        for room_key in ROOM_ORDER:
+            if room_key not in room_prices:
+                continue
+
+            prices = room_prices[room_key]
+            room_map = None
+            for k, v in ROOM_TYPE_MAP.items():
+                if v["key"] == room_key:
+                    room_map = v
+                    break
+            if not room_map:
+                continue
+
+            room_name = room_map["en"]
+            lines.append(room_name)
+            nr_price = prices.get("non_refundable")
+            r_price = prices.get("refundable")
+            lines.append(f"不可退款: {_format_price(nr_price)} {display_currency}" if nr_price is not None else "不可退款: -")
+            lines.append(f"免费取消: {_format_price(r_price)} {display_currency}" if r_price is not None else "免费取消: -")
+            lines.append("")
+
+        lines.extend([
+            '入住/退房时间: "入住 14:00 - 退房 12:00"',
+            "",
+            "免费取消政策: 入住前5天及以上取消可100%退款。",
+            "入住后不支持取消/退款。",
+            "",
+            "确认预订需支付1晚房费。",
+        ])
+    elif lang_norm in {"de", "ar", "es", "fr", "hi", "pt"}:
+        date_range = f"{from_date} - {to_date}"
+        generic_localized = {
+            "de": {
+                "intro_1": "Ich kann Ihnen bei der Preisermittlung helfen.",
+                "intro_2": "Vielen Dank für Ihr Interesse an unserem Hotel.",
+                "price_line": f"Unsere Preise zwischen {date_range} für {adult} Erwachsene{child_text_en} für {nights} Nächte (inklusive Frühstück):",
+                "label_non_ref": "Nicht erstattbar",
+                "label_free_cancel": "Kostenlose Stornierung",
+                "check_line": 'Unsere Check-in/Check-out-Zeiten: "Check-in: 14:00 - Check-out: 12:00"',
+                "refund_line": "Hinweis: Bei kostenloser Stornierung ist bis 5 Tage vor Check-in eine 100% Rückerstattung möglich.",
+                "after_checkin_line": "Nach dem Check-in sind Stornierung und Rückerstattung nicht möglich.",
+                "confirm_line": "Zur Buchungsbestätigung wird der Preis für 1 Nacht berechnet.",
+                "quiet_note": "Hinweis: Superior-Zimmer sind ebenfalls ruhig, aber Superior-Buchungen werden von unserem Live-Team durchgeführt.",
+            },
+            "ar": {
+                "intro_1": "يمكنني مساعدتك بمعلومات الأسعار.",
+                "intro_2": "شكرًا جزيلاً لاهتمامك بفندقنا.",
+                "price_line": f"أسعارنا بين {date_range} لعدد {adult} بالغين{child_text_en} لمدة {nights} ليالٍ (شاملة الإفطار):",
+                "label_non_ref": "غير قابل للاسترداد",
+                "label_free_cancel": "إلغاء مجاني",
+                "check_line": 'أوقات تسجيل الدخول والمغادرة: "تسجيل الدخول: 14:00 - تسجيل المغادرة: 12:00"',
+                "refund_line": "ملاحظة: في الحجوزات ذات الإلغاء المجاني، يتم رد 100% عند الإلغاء قبل 5 أيام من تسجيل الدخول.",
+                "after_checkin_line": "بعد تسجيل الدخول لا يتوفر إلغاء أو استرداد.",
+                "confirm_line": "لتأكيد الحجز، يتم تحصيل قيمة ليلة واحدة.",
+                "quiet_note": "ملاحظة: غرف Superior هادئة أيضًا، لكن حجز Superior يتم عبر فريقنا البشري.",
+            },
+            "es": {
+                "intro_1": "Puedo ayudarte con la información de precios.",
+                "intro_2": "Muchas gracias por tu interés en nuestro hotel.",
+                "price_line": f"Nuestros precios entre {date_range} para {adult} adultos{child_text_en} por {nights} noches (desayuno incluido):",
+                "label_non_ref": "No reembolsable",
+                "label_free_cancel": "Cancelación gratuita",
+                "check_line": 'Nuestros horarios de check-in/check-out: "Check-in: 14:00 - Check-out: 12:00"',
+                "refund_line": "Nota: en reservas con cancelación gratuita, cancelando hasta 5 días antes del check-in se reembolsa el 100%.",
+                "after_checkin_line": "Después del check-in no hay cancelación ni reembolso.",
+                "confirm_line": "Para confirmar la reserva, cobramos el precio de 1 noche.",
+                "quiet_note": "Nota: las habitaciones Superior también son silenciosas, pero su reserva se gestiona con nuestro equipo en vivo.",
+            },
+            "fr": {
+                "intro_1": "Je peux vous aider avec les informations tarifaires.",
+                "intro_2": "Merci beaucoup pour votre intérêt pour notre hôtel.",
+                "price_line": f"Nos tarifs entre {date_range} pour {adult} adultes{child_text_en} pendant {nights} nuits (petit déjeuner inclus) :",
+                "label_non_ref": "Non remboursable",
+                "label_free_cancel": "Annulation gratuite",
+                "check_line": 'Nos horaires de check-in/check-out : "Check-in : 14:00 - Check-out : 12:00"',
+                "refund_line": "Remarque : avec l'annulation gratuite, un remboursement à 100% est possible jusqu'à 5 jours avant le check-in.",
+                "after_checkin_line": "Après le check-in, aucune annulation ni remboursement n'est possible.",
+                "confirm_line": "Pour confirmer la réservation, nous facturons le prix d'1 nuit.",
+                "quiet_note": "Remarque : les chambres Superior sont aussi calmes, mais leur réservation est traitée par notre équipe en direct.",
+            },
+            "hi": {
+                "intro_1": "मैं मूल्य जानकारी में आपकी मदद कर सकता हूँ।",
+                "intro_2": "हमारे होटल में आपकी रुचि के लिए बहुत धन्यवाद।",
+                "price_line": f"{date_range} के बीच {adult} वयस्कों{child_text_en} के लिए {nights} रातों (नाश्ता शामिल) के हमारे मूल्य:",
+                "label_non_ref": "नॉन-रिफंडेबल",
+                "label_free_cancel": "फ्री कैंसलेशन",
+                "check_line": 'हमारे check-in/check-out समय: "Check-in: 14:00 - Check-out: 12:00"',
+                "refund_line": "नोट: फ्री कैंसलेशन बुकिंग में check-in से 5 दिन पहले तक कैंसल करने पर 100% रिफंड मिलता है।",
+                "after_checkin_line": "check-in के बाद कैंसलेशन/रिफंड उपलब्ध नहीं है।",
+                "confirm_line": "बुकिंग कन्फर्म करने के लिए 1 रात का शुल्क लिया जाता है।",
+                "quiet_note": "नोट: Superior कमरे भी शांत हैं, लेकिन Superior बुकिंग हमारी लाइव टीम संभालती है।",
+            },
+            "pt": {
+                "intro_1": "Posso ajudar com informações de preços.",
+                "intro_2": "Muito obrigado pelo seu interesse em nosso hotel.",
+                "price_line": f"Nossos preços entre {date_range} para {adult} adultos{child_text_en} por {nights} noites (café da manhã incluído):",
+                "label_non_ref": "Não reembolsável",
+                "label_free_cancel": "Cancelamento gratuito",
+                "check_line": 'Nossos horários de check-in/check-out: "Check-in: 14:00 - Check-out: 12:00"',
+                "refund_line": "Observação: em reservas com cancelamento gratuito, há reembolso de 100% para cancelamentos até 5 dias antes do check-in.",
+                "after_checkin_line": "Após o check-in, não há cancelamento/reembolso.",
+                "confirm_line": "Para confirmar a reserva, cobramos o valor de 1 noite.",
+                "quiet_note": "Observação: quartos Superior também são silenciosos, mas a reserva de Superior é feita pelo nosso time de atendimento ao vivo.",
+            },
+        }
+        labels = generic_localized.get(lang_norm, generic_localized["es"])
+        lines = [
+            labels["intro_1"],
+            labels["intro_2"],
+            "",
+            labels["price_line"],
+            "",
+        ]
+
+        for room_key in ROOM_ORDER:
+            if room_key not in room_prices:
+                continue
+
+            prices = room_prices[room_key]
+            room_map = None
+            for k, v in ROOM_TYPE_MAP.items():
+                if v["key"] == room_key:
+                    room_map = v
+                    break
+            if not room_map:
+                continue
+
+            room_name = room_map.get("en", "")
+            lines.append(room_name)
+            nr_price = prices.get("non_refundable")
+            r_price = prices.get("refundable")
+            lines.append(f"{labels['label_non_ref']}: {_format_price(nr_price)} {display_currency}" if nr_price is not None else f"{labels['label_non_ref']}: -")
+            lines.append(f"{labels['label_free_cancel']}: {_format_price(r_price)} {display_currency}" if r_price is not None else f"{labels['label_free_cancel']}: -")
+            lines.append("")
+
+        lines.extend([
+            labels["check_line"],
+            "",
+            labels["refund_line"],
+            "",
+            labels["after_checkin_line"],
+            "",
+            labels["confirm_line"],
+        ])
+
+        if filter_meta.get("quiet_human_only_found") and "quiet_preferred" in request_filters.get("required", set()):
+            lines.extend(["", labels["quiet_note"]])
+
     else:  # Turkish
         date_range = _format_date_range_tr(from_date, to_date)
         lines = [
-            f"Otelimize göstermiş olduğunuz ilgi için teşekkür ederiz.",
+            "Memnuniyetle yardımcı olurum.",
             f"",
             f"{date_range} tarihleri arasında {nights} gece",
             f"kahvaltı dahil {adult} yetişkin{child_text_tr} fiyatlarımız aşağıdaki gibidir;",
@@ -2143,22 +3497,27 @@ def _format_price_reply(
             nr_price = prices.get("non_refundable")
             r_price = prices.get("refundable")
             
-            lines.append(f"İade yapılmaz: {_format_price(nr_price)} {currency}" if nr_price is not None else "İade yapılmaz: -")
-            lines.append(f"Ücretsiz İptal: {_format_price(r_price)} {currency}" if r_price is not None else "Ücretsiz İptal: -")
+            lines.append(f"İade yapılmaz: {_format_price(nr_price)} {display_currency}" if nr_price is not None else "İade yapılmaz: -")
+            lines.append(f"Ücretsiz İptal: {_format_price(r_price)} {display_currency}" if r_price is not None else "Ücretsiz İptal: -")
             lines.append("")
 
         lines.extend([
-            "Sizleri ağırlamak dileğiyle,",
-            "İyi günler dileriz.",
-            "",
             'Otelimize giriş ve çıkış saatlerimiz: "Giriş Saati: 14:00 - Çıkış Saati: 12:00"',
             "",
             "Not: Ücretsiz iptal seçeneği ile yapılan rezervasyonlarda girişten 5 gün öncesine kadar iptal olması halinde %100 geri ödeme alabilirsiniz.",
             "",
             "Girişten itibaren herhangi bir iptal/iade seçeneğimiz bulunmamaktadır.",
             "",
-            "Rezervasyon onayı için 1 gecelik ödeme tahsil edilmektedir. Kalan ödemeyi giriş günündeki güncel döviz kuruna göre TL veya döviz olarak yapabilirsiniz."
+            "Rezervasyon onayı için 1 gecelik ödeme tahsil edilmektedir. Kalan ödemeyi giriş günündeki güncel döviz kuruna göre TL veya döviz olarak yapabilirsiniz.",
+            "",
+            "Dilerseniz uygun oda tipini seçtiğiniz anda rezervasyon adımına birlikte geçebiliriz."
         ])
+
+        if filter_meta.get("quiet_human_only_found") and "quiet_preferred" in request_filters.get("required", set()):
+            lines.extend([
+                "",
+                "Not: Superior odalar da sessizdir; ancak Superior rezervasyonları canlı müşteri temsilcisi üzerinden yapılmaktadır."
+            ])
 
     return ("\n".join(lines), True)
 
@@ -2181,32 +3540,99 @@ def _build_missing_info_reply(missing: List[str], lang: str, dates_found: bool) 
             "guest_count": "количество гостей",
             "child_ages": "возраст детей",
         },
+        "de": {
+            "tarih_araligi": "Datumsbereich",
+            "guest_count": "Anzahl der Gäste",
+            "child_ages": "Alter der Kinder",
+        },
+        "es": {
+            "tarih_araligi": "rango de fechas",
+            "guest_count": "número de huéspedes",
+            "child_ages": "edades de niños",
+        },
+        "fr": {
+            "tarih_araligi": "période de dates",
+            "guest_count": "nombre de clients",
+            "child_ages": "âges des enfants",
+        },
+        "pt": {
+            "tarih_araligi": "intervalo de datas",
+            "guest_count": "número de hóspedes",
+            "child_ages": "idades das crianças",
+        },
+        "ar": {
+            "tarih_araligi": "نطاق التواريخ",
+            "guest_count": "عدد الضيوف",
+            "child_ages": "أعمار الأطفال",
+        },
+        "zh": {
+            "tarih_araligi": "日期范围",
+            "guest_count": "入住人数",
+            "child_ages": "儿童年龄",
+        },
+        "hi": {
+            "tarih_araligi": "तारीख सीमा",
+            "guest_count": "मेहमानों की संख्या",
+            "child_ages": "बच्चों की उम्र",
+        },
     }
-    lang_norm = (lang or "tr").lower()
-    labels = missing_labels.get(lang_norm, missing_labels["tr"])
+    lang_norm = (lang or "en").lower()
+    labels = missing_labels.get(lang_norm, missing_labels["en"])
     missing_text = ", ".join(labels.get(item, item) for item in missing)
+    child_ages_only_missing = ("child_ages" in missing) and ("guest_count" not in missing) and ("tarih_araligi" not in missing)
 
-    if (lang or "").lower() == "en":
+    if lang_norm == "en":
+        if child_ages_only_missing:
+            return "Could you share the children's ages, please?"
         if dates_found and "guest_count" in missing:
             return "Thank you! For how many guests? (adults and children with ages if any)"
         return (
             "To check availability, please provide:\n"
             f"Missing: {missing_text}"
         )
-    if (lang or "").lower() == "ru":
+    if lang_norm == "ru":
+        if child_ages_only_missing:
+            return "Пожалуйста, подскажите возраст детей."
         if dates_found and "guest_count" in missing:
             return "Спасибо! На сколько гостей планируется проживание? (взрослые и, если есть, дети с возрастами)"
         return (
             "Чтобы проверить наличие, пожалуйста, уточните:\n"
             f"Не хватает данных: {missing_text}"
         )
+    if lang_norm == "tr":
+        if child_ages_only_missing:
+            return "Çocuk yaşları nelerdir?"
+        if dates_found and "guest_count" in missing:
+            return "Teşekkürler! Kaç kişilik konaklama olacak? (yetişkin ve varsa çocuk yaşları)"
+        return (
+            "Müsaitlik kontrolü için lütfen belirtin:\n"
+            f"Eksik: {missing_text}"
+        )
+    if lang_norm == "zh":
+        if child_ages_only_missing:
+            return "请问儿童年龄分别是多少？"
+        if dates_found and "guest_count" in missing:
+            return "谢谢！请问入住人数是多少？（成人及儿童年龄）"
+        return (
+            "为了查询可订情况，请补充以下信息：\n"
+            f"缺少: {missing_text}"
+        )
+    if lang_norm == "hi":
+        if child_ages_only_missing:
+            return "कृपया बच्चों की उम्र बताइए।"
+        if dates_found and "guest_count" in missing:
+            return "धन्यवाद! कुल कितने मेहमान होंगे? (वयस्क और यदि हों तो बच्चों की उम्र के साथ)"
+        return (
+            "उपलब्धता जांचने के लिए कृपया यह जानकारी साझा करें:\n"
+            f"कमी: {missing_text}"
+        )
 
     if dates_found and "guest_count" in missing:
-        return "Teşekkürler! Kaç kişilik konaklama olacak? (yetişkin ve varsa çocuk yaşları)"
-    
+        # Desteklenen diger dillerde de net/tekdüze bilgi isteme için EN fallback.
+        return "Thank you! For how many guests? (adults and children with ages if any)"
     return (
-        "Müsaitlik kontrolü için lütfen belirtin:\n"
-        f"Eksik: {missing_text}"
+        "To check availability, please provide:\n"
+        f"Missing: {missing_text}"
     )
 
 
@@ -2236,6 +3662,16 @@ async def handle_elektra_price_request(
     # Yetiskin ve cocuk sayisi
     adult = _extract_adult_count(user_message)
     child_ages = _extract_child_ages(user_message)
+    child_count = None
+    m_child = re.search(
+        r"(\d+)\s*(?:cocuk|child|children|kid|kids|bebek|baby|infant|बच्चा|बच्चों|शिशु|طفل|أطفال|اطفال|儿童|小孩|兒童)",
+        _normalize_turkish_chars((user_message or "").lower()),
+    )
+    if m_child:
+        try:
+            child_count = int(m_child.group(1))
+        except Exception:
+            child_count = None
     
     if adult is None:
         missing.append("guest_count")
@@ -2244,6 +3680,10 @@ async def handle_elektra_price_request(
     low_msg = _normalize_turkish_chars((user_message or "").lower())
     if any(k in low_msg for k in ["cocuk", "child", "children", "kid", "kids", "bebek", "baby", "infant"]) and not child_ages:
         missing.append("child_ages")
+    # Cocuk sayisi verildiyse, yas sayisi da ayni olmalı. Eşleşmiyorsa net yaş sor.
+    if child_count is not None and child_count > 0 and len(child_ages) != child_count:
+        if "child_ages" not in missing:
+            missing.append("child_ages")
 
     if missing:
         reply = _build_missing_info_reply(missing, lang, dates_found)
@@ -2271,14 +3711,70 @@ async def handle_elektra_price_request(
         log = json.dumps({"error": str(e)[:500], "from": from_date, "to": to_date}, ensure_ascii=False)
         return "HANDOFF:API_ERROR", log, None
 
+    offers_for_cache, _ = _extract_offers_from_api_json(api_json)
+    try:
+        eligibility = await _fetch_stay_eligibility(
+            hotel_id=hotel_id,
+            from_date=from_date,
+            to_date=to_date,
+            adult=int(pricing_adult),
+            currency=currency,
+            child_ages=pricing_child_ages or None,
+            timeout_sec=20,
+        )
+    except Exception as e:
+        print(f"[ELEKTRA][AVAILABILITY] check failed hotel_id={hotel_id} {from_date}->{to_date} err={e}")
+        log = json.dumps(
+            {
+                "error": f"availability_check_failed: {str(e)[:400]}",
+                "from": from_date,
+                "to": to_date,
+                "hotel_id": hotel_id,
+            },
+            ensure_ascii=False,
+        )
+        return "HANDOFF:AVAILABILITY_ERROR", log, None
+
+    eligible_room_keys: set[str] = set(eligibility.get("room_keys") or set())
+    eligible_room_type_ids: set[int] = set(eligibility.get("room_type_ids") or set())
+    eligibility_source = str(eligibility.get("source") or "-")
+
+    if offers_for_cache:
+        offers_for_cache = [
+            o
+            for o in offers_for_cache
+            if (
+                ((_normalize_room_type(o.get("room-type", "") or "") or {}).get("key") in eligible_room_keys)
+                or (
+                    _to_int_or_none(o.get("room-type-id")) in eligible_room_type_ids
+                )
+            )
+        ]
+
+    # Kullanici acikca para birimi istediyse, offer fiyatlarini o para birimine cevir.
+    # Booking API bazen istenen currency'yi dikkate almayip EUR dondugu icin burada zorlariz.
+    if offers_for_cache and currency:
+        try:
+            offers_for_cache = await _coerce_offer_currency(
+                offers_for_cache,
+                requested_currency=currency,
+                hotel_id=hotel_id,
+                rate_date=from_date,
+            )
+        except Exception as e:
+            print(f"[ELEKTRA] WARN: currency coercion failed ({currency}): {e}")
+
+    offers_for_cache, room_request_filters, _ = _filter_offers_for_customer_request(offers_for_cache, user_message)
+
     reply, success = _format_price_reply(
-        api_json,
+        offers_for_cache,
         lang,
         from_date,
         to_date,
         adult,
         child_count=len(child_ages),
         child_ages=child_ages,
+        request_context_text=user_message,
     )
 
     if not success:
@@ -2287,14 +3783,7 @@ async def handle_elektra_price_request(
         return "HANDOFF:FORMAT_ERROR", log, None
 
     # Ham offer listesini cikar (booking cache icin)
-    raw_offers: Optional[List[Dict[str, Any]]] = None
-    if isinstance(api_json, list):
-        raw_offers = [x for x in api_json if isinstance(x, dict)]
-    elif isinstance(api_json, dict):
-        for key in ("data", "result", "offers", "prices"):
-            if key in api_json and isinstance(api_json[key], list):
-                raw_offers = [x for x in api_json[key] if isinstance(x, dict)]
-                break
+    raw_offers: Optional[List[Dict[str, Any]]] = offers_for_cache or None
 
     log_obj = {
         "hotel_id": hotel_id,
@@ -2306,7 +3795,12 @@ async def handle_elektra_price_request(
         "pricing_child_ages": pricing_child_ages,
         "currency": currency,
         "nationality": nationality,
-        "room_count": len(api_json) if isinstance(api_json, list) else 0,
+        "availability_source": eligibility_source,
+        "eligible_room_keys_count": len(eligible_room_keys),
+        "eligible_room_type_ids_count": len(eligible_room_type_ids),
+        "room_request_required": sorted(list(room_request_filters.get("required", set()))),
+        "room_request_forbidden": sorted(list(room_request_filters.get("forbidden", set()))),
+        "room_count": len(raw_offers or []),
     }
     log = json.dumps(log_obj, ensure_ascii=False)[:2000]
     return reply, log, raw_offers

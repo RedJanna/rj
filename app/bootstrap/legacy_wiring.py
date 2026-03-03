@@ -6,6 +6,13 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from app.services.access_control_service import activate_human_takeover
+from app.services.correlation_service import CORRELATION_HEADER, resolve_correlation_id
+from app.services.request_context_service import (
+    reset_current_correlation_id,
+    set_current_correlation_id,
+)
+from app.services.structured_log_service import log_event
 
 
 PUBLIC_ADMIN_PATHS = {
@@ -13,6 +20,19 @@ PUBLIC_ADMIN_PATHS = {
     "/admin/verify-2fa",
     "/admin/setup-2fa",
 }
+
+NOISY_HTTP_PATHS = {
+    "/admin/active-conversations",
+    "/admin/pytest/status",
+    "/automation/status",
+}
+
+
+def _http_log_level_for_path(path: str) -> str:
+    norm = (path or "").rstrip("/") or "/"
+    if norm in NOISY_HTTP_PATHS:
+        return "DEBUG"
+    return "INFO"
 
 
 def configure_http(app, require_admin):
@@ -36,32 +56,61 @@ def configure_http(app, require_admin):
         started = time.perf_counter()
         client_ip = getattr(request.client, "host", "-")
         path = request.url.path.rstrip("/") or "/"
-        if path.startswith("/admin") and path not in PUBLIC_ADMIN_PATHS:
-            try:
-                require_admin(request=request)
-            except HTTPException as exc:
-                redirect_target = (exc.headers or {}).get("X-Redirect")
-                accepts_html = "text/html" in request.headers.get("accept", "")
-                if redirect_target and accepts_html:
+        correlation_id = resolve_correlation_id(getattr(request, "headers", {}))
+        request.state.correlation_id = correlation_id
+        token = set_current_correlation_id(correlation_id)
+        try:
+            if path.startswith("/admin") and path not in PUBLIC_ADMIN_PATHS:
+                try:
+                    require_admin(request=request)
+                except HTTPException as exc:
+                    redirect_target = (exc.headers or {}).get("X-Redirect")
+                    accepts_html = "text/html" in request.headers.get("accept", "")
+                    if redirect_target and accepts_html:
+                        elapsed_ms = (time.perf_counter() - started) * 1000
+                        response = RedirectResponse(url=redirect_target, status_code=302)
+                        response.headers[CORRELATION_HEADER] = correlation_id
+                        log_event(
+                            "http.request",
+                            level=_http_log_level_for_path(request.url.path),
+                            correlation_id=correlation_id,
+                            method=request.method,
+                            path=request.url.path,
+                            status_code=302,
+                            elapsed_ms=round(elapsed_ms, 1),
+                            ip=client_ip,
+                        )
+                        return response
                     elapsed_ms = (time.perf_counter() - started) * 1000
-                    print(
-                        f"[HTTP] {request.method} {request.url.path} -> 302 "
-                        f"{elapsed_ms:.1f}ms ip={client_ip}"
+                    response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+                    response.headers[CORRELATION_HEADER] = correlation_id
+                    log_event(
+                        "http.request",
+                        level="WARNING",
+                        correlation_id=correlation_id,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=exc.status_code,
+                        elapsed_ms=round(elapsed_ms, 1),
+                        ip=client_ip,
                     )
-                    return RedirectResponse(url=redirect_target, status_code=302)
-                elapsed_ms = (time.perf_counter() - started) * 1000
-                print(
-                    f"[HTTP] {request.method} {request.url.path} -> {exc.status_code} "
-                    f"{elapsed_ms:.1f}ms ip={client_ip}"
-                )
-                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-        response = await call_next(request)
-        elapsed_ms = (time.perf_counter() - started) * 1000
-        print(
-            f"[HTTP] {request.method} {request.url.path} -> {response.status_code} "
-            f"{elapsed_ms:.1f}ms ip={client_ip}"
-        )
-        return response
+                    return response
+            response = await call_next(request)
+            response.headers[CORRELATION_HEADER] = correlation_id
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            log_event(
+                "http.request",
+                level=_http_log_level_for_path(request.url.path),
+                correlation_id=correlation_id,
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                elapsed_ms=round(elapsed_ms, 1),
+                ip=client_ip,
+            )
+            return response
+        finally:
+            reset_current_correlation_id(token)
 
 
 def get_system_test_router():
@@ -79,6 +128,7 @@ def get_system_test_router():
 
 
 def wire_routes(app, *, ctx: dict, system_test_router):
+    app.include_router(ctx["build_system_router"]())
     app.include_router(system_test_router, dependencies=[Depends(ctx["require_admin"])])
     app.include_router(ctx["metrics_router"], dependencies=[Depends(ctx["require_admin"])])
     app.include_router(ctx["reminder_router"], dependencies=[Depends(ctx["require_admin"])])
@@ -147,6 +197,12 @@ def wire_routes(app, *, ctx: dict, system_test_router):
         dependencies=[Depends(ctx["require_admin"])],
     )
     app.include_router(
+        ctx["build_admin_transfer_reservations_router"](
+            send_whatsapp_message_fn=ctx["send_whatsapp_message"],
+        ),
+        dependencies=[Depends(ctx["require_admin"])],
+    )
+    app.include_router(
         ctx["build_restaurant_plan_router"](
             project_root=ctx["Path"](__file__).resolve().parents[2],
             restaurant_staff=ctx["RESTAURANT_STAFF"],
@@ -181,6 +237,7 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             admin_html=ctx["ADMIN_HTML"],
             reminder_page_html=ctx["REMINDER_PAGE_HTML"],
             reservations_html=ctx["RESERVATIONS_HTML"],
+            transfer_reservations_html=ctx["TRANSFER_RESERVATIONS_HTML"],
             restaurant_plan_html=ctx["RESTAURANT_PLAN_HTML"],
             dashboard_html=ctx["DASHBOARD_HTML"],
             admin_tools_html=ctx["ADMIN_TOOLS_HTML"],
@@ -200,7 +257,8 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             admin_phone=ctx["ADMIN_PHONE"],
             whatsapp_phone_id=ctx["WHATSAPP_PHONE_ID"],
             whatsapp_token=ctx["WHATSAPP_TOKEN"],
-        )
+        ),
+        dependencies=[Depends(ctx["require_admin"])],
     )
     app.include_router(
         ctx["build_admin_monitoring_router"](
@@ -240,6 +298,9 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             send_whatsapp_message_fn=ctx["send_whatsapp_message"],
             get_followup_message_fn=ctx["get_followup_message"],
             mark_followup_sent_fn=ctx["mark_followup_sent"],
+            mark_followup_closed_fn=ctx["mark_followup_closed"],
+            get_expired_followups_fn=ctx["get_expired_followups"],
+            save_last_followup_cycle_fn=ctx["save_last_followup_cycle"],
             save_message_fn=ctx["save_message"],
             schedule_conversation_cleanup_fn=ctx["schedule_conversation_cleanup"],
             followup_grace_seconds=ctx["FOLLOWUP_GRACE_SECONDS"],
@@ -299,12 +360,7 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             price_natural_date_keywords=ctx["PRICE_NATURAL_DATE_KEYWORDS"],
             price_inquiry_keywords=ctx["PRICE_INQUIRY_KEYWORDS"],
             price_guest_keywords=ctx["PRICE_GUEST_KEYWORDS"],
-            try_handle_canonical_and_local_fn=ctx["try_handle_canonical_and_local"],
             check_local_faq_fn=ctx["check_local_faq"],
-            canonical_greeting_keywords=ctx["CANONICAL_GREETING_KEYWORDS"],
-            kanonik_fiyat_exclusions=ctx["KANONIK_FIYAT_EXCLUSIONS"],
-            erken_giris_keywords=ctx["ERKEN_GIRIS_KEYWORDS"],
-            gec_cikis_keywords=ctx["GEC_CIKIS_KEYWORDS"],
             handle_openai_fallback_fn=ctx["handle_openai_fallback"],
             openai_client=ctx["client"],
             openai_model=ctx["OPENAI_MODEL"],
@@ -314,11 +370,13 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             qa_agent=ctx["QA_AGENT"],
             qa_fail_notifications=ctx["_qa_fail_notifications"],
             record_error_fn=ctx["record_error"],
+            activate_human_takeover_fn=activate_human_takeover,
             load_conversation_fn=ctx["load_conversation"],
             is_safe_mode_fn=ctx["is_safe_mode"],
             is_auto_safe_mode_fn=ctx["is_auto_safe_mode"],
             check_rate_limit_fn=ctx["check_rate_limit"],
             is_automation_enabled_fn=ctx["is_automation_enabled"],
+            is_operational_rules_enabled_fn=ctx["is_operational_rules_enabled"],
             is_blacklisted_fn=ctx["is_blacklisted"],
             is_paused_fn=ctx["is_paused"],
             cancel_followup_fn=ctx["cancel_followup"],
@@ -341,5 +399,7 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             is_processed_message_id_fn=ctx["is_processed_message_id"],
             mark_message_id_processed_fn=ctx["mark_message_id_processed"],
             trace_decision_fn=ctx["trace_decision"],
+            capture_active_learning_fn=ctx["capture_active_learning_sample"],
+            flow_orchestrator=ctx.get("FLOW_ORCHESTRATOR"),
         )
     )

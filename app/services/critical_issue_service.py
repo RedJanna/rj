@@ -1,104 +1,12 @@
 from datetime import datetime
 from typing import Tuple
 
-CRITICAL_ISSUE_CATEGORIES = {
-    'complaint': {
-        'priority': 5,
-        'keywords_tr': ['berbat', 'rezalet', 'kötü', 'iğrenç', 'korkunç', 'skandal', 
-                        'utanç', 'fiyasko', 'felaket', 'şikayet', 'memnuniyetsiz'],
-        'keywords_en': ['terrible', 'horrible', 'awful', 'disgusting', 'worst',
-                        'unacceptable', 'complaint', 'disappointed', 'angry', 'furious'],
-        'auto_response_tr': 'Yaşadığınız olumsuz deneyim için çok üzgünüz. Konuyu en kısa sürede çözmek için müşteri temsilcimiz sizinle iletişime geçecektir.',
-        'auto_response_en': 'We are very sorry for the negative experience. Our customer representative will contact you shortly to resolve this issue.',
-        'notify_immediately': True
-    },
-    'cancellation': {
-        'priority': 5,
-        # NOT: "refund" ve "iade" sadece GERÇEK İADE TALEBİ için tetiklenmeli
-        # "Non-refundable nedir?" gibi BİLGİ sorularında tetiklenmemeli!
-        'keywords_tr': ['iade istiyorum', 'paramı geri', 'geri iade', 'para iadesi', 'iade talep'],
-        'keywords_en': ['want refund', 'get refund', 'money back', 'request refund', 'refund please'],
-        'auto_response_tr': 'İade talebinizi aldık. İşleminiz için sizinle en kısa sürede iletişime geçeceğiz.',
-        'auto_response_en': 'We received your refund request. We will contact you shortly.',
-        'notify_immediately': True
-    },
-    'emergency': {
-        'priority': 5,
-        'keywords_tr': ['acil yardım', 'acil durum', 'acil destek', 'ambulans', 'kaza', 'hastayım', 'tehlike', 'kayboldum'],
-        'keywords_en': ['emergency', 'need help now', 'send help', 'sick', 'accident', 'lost', 'danger', 'ambulance'],
-        'auto_response_tr': 'Acil durumunuz için hemen yardım gönderiyoruz. Otel telefonu: +90 533 250 32 77',
-        'auto_response_en': 'We are sending help immediately for your emergency. Hotel phone: +90 533 250 32 77',
-        'notify_immediately': True
-    },
-    'security_concern': {
-        'priority': 5,
-        'keywords_tr': ['güvenlik', 'hırsızlık', 'çalındı', 'kasa', 'tehdit', 'hırsız'],
-        'keywords_en': ['security', 'theft', 'stolen', 'safe', 'threat', 'thief'],
-        'auto_response_tr': 'Güvenlik ekibimiz derhal bilgilendirildi. En kısa sürede size dönüş yapılacaktır.',
-        'auto_response_en': 'Our security team has been notified immediately. You will be contacted shortly.',
-        'notify_immediately': True
-    },
-    'negative_review_threat': {
-        'priority': 2,
-        'keywords_tr': ['google yorum', 'kötü yorum', 'şikayet edeceğim', 'tripadvisor'],
-        'keywords_en': ['google review', 'bad review', 'will complain', 'tripadvisor'],
-        'auto_response_tr': None,
-        'auto_response_en': None,
-        'notify_immediately': False
-    },
-    'payment_issue': {
-        'priority': 2,
-        'keywords_tr': ['fatura', 'çekim yapılmış', 'yanlış ücret'],
-        'keywords_en': ['invoice', 'wrong charge', 'overcharged'],
-        'auto_response_tr': None,
-        'auto_response_en': None,
-        'notify_immediately': False
-    },
-    'health_hygiene': {
-        'priority': 2,
-        'keywords_tr': ['böcek', 'kirli', 'pis', 'hijyen', 'hamam böceği'],
-        'keywords_en': ['bug', 'dirty', 'unclean', 'hygiene', 'cockroach', 'insect'],
-        'auto_response_tr': None,
-        'auto_response_en': None,
-        'notify_immediately': False
-    }
-}
-
-# BİLGİ SORUSU KALIPLARI
-# Bu kalıplar varsa, mesaj büyük ihtimalle bir BİLGİ SORUSU, şikayet/talep DEĞİL!
-INFO_QUESTION_PATTERNS = [
-    # Türkçe soru kalıpları
-    'nedir', 'ne demek', 'ne anlama', 'fark nedir', 'farkı nedir', 'farkı ne',
-    'arasındaki fark', 'arasında fark', 'hangisi', 'nasıl', 'ne zaman',
-    'kaç', 'kaçta', 'saat kaç', 'ne kadar sürer',
-    
-    # İngilizce soru kalıpları  
-    'what is', "what's", 'what does', 'what are',
-    'difference between', 'difference of', 'the difference',
-    'which one', 'which is', 'how does', 'how do', 'how is',
-    'when is', 'when does', 'how long', 'how much',
-    
-    # Karşılaştırma/bilgi talepleri
-    'ile', 'arasında', 'between', 'versus', 'vs',
-    'hakkında bilgi', 'about', 'explain', 'açıkla', 'anlat'
-]
-
-# İADE TALEBİ OLMAYAN TERİMLER
-# Bu terimler "refund" veya "iade" içerse bile, bunlar TERIM, talep değil!
-TERM_EXCEPTIONS = [
-    'non-refundable', 'nonrefundable', 'no-refund', 'iade edilemez',
-    'iade edilmeyen', 'iade yapılmaz', 'refundable', 'iade politikası',
-    'cancellation policy', 'iptal politikası', 'refund policy'
-]
-
-NOTIFICATION_SETTINGS = {
-    'active_hours': {
-        'start': 7,   # 07:00
-        'end': 2      # 02:00 (ertesi gün)
-    },
-    'night_contact': '+905304498453',
-    'escalation_minutes': [0, 10, 30]
-}
+from app.services.handoff_critical_registry import (
+    CRITICAL_INFO_QUESTION_PATTERNS as INFO_QUESTION_PATTERNS,
+    CRITICAL_ISSUE_CATEGORIES,
+    CRITICAL_TERM_EXCEPTIONS as TERM_EXCEPTIONS,
+    NOTIFICATION_SETTINGS,
+)
 
 def is_within_notification_hours() -> bool:
     """Bildirim saatleri içinde mi kontrol et"""

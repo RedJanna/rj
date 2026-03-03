@@ -1,30 +1,21 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict
 
+from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
-MESSAGE_ID_STORE_FILE = Path("data/message_ids.json")
+MESSAGE_ID_STORE_FILE = resolve_data_file("message_ids.json", env_var="KASSANDRA_MESSAGE_ID_FILE")
+_MESSAGE_ID_STORE = JsonStateRepository(MESSAGE_ID_STORE_FILE)
 MESSAGE_ID_TTL_HOURS = 24
 
 
 def _load_store() -> Dict[str, Any]:
-    if not MESSAGE_ID_STORE_FILE.exists():
-        return {}
-    try:
-        with open(MESSAGE_ID_STORE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    return _MESSAGE_ID_STORE.load_dict()
 
 
 def _save_store(data: Dict[str, Any]) -> None:
-    MESSAGE_ID_STORE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(MESSAGE_ID_STORE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _MESSAGE_ID_STORE.save_dict(data)
 
 
 def _clean_phone(phone: str) -> str:
@@ -91,4 +82,3 @@ def clear_message_ids(phone: str) -> None:
     if clean in store:
         store.pop(clean, None)
         _save_store(store)
-

@@ -5,22 +5,34 @@ Template PDF üzerine rezervasyon bilgilerini yazar.
 Koordinatlar pdf_config.json dosyasından okunur.
 """
 
-import json
+import os
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
 
+from app.services.state_store_service import JsonStateRepository, get_project_root
+
 # Config dosyası
-CONFIG_PATH = Path("C:/KassandraOpenAI/pdf_config.json")
+PROJECT_ROOT = get_project_root()
+CONFIG_PATH = Path(
+    os.getenv("KASSANDRA_PDF_CONFIG_FILE", str(PROJECT_ROOT / "pdf_config.json"))
+).expanduser()
+_CONFIG_STORE = JsonStateRepository(CONFIG_PATH)
+
+DEFAULT_FONT_PATH = (
+    "C:/Windows/Fonts/arial.ttf"
+    if os.name == "nt"
+    else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+)
 
 # Varsayılan ayarlar (config yoksa kullanılır)
 DEFAULT_CONFIG = {
     "pdf_settings": {
-        "template_path": "C:/KassandraOpenAI/templates/reservation_template.pdf",
-        "output_dir": "C:/KassandraOpenAI/reservation_pdfs"
+        "template_path": str(PROJECT_ROOT / "templates" / "reservation_template.pdf"),
+        "output_dir": str(PROJECT_ROOT / "reservation_pdfs")
     },
     "font_settings": {
-        "font_path": "C:/Windows/Fonts/arial.ttf",
+        "font_path": DEFAULT_FONT_PATH,
         "size_normal": 13,
         "size_small": 11,
         "color_r": 0.36,
@@ -43,13 +55,12 @@ DEFAULT_CONFIG = {
 
 def load_config():
     """Config dosyasını yükle"""
-    if CONFIG_PATH.exists():
-        try:
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"⚠️ Config okunamadı: {e}, varsayılan kullanılıyor")
-    return DEFAULT_CONFIG
+    try:
+        data = _CONFIG_STORE.load_json(default=DEFAULT_CONFIG)
+        return data if isinstance(data, dict) else DEFAULT_CONFIG
+    except Exception as e:
+        print(f"⚠️ Config okunamadı: {e}, varsayılan kullanılıyor")
+        return DEFAULT_CONFIG
 
 
 def format_phone(phone: str) -> str:

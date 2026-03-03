@@ -7,19 +7,19 @@ Müşterilere takip mesajları planlar ve gönderir.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import List, Optional
 
+from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 # ======================================================
 # FOLLOW-UP AYARLARI
 # ======================================================
 
 # Varsayılan bekleme süresi (dakika)
-DEFAULT_FOLLOWUP_MINUTES = 3
+# 10. dakikada "sohbet sonlandırılacak" uyarısı
+DEFAULT_FOLLOWUP_MINUTES = 10
 
 # Maksimum yaş (dakika) - bu süreden eski follow-up'lar gönderilmez
 FOLLOWUP_MAX_AGE_MINUTES = 30
@@ -28,7 +28,8 @@ FOLLOWUP_MAX_AGE_MINUTES = 30
 FOLLOWUP_GRACE_SECONDS = 120
 
 # Follow-up veritabanı dosyası
-FOLLOWUP_FILE = Path("data/followups.json")
+FOLLOWUP_FILE = resolve_data_file("followups.json", env_var="KASSANDRA_FOLLOWUP_FILE")
+_FOLLOWUP_STORE = JsonStateRepository(FOLLOWUP_FILE)
 
 
 # ======================================================
@@ -37,18 +38,14 @@ FOLLOWUP_FILE = Path("data/followups.json")
 
 def load_followups() -> dict:
     """Follow-up verilerini yükle"""
-    if FOLLOWUP_FILE.exists():
-        try:
-            return json.loads(FOLLOWUP_FILE.read_text(encoding="utf-8"))
-        except:
-            pass
-    return {"pending": {}, "settings": {"minutes": DEFAULT_FOLLOWUP_MINUTES}}
+    default_data = {"pending": {}, "settings": {"minutes": DEFAULT_FOLLOWUP_MINUTES}, "last_cycle": {}}
+    data = _FOLLOWUP_STORE.load_json(default=default_data)
+    return data if isinstance(data, dict) else default_data
 
 
 def save_followups(data: dict):
     """Follow-up verilerini kaydet"""
-    FOLLOWUP_FILE.parent.mkdir(parents=True, exist_ok=True)
-    FOLLOWUP_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _FOLLOWUP_STORE.save_json(data if isinstance(data, dict) else {})
 
 
 def get_followup_minutes() -> int:
@@ -86,12 +83,16 @@ def schedule_followup(phone: str):
     data = load_followups()
     clean_phone = re.sub(r'[^\d]', '', phone)
     now = datetime.now()
+    reminder_minutes = get_followup_minutes()
     
     data["pending"][clean_phone] = {
         "scheduled_at": now.isoformat(),
-        "send_at": (now + timedelta(minutes=get_followup_minutes())).isoformat(),
+        "send_at": (now + timedelta(minutes=reminder_minutes)).isoformat(),
+        "close_at": (now + timedelta(minutes=30)).isoformat(),
         "last_seen": now.isoformat(),
-        "sent": False
+        "sent": False,
+        "reminder_sent": False,
+        "closed": False,
     }
     save_followups(data)
 
@@ -127,6 +128,22 @@ def mark_followup_sent(phone: str):
     data = load_followups()
     clean_phone = re.sub(r'[^\d]', '', phone)
     
+    if clean_phone in data.get("pending", {}):
+        entry = data["pending"][clean_phone]
+        if isinstance(entry, dict):
+            entry["sent"] = True
+            entry["reminder_sent"] = True
+            entry["reminder_sent_at"] = datetime.now().isoformat()
+            data["pending"][clean_phone] = entry
+            save_followups(data)
+
+
+def mark_followup_closed(phone: str):
+    """Sohbet otomatik kapatma işlendi olarak işaretle ve kaydı kaldır."""
+    if not phone:
+        return
+    data = load_followups()
+    clean_phone = re.sub(r'[^\d]', '', phone)
     if clean_phone in data.get("pending", {}):
         del data["pending"][clean_phone]
         save_followups(data)
@@ -166,14 +183,21 @@ def get_pending_followups() -> List[str]:
     
     for phone, info in data.get("pending", {}).items():
         send_at = datetime.fromisoformat(info["send_at"])
+        close_at_raw = info.get("close_at")
+        close_at = datetime.fromisoformat(close_at_raw) if close_at_raw else (send_at + timedelta(minutes=20))
         last_seen = datetime.fromisoformat(info.get("last_seen", info["scheduled_at"]))
         
-        # KURAL 1: Son mesaj çok eski mi? (30 dk+)
+        # KURAL 1: Son mesaj çok eskiyse (30 dk+) reminder gönderme.
+        # Bu kayıtlar get_expired_followups() ile otomatik kapatma/temizleme
+        # akışına bırakılır.
         if (now - last_seen).total_seconds() > FOLLOWUP_MAX_AGE_MINUTES * 60:
-            to_drop.append((phone, "Son mesaj çok eski"))
             continue
         
-        # KURAL 2: Gönderim penceresi kontrolü
+        # KURAL 2: 30 dakikayı geçtiyse reminder gönderme
+        if now >= close_at:
+            continue
+
+        # KURAL 3: Gönderim penceresi kontrolü
         deadline = send_at + timedelta(seconds=FOLLOWUP_GRACE_SECONDS)
         
         if now < send_at:
@@ -185,7 +209,7 @@ def get_pending_followups() -> List[str]:
             continue
         else:
             # Tam zamanında - gönder!
-            if not info.get("sent", False):
+            if not info.get("reminder_sent", False):
                 pending.append(phone)
     
     # Süresi geçenleri sil
@@ -208,6 +232,28 @@ def get_followup_stats() -> dict:
     }
 
 
+def get_expired_followups() -> List[str]:
+    """
+    30 dakika boyunca yanıt gelmeyen (otomatik kapatılacak) numaraları döndür.
+    """
+    data = load_followups()
+    now = datetime.now()
+    expired: List[str] = []
+    for phone, info in data.get("pending", {}).items():
+        if not isinstance(info, dict):
+            continue
+        close_at_raw = info.get("close_at")
+        if not close_at_raw:
+            continue
+        try:
+            close_at = datetime.fromisoformat(close_at_raw)
+        except Exception:
+            continue
+        if now >= close_at and not info.get("closed", False):
+            expired.append(phone)
+    return expired
+
+
 def clear_all_followups() -> int:
     """Tüm bekleyen follow-up'ları temizle"""
     data = load_followups()
@@ -217,13 +263,24 @@ def clear_all_followups() -> int:
     return count
 
 
+def save_last_followup_cycle(sent: int, closed: int):
+    """Son follow-up döngüsü özetini kaydet."""
+    data = load_followups()
+    data["last_cycle"] = {
+        "sent": int(sent or 0),
+        "closed": int(closed or 0),
+        "checked_at": datetime.now().isoformat(),
+    }
+    save_followups(data)
+
+
 # ======================================================
 # FOLLOW-UP MESAJLARI
 # ======================================================
 
 FOLLOWUP_MESSAGES = {
-    "tr": "Merhaba! 👋\n\nBaşka bir konuda yardımcı olabilir miyim?\n\nSorularınız için buradayım. 😊",
-    "en": "Hello! 👋\n\nIs there anything else I can help you with?\n\nI'm here for your questions. 😊"
+    "tr": "Merhaba 👋\n\nGörüşmemiz yaklaşık 20 dakika içinde otomatik olarak sonlandırılacaktır. Devam etmek isterseniz lütfen bu mesaja yanıt verin. 😊",
+    "en": "Hello 👋\n\nOur conversation will be automatically closed in about 20 minutes. If you'd like to continue, please reply to this message. 😊"
 }
 
 

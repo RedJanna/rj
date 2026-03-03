@@ -1,0 +1,230 @@
+{
+  "intent_examples": {
+    "HOTEL_BOOKING_CREATE": [
+      "Merhaba, oda rezervasyonu yapmak istiyorum.",
+      "Otelinizde yer var mı?",
+      "Fiyat almak istiyorum, rezervasyon yapacağım.",
+      "Boş odalarınız hakkında bilgi alabilir miyim?",
+      "Tarihleri ve oda tipini seçtim, rezervasyonu tamamlayalım.",
+      "Tamam, bu odayı ayırtmak istiyorum. Ne yapmam lazım?",
+      "Ödemeyi nasıl yapacağım, bilgileri vereyim.",
+      "Seçtiğim oda için işlemleri bitirmek istiyorum."
+    ],
+    "PRICE_QUERY": [
+      "Fiyat alabilir miyim?",
+      "Konaklama ücretleriniz ne kadar?",
+      "Oda fiyatlarını öğrenebilir miyim?",
+      "Gecelik ne kadar ödeleriz?",
+      "Tatil için fiyat bilgisi verir misiniz?",
+      "2 yetişkin 2 çocuk için fiyat istiyorum.",
+      "Aile odası ücretlerinizi öğrenebilir miyim?",
+      "Çocuklu aileler için tatil fiyatlarınız nedir?",
+      "Biz eşim ve çocuklarla geleceğiz, fiyat alabilir miyim?"
+    ],
+    "AVAILABILITY_QUERY": [
+      "Aynı tarihlerde oda müsait mi?",
+      "Bu hafta sonu için boş yeriniz var mı?",
+      "Otelinizde yer var mı?",
+      "Müsaitlik durumunuz nedir?"
+    ],
+    "HOTEL_BOOKING_MODIFY": [
+      "Rezervasyon tarihimi değiştirmek istiyorum.",
+      "Rezervasyonumda gün değişikliği yapabilir miyiz?",
+      "Tatil tarihlerimi ertelemek/öne çekmek istiyorum.",
+      "Mevcut rezervasyonumu güncellemem gerekiyor.",
+      "Rezervasyonumu 15 Ağustos yerine 18 Ağustos giriş yapmak istiyorum.",
+      "Tatil tarihlerimizi birkaç gün ileri alabilir miyiz?",
+      "Giriş günümüzü değiştirmek istiyoruz, aynı odada kalmaya devam edebilir miyiz?",
+      "Rezervasyon tarihlerimi güncelleyebilir miyim?",
+      "2 odadan sadece birinin tarihini değiştirmek istiyorum.",
+      "Ayırttığımız 3 odadan birinin giriş çıkış günlerini güncelleyebilir miyiz?",
+      "Diğer oda aynı kalsın, bizim odanın tarihlerini ileri alacağız.",
+      "Grup rezervasyonumuzda tek bir odanın tarihlerinde değişiklik yapmak istiyoruz.",
+      "Rezervasyondaki isim değişsin istiyorum.",
+      "Oda tipimi değiştirebilir miyim?",
+      "Deluxe yerine superior istiyorum.",
+      "Aynı tarihte daha büyük odaya geçmek istiyorum.",
+      "İsimde yazım hatası var, düzeltebilir misiniz?"
+    ],
+    "HOTEL_BOOKING_CANCEL": [
+      "Rezervasyonumu iptal etmek istiyorum.",
+      "Tatilimi iptal edebilir miyim?",
+      "Oda rezervasyonumu iptal etmek için ne yapmalıyım?",
+      "Gelemiyorum, rezervasyonu nasıl iptal ederiz?",
+      "2 numara, ücretsiz iptal tarifesiydi.",
+      "İptal edilemez şartıyla almıştım.",
+      "Ücretsiz iptal hakkımı kullanmak istiyorum.",
+      "Fiyat tipi olarak birinci seçeneği seçmiştim.",
+      "3 odadan sadece 1 tanesini iptal etmek istiyorum.",
+      "Rezerve ettiğimiz odalardan birini iptal edebilir miyiz?",
+      "Gruptan bir aile gelemiyor, onların odasını iptal edeceğiz.",
+      "İki oda ayırmıştık, birini iptal etmek istiyorum."
+    ],
+    "LOCAL_FAQ_INFO": [
+      "Rezervasyon kesinleşince kodu ne zaman paylaşıyorsunuz?",
+      "Onay numaram bana ne zaman ulaşır?",
+      "Rezervasyon kodumu ne zaman alacağım?",
+      "İşlem bittikten sonra teyit mesajı veya kodu gönderiyor musunuz?",
+      "Rezervasyonum onaylandığında bana nasıl bilgi verilecek?",
+      "Rez ID nedir?",
+      "Benden istenen Rez ID numarası nerede yazıyor?",
+      "Voucher No veya Rezervasyon numarası dediğiniz şey aynı mı?",
+      "Formdaki Rez ID kısmına ne yazmam gerekiyor?",
+      "Rezervasyon ID numaramı nasıl öğrenebilirim?",
+      "Check-in ve check-out saatleri kaç?",
+      "Giriş ve çıkış saatleriniz nedir?",
+      "Check-in saat kaçta, check-out saat kaçta?",
+      "Otele giriş/çıkış saatleri nedir?",
+      "Kahvaltı dahil mi, saat kaça kadar?",
+      "Kahvaltı fiyata dahil mi?",
+      "Kahvaltı saatleri nedir?",
+      "Kahvaltı ne zaman başlıyor, ne zaman bitiyor?",
+      "Havuz ısıtmalı mı?",
+      "Havuzunuz ısıtılıyor mu?",
+      "Isıtmalı havuz var mı?",
+      "Wi-Fi ve otopark ücretsiz mi?",
+      "İnternet ücretsiz mi?",
+      "Otopark var mı, ücretli mi?",
+      "Otel nerede, plaja uzaklık ne kadar?",
+      "Konumunuz neresi?",
+      "Plaja yürüyerek kaç dakika?",
+      "Aralık ayında açık mısınız?",
+      "Kışın hizmet veriyor musunuz?",
+      "Kasım’dan sonra açık mı?",
+      "Evcil hayvan kabul ediyor musunuz?",
+      "Köpekle gelebilir miyiz?",
+      "Kedi ile konaklama mümkün mü?",
+      "Evcil hayvan politikası nedir?",
+      "Odalarda sigara içiliyor mu?",
+      "Oda içinde sigara içebilir miyim?",
+      "Sigara yasağı var mı?",
+      "Sigara içilen alanınız var mı?"
+    ],
+    "PAYMENT_METHOD_QUERY": [
+      "Hangi ödeme yöntemleri var?",
+      "Rezervasyon ödemesini nasıl yapabilirim?",
+      "Kredi kartıyla online ödeme alıyor musunuz?",
+      "Havale seçeneğiniz bulunuyor mu?",
+      "Ön ödemeyi nereye göndermem gerekiyor?"
+    ],
+    "PAYMENT_LINK_REQUEST": [
+      "Ödeme linki gönderebilir misiniz?",
+      "Kredi kartıyla ödemek için link alabilir miyim?",
+      "Ön ödemeyi online yapmak istiyorum, bağlantı atar mısınız?",
+      "Ödeme yapabilmem için bir ekran veya link paylaşır mısınız?"
+    ],
+    "DISCOUNT_NEGOTIATION": [
+      "Bu fiyata indirim yapar mısınız?",
+      "Biraz daha uygun bir fiyat verebilir misiniz?",
+      "Bize özel bir kampanya veya son fiyatınız ne olur?",
+      "Fiyatta bir şeyler yapma şansınız var mı?",
+      "Bütçemizi biraz aşıyor, yardımcı olabilir misiniz?"
+    ],
+    "HUMAN_AGENT_REQUEST": [
+      "Yetkili biriyle görüşmek istiyorum.",
+      "Beni bir müşteri temsilcisine bağlar mısınız?",
+      "Canlı destek almak istiyorum.",
+      "Gerçek bir insanla konuşmak istiyorum.",
+      "Operatörle görüşebilir miyim?"
+    ],
+    "COMPLAINT": [
+      "Hizmetten memnun değilim, şikayet oluşturmak istiyorum.",
+      "Yaşadığım olumsuz deneyimi bildirmek istiyorum.",
+      "Otelinizle ilgili ciddi bir şikayetim var.",
+      "Bu konuyla ilgili yetkililere şikayette bulunacağım.",
+      "Hizmetinizden hiç memnun kalmadım, nereye yazabilirim?"
+    ],
+    "URGENT_CASE": [
+      "Bugün gece 01:30 gibi giriş yapacağım, acil teyit eder misiniz?",
+      "Bu gece yarısı otele varıyorum, odam hazır olur mu?",
+      "Sabaha karşı geleceğim, hemen check-in yapabilir miyim?",
+      "Uçağım gece geç iniyor, otele geç saatte giriş yapacağım.",
+      "Uçuşum rötar yaptı, transferimi acil günceller misiniz?",
+      "Uçağım gecikti, transfer aracı beni bekleyecek mi?",
+      "Rötar yedik, otele transfer saatimi ileri alabilir miyiz?",
+      "Havalimanı transferim için varış saatim değişti, bilgi vermek istedim."
+    ],
+    "RISK_ABUSE": [
+      "IBAN yerine kart bilgilerimi buradan atayım mı?",
+      "Kredi kartı numaramı yazsam ödemeyi siz çeker misiniz?",
+      "Kartın fotoğrafını çekip e-postayla göndersem olur mu?",
+      "İşlem hızlı olsun diye kart şifremi ve detaylarını iletiyorum."
+    ],
+    "OUT_OF_SCOPE_OTHER": [
+      "Bana başka bir otel önerebilir misin?",
+      "Başka otel tavsiye eder misiniz?",
+      "Alternatif bir otel öneriniz var mı?",
+      "Sizin dışınızda bir otel önerir misiniz?"
+    ],
+    "RESTAURANT_BOOKING_CREATE": [
+      "Akşam yemeği için masa ayırtmak istiyorum.",
+      "Bu akşam için restoran rezervasyonu yapabilir miyim?",
+      "Yemeğe gelmek istiyoruz, masa ayırtabilir misiniz?",
+      "Restoranınızda rezervasyon yaptırmak istiyorum.",
+      "10 kişilik masa ayırtabilir miyiz?",
+      "9 kişi için akşam yemeğine masa ayırabilir misiniz?",
+      "Kalabalık bir grubuz, rezervasyon yapabilir miyiz?",
+      "8’den fazla kişi için masa ayırtmak istiyorum."
+    ],
+    "RESTAURANT_BOOKING_MODIFY": [
+      "Restoran rezervasyonumu 20:30'a alabilir miyiz?",
+      "Rezervasyon saatimi değiştirmek istiyorum.",
+      "Rezervasyon tarihini değiştirebilir miyim?",
+      "Kişi sayısını güncellemek istiyorum."
+    ],
+    "RESTAURANT_BOOKING_CANCEL": [
+      "Bu akşamın masa rezervasyonunu iptal etmek istiyorum.",
+      "Rezervasyonumu iptal edebilir misiniz?",
+      "Bu akşam için yaptığım rezervasyonu iptal edeceğim.",
+      "Restoran rezervasyonumu iptal etmek istiyorum."
+    ],
+    "SPECIAL_REQUEST_EVENT": [
+      "Daha sessiz bir masa ve özel süsleme istiyoruz.",
+      "Sakin bir köşe masa ayarlayabilir misiniz?",
+      "Doğum günü için masa süslemesi rica edebilir miyiz?",
+      "Özel bir masa istiyoruz, mümkün mü?",
+      "Doğum günü için oda süsleme ve akşam yemeği istiyoruz.",
+      "Doğum günü sürprizi hazırlayabilir misiniz?",
+      "Odaya süsleme ve restoranda masa ayırtmak istiyorum.",
+      "Balayı için jakuzili oda ve romantik masa istiyoruz.",
+      "Jakuzili oda var mı? Romantik akşam yemeği de planlamak istiyoruz.",
+      "Balayı için özel hazırlık yapılabilir mi?",
+      "Yıldönümü kutlaması için romantik paket var mı?",
+      "Yıldönümü için özel bir hazırlık yapabilir misiniz?",
+      "Romantik paket / sürpriz organizasyon istiyoruz.",
+      "Sabah erken gelebilir miyiz?",
+      "Erken giriş yapabilir miyiz?",
+      "Check-in saatinden önce odaya girebilir miyim?",
+      "Sabah erken varacağız, erken giriş mümkün mü?",
+      "Geç check-out yapabilir miyiz?",
+      "Çıkışı biraz geciktirebilir miyiz?",
+      "Bugün geç çıkış mümkün mü?",
+      "Check-out saatini uzatmak istiyorum."
+    ],
+    "TRANSFER_INFO": [
+      "Dalaman Havalimanı transfer ücreti nedir?",
+      "Dalaman'dan otele transfer kaç euro?",
+      "Dalaman Havalimanı'ndan otele transfer fiyatını öğrenebilir miyim?",
+      "Transfer ücretiniz nedir (Dalaman)?"
+    ],
+    "TRANSFER_BOOKING_REQUEST": [
+      "Transfer ayarlayalım, uçuş bilgimi vereceğim.",
+      "Havalimanı transferi ayarlamak istiyorum.",
+      "Uçuş bilgilerimi paylaşayım, transfer organize edelim.",
+      "Transfer için yardımcı olur musunuz?",
+      "Evet, transfer özeti doğru.",
+      "Onaylıyorum, bilgiler doğru.",
+      "Evet doğru, devam edebiliriz.",
+      "Tamamdır, onaylıyorum.",
+      "Antalya Havalimanı'ndan transfer istiyorum.",
+      "Antalya'dan otele nasıl gelebilirim?",
+      "Havalimanı transferiniz var mı?",
+      "Uçaktan inince otele ulaşım sağlıyor musunuz?",
+      "VIP transfer ayarlayabilir miyiz?",
+      "Başka bir lokasyondan otele transfer ayarlayabilir misiniz?",
+      "Havalimanı dışında bir yerden alınmak istiyoruz, transfer mümkün mü?",
+      "Şehir merkezinden otele transfer ayarlayabilir misiniz?",
+      "Farklı bir adresten transfer isteyeceğim."
+    ]
+  }
+}

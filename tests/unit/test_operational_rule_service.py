@@ -11,7 +11,7 @@ def test_rez_id_info_rule():
     result = evaluate_operational_reservation_rule("Rez ID nedir?", [])
     assert result is not None
     assert result["status"] == "operational_rez_id_info"
-    assert "Rez Id" in result["reply"] or "Voucher No" in result["reply"]
+    assert "rezervasyon numarası" in result["reply"].lower()
 
 
 def test_cancel_request_starts_slot_collection():
@@ -79,7 +79,7 @@ def test_date_change_flow_rule():
     )
     assert result is not None
     assert result["status"] == "operational_rezid_required"
-    assert "Rez ID" in result["reply"]
+    assert "rezervasyon numarası" in result["reply"].lower()
 
 
 def test_booking_confirmation_code_question_returns_direct_info():
@@ -90,6 +90,35 @@ def test_booking_confirmation_code_question_returns_direct_info():
     assert result is not None
     assert result["status"] == "operational_booking_confirmation_info"
     assert result["reply"] == "Rezervasyon kesinleştikten sonra sizlere rezervasyon kodu ve teyit mesajı paylaşılacaktır."
+
+
+def test_booking_confirmation_info_localized_en():
+    result = evaluate_operational_reservation_rule(
+        "After booking confirmation, can you send booking code and confirmation on WhatsApp?",
+        [],
+        lang="en",
+    )
+    assert result is not None
+    assert result["status"] == "operational_booking_confirmation_info"
+    assert "booking code" in result["reply"].lower()
+
+
+def test_booking_confirmation_info_localized_ru():
+    result = evaluate_operational_reservation_rule(
+        "После подтверждения бронирования отправите код брони в WhatsApp?",
+        [],
+        lang="ru",
+    )
+    assert result is not None
+    assert result["status"] == "operational_booking_confirmation_info"
+    assert "бронир" in result["reply"].lower()
+
+
+def test_rez_id_info_localized_en():
+    result = evaluate_operational_reservation_rule("What is Rez ID?", [], lang="en")
+    assert result is not None
+    assert result["status"] == "operational_rez_id_info"
+    assert "reservation number" in result["reply"].lower()
 
 
 def test_date_change_flow_rule_with_rezid():
@@ -110,7 +139,7 @@ def test_multi_room_partial_cancel_rule():
     )
     assert result is not None
     assert result["status"] == "operational_rezid_required"
-    assert "Rez ID" in result["reply"]
+    assert "rezervasyon numarası" in result["reply"].lower()
 
 
 def test_multi_room_partial_cancel_rule_with_rezid():

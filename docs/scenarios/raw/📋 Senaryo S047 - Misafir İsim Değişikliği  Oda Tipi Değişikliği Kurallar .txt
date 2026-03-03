@@ -1,0 +1,96 @@
+📋 Senaryo: MOD-002 - Misafir İsim Değişikliği / Oda Tipi Değişikliği Kurallar (V1.0)
+
+Senaryo Kodu ve Adı: MOD-002 - Misafir İsim Değişikliği / Oda Tipi Değişikliği Kurallar V1.0
+Kanal: WhatsApp
+
+🎯 Hedef:
+Mevcut rezervasyonu olan misafirden isim değişikliği veya oda tipi değişikliği için gerekli bilgileri sohbet içinde eksiksiz toplamak, kurallara göre uygunluk kontrolü yapmak, özetleyip teyit almak ve talebi Rezervasyon Operasyon birimine onaya iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "Rezervasyondaki isim değişsin istiyorum."
+- "Oda tipimi değiştirebilir miyim?"
+- "Deluxe yerine superior istiyorum."
+- (Opsiyonel) "Aynı tarihte daha büyük odaya geçmek istiyorum."
+- (Opsiyonel) "İsimde yazım hatası var, düzeltebilir misiniz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Rezervasyon Referansı: (Örn: KAS-2026-22814)
+2) Değişiklik Türü: (Misafir ismi / Oda tipi / Her ikisi)
+3) Eski ve Yeni Bilgi: (Örn: "Ahmet Yılmaz -> Mehmet Yılmaz" veya "Superior -> Deluxe")
+4) Tarih Aralığı: (Check-in / Check-out, Örn: 14.08.2026 - 18.08.2026)
+5) Onay İletişim Bilgisi: (Telefon + e-posta)
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının değişiklik niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde gruplanarak sorulur.
+  - İlk adımda 2 bilgi birlikte istenir: rezervasyon referansı + değişiklik türü.
+  - İkinci adımda eski/yeni bilgi + tarih aralığı istenir.
+  - Son adımda iletişim bilgisi alınır.
+- İş kuralı kontrolleri:
+  - İsim değişikliği:
+    - Yazım düzeltmesi ise hızlı onay akışına alınır.
+    - Tam kişi değişikliği ise kimlik/doğrulama gerektirebilir ve admin onayına düşer.
+    - Check-in'e 24 saatten az kaldıysa canlı destek öncelikli işleme aktarılır.
+  - Oda tipi değişikliği:
+    - Müsaitlik kontrolü zorunlu.
+    - Üst kategoriye geçişte fiyat farkı çıkarılır; alt kategoriye düşüşte iade kuralı tarifeye göre belirlenir.
+    - Non-refundable rezervasyonlarda iade yoksa yalnızca fark tahsilatı veya eşdeğer değişim kuralı uygulanır.
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - Değişiklik talebi kaydı oluşturulur.
+  - Webhook/API ile Rezervasyon Operasyon birimine bildirim düşer.
+- Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+🧾 Rezervasyon Referansı: [Rezervasyon Referansı]
+🔁 Değişiklik Türü: [Değişiklik Türü]
+✍️ Eski/Yeni Bilgi: [Eski ve Yeni Bilgi]
+📅 Tarih Aralığı: [Tarih Aralığı]
+📞 Onay İletişim Bilgisi: [Onay İletişim Bilgisi]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Değişiklik Onay Bekliyor" statüsünde düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Değişiklik talebiniz onaylandı. Rezervasyon kaydınız güncelleniyor, birazdan kesin teyit paylaşacağız."
+- Admin reddederse kullanıcıya otomatik mesaj:
+  - "Talebiniz mevcut tarife ve müsaitlik kuralları nedeniyle onaylanamadı. Dilerseniz alternatif seçenek sunabilirim."
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - Aynı rezervasyonda birden fazla oda için farklı isim/oda tipi değişikliği
+  - Check-in gününde acil değişiklik talebi
+  - Kimlik uyuşmazlığı veya üçüncü kişi adına işlem talebi
+- Bot, kritik bilgiyi üst üste 2 kez yanlış formatta alırsa (rezervasyon kodu/tarih/eski-yeni bilgi):
+  - "Formatı anlayamadım + örnek göster" → tekrar hatalıysa canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör"
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"İsim veya oda tipi değişiklik talebiniz için yardımcı olabilirim. 😊
+Süreci başlatmak için lütfen rezervasyon referansınızı ve hangi değişikliği istediğinizi paylaşır mısınız?"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+(Özet Teyit Formatı’nı kullan)
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Değişiklik talebinizi oluşturdum ve Rezervasyon Operasyon ekibiyle paylaştım.
+Kontrol tamamlandığında size buradan bilgi vereceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU], [SENARYO ADI], [Kanal]
+- [Rezervasyon Referansı], [Değişiklik Türü], [Eski ve Yeni Bilgi], [Tarih Aralığı], [Onay İletişim Bilgisi]
+- [Rezervasyon Operasyon], [Webhook/API adı], [Statü]
+- [Fiyat farkı], [Tarife tipi], [Onay/Red metinleri]

@@ -1,0 +1,83 @@
+📋 Senaryo: S040 - Ozel Etkinlik Dogum Gunu V1
+Senaryo Kodu ve Adı: S040 - Ozel Etkinlik Dogum Gunu V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin doğum günü için oda süsleme ve akşam yemeği talebini sohbet akışı içinde netleştirmek, gerekli bilgileri toplamak, müsaitliğin ekibe bağlı olduğunu belirtmek ve talebi “özel_istek” canlı ekibine soft devir ile ileterek 30 dakika içinde geri dönüş sürecini başlatmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Doğum günü için oda süsleme ve akşam yemeği istiyoruz."
+
+"Doğum günü sürprizi hazırlayabilir misiniz?"
+
+"Odaya süsleme ve restoranda masa ayırtmak istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Etkinlik Tarihi: (GG/AA/YYYY)
+
+Etkinlik Tipi: (Doğum günü - oda süsleme / akşam yemeği vb.)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Bütçe (Opsiyonel): (Varsa tercih aralığı)
+
+İletişim Bilgisi: (Telefon / isim)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin özel gün talebi (intent), mesajın ANLAMINDAN (semantik) algılanır; kelime bazlı eşleşme yaklaşımı kullanılmaz.
+
+Özel gün talebi algılandığında:
+- Bilgiler eksikse tek mesajda topluca istenir.
+- Talebin müsaitliğe göre planlanacağı belirtilir.
+- Bilgiler toplandıktan sonra özetleyip teyit alınır.
+- Talep “özel_istek” ekibine soft devir ile aktarılır (dekorasyon/pasta/masa detayları için).
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Soft Devir: özel_istek
+
+SLA: 30 dakika içinde geri dönüş hedeflenir.
+
+Fallback: Misafir detayları değiştirmek isterse güncel bilgi ile aynı soft devir süreci sürdürülür.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Yanıt + Bilgi Talebi:
+
+"Doğum günü talebinizi not aldım. 🎉 Süsleme/pasta/masa detayları için sizi canlı ekibimize yönlendireceğim. Lütfen etkinlik tarihini, kişi sayısını, istediğiniz detayları ve iletişim bilginizi (isim/telefon) paylaşır mısınız? Varsa bütçe aralığınızı da ekleyebilirsiniz."
+
+2. Teyit Mesajı (Bilgiler Toplandığında):
+
+"Teşekkür ederim. Hemen kontrol edelim:
+🗓️ Tarih: [Etkinlik Tarihi]
+🎈 Talep: [Etkinlik Tipi / Özel Not]
+👥 Kişi Sayısı: [Kişi Sayısı]
+💰 Bütçe (ops.): [Bütçe]
+📞 İletişim: [İletişim]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilirsiniz."
+
+3. Soft Devir + SLA:
+
+"Harika, teşekkürler. ✅ Talebinizi canlı ekibimize iletiyorum (özel_istek - soft devir). Müsaitliğe göre en geç 30 dakika içinde size dönüş yapacağız."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Initial Reply & Info Request:
+
+"I noted your birthday request. 🎉 I’m connecting you to our live team for decoration/cake/table details. Please share the event date, guest count, your request details, and your contact (name/phone). If you have a budget range, you may include it as well."
+
+2. Summary / Confirmation:
+
+"Thank you. Please confirm:
+🗓️ Date: [Event Date]
+🎈 Request: [Request Note]
+👥 Guests: [Guest Count]
+💰 Budget (opt.): [Budget]
+📞 Contact: [Contact]
+
+If everything is correct, please reply 'Yes'."
+
+3. Forwarding / SLA:
+
+"Perfect, thank you. ✅ I’m forwarding your request to our live team (special_request - soft handover). We will get back to you within 30 minutes, based on availability."

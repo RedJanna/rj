@@ -1,0 +1,52 @@
+📋 Senaryo: S029 - Transfer Bilgisi Dalaman V1
+Senaryo Kodu ve Adı: S029 - Transfer Bilgisi Dalaman V1
+Kanal: Telefon
+
+🎯 Hedef: Misafirin Dalaman Havalimanı transfer ücreti sorusuna telefon görüşmesi sırasında hızlı ve net şekilde bilgi vermek; ödeme tipini doğru aktararak süreci doğru beklentiyle tamamlamak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Dalaman Havalimanı transfer ücreti nedir?"
+
+"Dalaman'dan otele transfer kaç euro?"
+
+"Dalaman Havalimanı'ndan otele transfer fiyatını öğrenebilir miyim?"
+
+"Transfer ücretiniz nedir (Dalaman)?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Transfer Rotası: (Örn: Dalaman Havalimanı -> Otel / Otel -> Dalaman Havalimanı)
+
+Transfer Tarihi (Opsiyonel): (Fiyat sabit olsa da planlama için istenebilir)
+
+Kişi Sayısı (Opsiyonel): (Bilgilendirme için alınabilir)
+
+Ödeme Tipi: (Nakit)
+
+Dil: (TR/EN vb. - misafirin ifadesinin anlamından algılanır)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin transfer fiyatı sorma niyeti (intent), cümlenin ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Transfer rotası Dalaman Havalimanı -> Kassandra (otel) tek yön ise fiyat sabit olarak yanıtlanır:
+- Tek yön transfer: 75 EUR
+- Ödeme: Nakit olarak resepsiyona yapılır
+
+Misafir farklı rota (otel -> Dalaman) veya farklı destinasyon sorarsa, bu senaryo kapsamında sabit fiyat verilmez; ilgili transfer bilgilendirme sürecine yönlendirilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir fiyat/ödeme bilgisini tekrar teyit ederse aynı net bilgi tekrar edilir ve görüşme uygun şekilde kapatılır.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Dalaman Havalimanı’ndan Kassandra’ya tek yön transfer ücreti 75 EUR’dur. Ödemeyi nakit olarak resepsiyona yapmanız gerekmektedir."
+
+2. Kapanış / Takip:
+
+"İsterseniz transfer tarihinizi ve kişi sayısını da paylaşabilirsiniz; buna göre not alıp sizi yönlendirebilirim. Başka yardımcı olabileceğim bir konu var mı?"

@@ -11,7 +11,10 @@ from app.core.settings_service import (
     save_settings,
     is_automation_enabled,
     is_followup_enabled,
+    is_operational_rules_enabled,
     get_followup_minutes,
+    get_env_settings_schema,
+    validate_startup_environment,
 )
 
 __all__ = [
@@ -21,5 +24,8 @@ __all__ = [
     'save_settings',
     'is_automation_enabled',
     'is_followup_enabled',
+    'is_operational_rules_enabled',
     'get_followup_minutes',
+    'get_env_settings_schema',
+    'validate_startup_environment',
 ]

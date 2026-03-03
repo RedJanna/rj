@@ -1,17 +1,20 @@
 # Dosya Adı: app/services/access_control_service.py
 from __future__ import annotations
 
-import json
 import re
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
+from app.services.state_store_service import JsonStateRepository
 
 # app/services/... -> parents[2] = proje root (C:\KassandraOpenAI)
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 BLACKLIST_FILE = BASE_DIR / "blacklist.json"
 PAUSED_FILE = BASE_DIR / "paused_conversations.json"
+_BLACKLIST_STORE = JsonStateRepository(BLACKLIST_FILE)
+_PAUSED_STORE = JsonStateRepository(PAUSED_FILE)
 
 
 def _clean_phone(phone: str) -> str:
@@ -27,34 +30,24 @@ def _clean_phone(phone: str) -> str:
 
 def load_blacklist() -> List[str]:
     """blacklist.json -> {"blacklist":[...]} okur."""
-    if BLACKLIST_FILE.exists():
-        try:
-            with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                out = data.get("blacklist", [])
-                return out if isinstance(out, list) else []
-        except Exception:
-            pass
+    data = _BLACKLIST_STORE.load_dict()
+    out = data.get("blacklist", [])
+    if isinstance(out, list):
+        return out
     return []
 
 
 def save_blacklist(numbers: List[str]) -> None:
     """blacklist.json yazar (updated_at dahil)."""
-    BLACKLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     cleaned: List[str] = []
     for n in numbers or []:
         cn = _clean_phone(str(n))
         if cn:
             cleaned.append(cn)
 
-    with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            {"blacklist": cleaned, "updated_at": datetime.now().isoformat()},
-            f,
-            indent=2,
-            ensure_ascii=False,
-        )
+    _BLACKLIST_STORE.save_dict(
+        {"blacklist": cleaned, "updated_at": datetime.now().isoformat()}
+    )
 
 
 def is_blacklisted(phone: str) -> bool:
@@ -111,32 +104,23 @@ def remove_from_blacklist(phone: str) -> bool:
 
 def load_paused() -> Dict:
     """paused_conversations.json -> {"paused": {...}} okur."""
-    if PAUSED_FILE.exists():
-        try:
-            with open(PAUSED_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault("paused", {})
-                    if not isinstance(data.get("paused"), dict):
-                        data["paused"] = {}
-                    return data
-        except Exception:
-            pass
+    data = _PAUSED_STORE.load_dict()
+    if isinstance(data, dict):
+        data.setdefault("paused", {})
+        if not isinstance(data.get("paused"), dict):
+            data["paused"] = {}
+        return data
     return {"paused": {}}
 
 
 def save_paused(data: Dict) -> None:
     """paused_conversations.json yazar."""
-    PAUSED_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     if not isinstance(data, dict):
         data = {"paused": {}}
     data.setdefault("paused", {})
     if not isinstance(data.get("paused"), dict):
         data["paused"] = {}
-
-    with open(PAUSED_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    _PAUSED_STORE.save_dict(data)
 
 
 def is_paused(phone: str) -> bool:
@@ -174,3 +158,18 @@ def resume_conversation(phone: str) -> None:
         del paused_map[clean_phone]
         data["paused"] = paused_map
         save_paused(data)
+
+
+def activate_human_takeover(phone: str, reason: str = "handoff") -> bool:
+    """
+    İnsan devri gerektiren durumlarda müşteri konuşmasını bot akışından pause eder.
+    Opsiyonel: AUTO_BLACKLIST_ON_HANDOFF=true ise blacklist'e de ekler.
+    """
+    clean_phone = _clean_phone(phone)
+    if not clean_phone:
+        return False
+    auto_blacklist = str(os.getenv("AUTO_BLACKLIST_ON_HANDOFF", "false")).strip().lower() in {"1", "true", "yes", "on"}
+    if auto_blacklist:
+        add_to_blacklist(clean_phone)
+    pause_conversation(clean_phone, reason=f"human_takeover:{(reason or 'handoff')[:80]}")
+    return True

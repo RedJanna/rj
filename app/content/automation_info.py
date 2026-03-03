@@ -1,4 +1,143 @@
-# Extracted automation info text from kassandra_openai_bot.py
+"""Central automation info source.
+
+This module keeps:
+1) Long-form operational knowledge for LLM prompting (`OTOMASYON_INFO_TEXT_V2`)
+2) Structured deterministic rules consumed directly by runtime services.
+"""
+
+# Structured deterministic runtime rules.
+# NOTE: Canonical-local message flow is deprecated; runtime guards should read
+# operational rules from here.
+AUTOMATION_RUNTIME_RULES = {
+    "language_policy": {
+        "supported": ["tr", "en", "ru", "de", "ar", "es", "fr", "zh", "hi", "pt"],
+        "default": "tr",
+        "strict_lock": True,
+    },
+    "fallback": {
+        "technical_error": {
+            "tr": (
+                "Teknik bir aksaklık oluştu. Talebinizi kaydettim; isterseniz sizi canlı "
+                "müşteri temsilcimize hemen bağlayabilirim."
+            ),
+            "en": (
+                "A technical issue occurred. I have logged your request; I can connect "
+                "you to our live support team right away."
+            ),
+            "ru": (
+                "Произошла техническая ошибка. Я зафиксировал ваш запрос; при необходимости "
+                "могу сразу подключить вас к оператору."
+            ),
+        }
+    },
+    "handoff": {
+        "cancel_refund_sla_minutes": 15,
+        "special_request_hard_handoff_keywords": [
+            "sürpriz",
+            "surpriz",
+            "çiçek",
+            "cicek",
+            "not",
+            "romantik masa",
+            "balayı",
+            "balayi",
+        ],
+    },
+    "hotel_cancel_v1": {
+        "trigger_keywords": [
+            "rezervasyonumu iptal etmek istiyorum",
+            "rezervasyonu iptal etmek istiyorum",
+            "rezervasyonumu iptal",
+            "iptal etmek istiyorum",
+            "cancel reservation",
+            "cancel my reservation",
+        ],
+        "handoff_category": "iptal_iade",
+        "handoff_priority": "high",
+        "required_slots": [
+            "reservation_id_or_voucher_no",
+            "rate_type",
+        ],
+        "optional_slots": [
+            "cancel_reason",
+            "full_name",
+            "phone",
+        ],
+        "rate_type_options": {
+            "1": "iptal_edilemez",
+            "2": "ucretsiz_iptal",
+        },
+        "messages": {
+            "start": {
+                "tr": (
+                    "İptal işleminiz için size yardımcı olayım. İşlemi başlatabilmemiz için "
+                    "lütfen Rezervasyon / Voucher Numaranızı ve rezervasyondaki Ad-Soyad "
+                    "bilginizi paylaşır mısınız? Ayrıca, rezervasyonunuzu hangi koşulla "
+                    "oluşturmuştunuz? (1- İptal Edilemez, 2- Ücretsiz İptal)"
+                ),
+                "en": (
+                    "I can help with your cancellation request. To start, please share your "
+                    "Reservation / Voucher Number and the full name on the booking. Also, "
+                    "which rate type was used? (1- Non-refundable, 2- Free cancellation)"
+                ),
+                "ru": (
+                    "Помогу с отменой бронирования. Чтобы начать, укажите номер "
+                    "бронирования/ваучера и имя-фамилию в брони. Также укажите тип тарифа: "
+                    "(1- Невозвратный, 2- Бесплатная отмена)."
+                ),
+            },
+            "missing_slots": {
+                "tr": (
+                    "İşlemi başlatabilmem için eksik bilgiyi de paylaşır mısınız? "
+                    "Gerekli bilgiler: Rezervasyon/Voucher No ve fiyat tipi "
+                    "(1- İptal Edilemez, 2- Ücretsiz İptal)."
+                ),
+                "en": (
+                    "Could you share the missing detail so I can proceed? Required fields: "
+                    "Reservation/Voucher No and rate type "
+                    "(1- Non-refundable, 2- Free cancellation)."
+                ),
+                "ru": (
+                    "Пожалуйста, отправьте недостающую информацию для запуска процесса. "
+                    "Нужно: номер бронирования/ваучера и тип тарифа "
+                    "(1- Невозвратный, 2- Бесплатная отмена)."
+                ),
+            },
+            "handoff": {
+                "tr": (
+                    "Teşekkür ederim. Rezervasyon/Voucher numarası ve fiyat tipi bilgisini aldım. "
+                    "İptal talebinizi şimdi canlı müşteri temsilcimize (İptal/İade) öncelikli "
+                    "olarak iletiyorum. SLA: 15 dakika."
+                ),
+                "en": (
+                    "Thank you. I received your Reservation/Voucher number and rate type. "
+                    "I am now escalating your cancellation request to our live cancellation/refund "
+                    "team with priority. SLA: 15 minutes."
+                ),
+                "ru": (
+                    "Спасибо. Я получил номер бронирования/ваучера и тип тарифа. "
+                    "Передаю запрос на отмену в приоритетную очередь команды отмен/возвратов. "
+                    "SLA: 15 минут."
+                ),
+            },
+        },
+    },
+}
+
+
+def get_runtime_text(rule_path: tuple[str, ...], lang: str = "tr", default: str = "") -> str:
+    """Read a localized runtime text from `AUTOMATION_RUNTIME_RULES` safely."""
+    node = AUTOMATION_RUNTIME_RULES
+    for key in rule_path:
+        if not isinstance(node, dict):
+            return default
+        node = node.get(key)
+    if isinstance(node, dict):
+        if lang in node and isinstance(node[lang], str):
+            return node[lang]
+        if "tr" in node and isinstance(node["tr"], str):
+            return node["tr"]
+    return node if isinstance(node, str) else default
 
 OTOMASYON_INFO_TEXT_V2 = r"""KASSANDRA BOUTIQUE OTEL — OTOMASYON BİLGİ TOPLAMA DOSYASI (ŞABLON)
 Sürüm: v1.0  |  Tarih: 23/12/2025
@@ -27,6 +166,7 @@ A) TEMEL OTEL KİMLİĞİ
 5) Resepsiyon telefon / WhatsApp / e-posta: Telefon:+90533 250 32 77 WhatsApp: +90533 250 32 77 E- posta: info@kassandraoludeniz.com
 6) Web sitesi / sosyal medya:https://www.kassandraoludeniz.com/tr / https://www.instagram.com/kassandraoludeniz/
 7) Check-in / Check-out saatleri: Check-in: 14:00 (öğleden sonra 2)  Check-out: 12:00 (öğlen) 
+   • GEÇ GİRİŞ KURALI: Otele giriş saat 14:00'dan sonradır. Giriş gününde 14:00'dan sonra istenen saatte giriş yapılabilir (ör. 01:30 gece varış). Bu durum için "müsaitlik kontrolü" ifadesi kullanılmaz.
 8) Resepsiyon çalışma saatleri (24/7 mi? değilse saat aralığı): Resepsiyonumuz 7/24 açıktır.
 9) Diller (TR/EN/RU vs) + varsayılan dil: TR / ENG
 
@@ -430,17 +570,19 @@ Test mesajı: “Kart numaramı yazayım mı?” → [AUTO] güvenlik uyarısı 
 - Log maskeleme aktif (telefon/e-posta vb).
 - İlk 24 saat “yakın takip”: hata olursa otomasyonu durdurup manuel cevap prosedürü hazır.
 
-Müşteri ilk mesaj atınca vereceğimiz cevap:
+Müşteri sadece selamlama mesajı attığında vereceğimiz karşılama cevabı:
 
 Merhaba,
 
-Kassandra Ölüdeniz'e hoş geldiniz. 
+Kassandra Ölüdeniz'e hoş geldiniz.
 Size özel bir konaklama deneyimi hazırlamak için buradayım.
 Size nasıl yardımcı olabilirim?
 	1.	Rezervasyon / Oda bilgisi
 	2.	Transfer & Ulaşım
 	3.	Restoran & Kahvaltı
-	4.	Özel istekler (sürpriz, kutlama, vb.)
+		4.	Özel istekler (sürpriz, kutlama, vb.)
+
+Not: Müşteri ilk mesajda doğrudan fiyat/müsaitlik/rezervasyon sorusu sorarsa bu menü mesajı gönderilmez; müşteri sorusu doğrudan yanıtlanır.
 
 ──────────────────────────────────────────────────────────────────────────────
 DOLDURAN: ÖMER ALPEREN GÖNEN   TARİH: 24.12.2025   ONAYLAYAN: ÖMER ALPEREN GÖNEN

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
+from pathlib import Path
+
+from app.services.state_store_service import JsonStateRepository
 
 
 class QAAgentService:
@@ -12,24 +14,25 @@ class QAAgentService:
         self._client = openai_client
         self._model = model
         self._log_file = log_file
+        self._store = JsonStateRepository(Path(log_file).expanduser())
         self.evaluations = []
         self._load_evaluations()
 
     def _load_evaluations(self):
         try:
-            if os.path.exists(self._log_file):
-                with open(self._log_file, "r", encoding="utf-8") as f:
-                    self.evaluations = json.load(f)
+            data = self._store.load_json(default=[])
+            if isinstance(data, list):
+                self.evaluations = data
+            elif isinstance(data, dict) and isinstance(data.get("evaluations"), list):
+                self.evaluations = data.get("evaluations", [])
         except Exception as e:
             print(f"QA log yükleme hatası: {e}")
             self.evaluations = []
 
     def _save_evaluations(self):
         try:
-            os.makedirs(os.path.dirname(self._log_file), exist_ok=True)
             recent = self.evaluations[-500:] if len(self.evaluations) > 500 else self.evaluations
-            with open(self._log_file, "w", encoding="utf-8") as f:
-                json.dump(recent, f, ensure_ascii=False, indent=2)
+            self._store.save_json(recent)
         except Exception as e:
             print(f"QA log kaydetme hatası: {e}")
 

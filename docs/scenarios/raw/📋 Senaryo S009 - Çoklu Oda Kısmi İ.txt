@@ -1,0 +1,53 @@
+📋 Senaryo: S009 - Çoklu Oda Kısmi İptal V1
+Senaryo Kodu ve Adı: S009 - Çoklu Oda Kısmi İptal V1
+Kanal: E-posta
+
+🎯 Hedef: Çoklu oda rezervasyonu bulunan ve kısmi iptal talep eden misafirden, hangi odanın iptal edileceğini netleştirecek ön bilgileri eksiksiz toplamak ve işlemi hızlıca ilgili canlı destek ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"3 odadan sadece 1 tanesini iptal etmek istiyorum."
+
+"Rezerve ettiğimiz odalardan birini iptal edebilir miyiz?"
+
+"Gruptan bir aile gelemiyor, onların odasını iptal edeceğiz."
+
+"İki oda ayırmıştık, birini iptal etmek istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Rezervasyon No: (İşlemi sistemde bulmak ve doğrulamak için zorunludur)
+
+İptal Edilecek Oda Bilgisi: (Misafir adı veya oda tipi - hangi odanın iptal edileceğini belirlemek için)
+
+Kalan Odaların Teyidi: (Hata yapmamak adına devam edecek konaklamaların doğrulanması için)
+
+Ad Soyad: (Rezervasyon sahibi doğrulaması için)
+
+Telefon: (Gerekli durumlarda hızlı teyit ve iletişim için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin kısmi oda iptali talebi (intent), ilettiği mesajın genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime, sayı veya kalıp bazlı eşleştirme kesinlikle yapılmaz; misafir niyetini hangi sözcüklerle veya nasıl ifade ederse etsin asıl talep sistem tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer sistem rezervasyonun çoklu oda içerdiğini tespit ederse veya misafir kısmi iptal istediğini belirtirse, öncelikle hangi odanın (misafir adı/oda bilgisi) iptal edileceği netleştirilir. İptal edilecek oda netleşmeden işleme devam edilmez.
+
+Misafirin e-postasında eksik bilgi varsa, iptal edilecek odanın detayları kibarca talep edilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Devir): İptal edilecek spesifik oda bilgisi netleştirildikten sonra işlem otomasyonda sonlandırılmaz; bilet tüm detaylarıyla birlikte ilgili canlı temsilciye devredilir.
+
+SLA Süresi: Aktarılan bu kısmi iptal talebine, operasyon ekibi tarafından en geç 15 dakika (SLA hedefi) içerisinde müdahale edilmesi hedeflenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İptal Edilecek Odanın Netleştirilmesi (TR):
+
+"Elbette. Lütfen iptal edilecek odayı (misafir adı/oda bilgisi) netleştirir misiniz?"
+
+2. İptal Edilecek Odanın Netleştirilmesi (EN):
+
+"Sure. Please confirm which room should be cancelled (guest name/room detail)."

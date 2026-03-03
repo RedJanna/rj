@@ -3,7 +3,10 @@ import pytest
 from app.services.elektraweb_booking_service import (
     _clear_child_age_payload_fields,
     _apply_child_policy_to_pricing,
+    _build_missing_info_reply,
+    _extract_adult_count,
     _extract_child_ages,
+    handle_elektra_price_request,
     _extract_price_data_pax_counts,
 )
 
@@ -21,6 +24,46 @@ def test_extract_child_ages_supports_multi_age_with_repeated_yas_words():
 @pytest.mark.unit
 def test_extract_child_ages_supports_monthly_baby_as_zero_age():
     assert _extract_child_ages("1 bebek 9 aylik") == [0]
+
+
+@pytest.mark.unit
+def test_extract_child_ages_does_not_match_ayarlayabilir_word():
+    assert _extract_child_ages("2 ayrı oda ayarlayabilir misiniz?") == []
+
+
+@pytest.mark.unit
+def test_extract_child_ages_supports_child_yasi_format():
+    assert _extract_child_ages("Cocuk yasi 7") == [7]
+
+
+@pytest.mark.unit
+def test_extract_child_ages_supports_child_age_format_in_english():
+    assert _extract_child_ages("1 child age 7") == [7]
+
+
+@pytest.mark.unit
+def test_extract_child_ages_supports_years_old_format_in_english():
+    assert _extract_child_ages("2 adults + 1 child (7 years old)") == [7]
+
+
+@pytest.mark.unit
+def test_extract_adult_count_supports_german_erwachsene():
+    assert _extract_adult_count("2 Erwachsene vom 14. bis 18. August") == 2
+
+
+@pytest.mark.unit
+def test_extract_adult_count_supports_chinese_adults():
+    assert _extract_adult_count("请提供2026年8月14日至18日两位成人的总价。") == 2
+
+
+@pytest.mark.unit
+def test_extract_adult_count_supports_arabic_dual_adults():
+    assert _extract_adult_count("يرجى مشاركة السعر الإجمالي لشخصين بالغين من 14 إلى 18 أغسطس 2026.") == 2
+
+
+@pytest.mark.unit
+def test_extract_adult_count_supports_hindi_adults():
+    assert _extract_adult_count("कृपया 14 से 18 अगस्त 2026 तक 2 वयस्कों के लिए कुल कीमत बताएं।") == 2
 
 
 @pytest.mark.unit
@@ -95,3 +138,22 @@ def test_clear_child_age_payload_fields_removes_all_child_age_keys():
     # Count alanlari intentionally korunur.
     assert payload["child"] == 2
     assert payload["child-count"] == 2
+
+
+@pytest.mark.unit
+def test_build_missing_info_reply_for_child_ages_only_is_explicit_in_turkish():
+    reply = _build_missing_info_reply(["child_ages"], "tr", dates_found=True)
+    assert "Çocuk yaşları" in reply
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_elektra_price_request_requires_child_ages_when_only_child_count_given():
+    reply, log, offers = await handle_elektra_price_request(
+        "1 Ekim - 3 Ekim 2026, 2 yetişkin 2 çocuk fiyat nedir?",
+        hotel_id="21966",
+        lang="tr",
+    )
+    assert "Çocuk yaşları" in reply
+    assert offers is None
+    assert "child_ages" in log

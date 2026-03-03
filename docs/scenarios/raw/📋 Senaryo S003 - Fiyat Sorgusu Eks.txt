@@ -1,0 +1,53 @@
+📋 Senaryo: S003 - Fiyat Sorgusu Eksik Tarih V1
+Senaryo Kodu ve Adı: S003 - Fiyat Sorgusu Eksik Tarih V1
+Kanal: E-posta
+
+🎯 Hedef: Rezervasyon işlemi için fiyat sorgulayan ancak tarih ve kişi sayısını eksik ileten misafirlerden, fiyat teklifi sunabilmek adına gerekli ön bilgileri sohbet akışı içinde eksiksiz toplamak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Fiyat alabilir miyim?"
+
+"Konaklama ücretleriniz ne kadar?"
+
+"Oda fiyatlarını öğrenebilir miyim?"
+
+"Gecelik ne kadar ödeleriz?"
+
+"Tatil için fiyat bilgisi verir misiniz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş Tarihi: (GG/AA/YYYY formatında konaklama başlangıç tarihi)
+
+Çıkış Tarihi: (GG/AA/YYYY formatında konaklama bitiş tarihi)
+
+Yetişkin Sayısı: (Fiyatlandırma ve oda kapasitesi için)
+
+Çocuk Sayısı ve Yaşları: (Çocuk indirimleri ve uygun yatak planlaması için)
+
+Para Birimi Tercihi: (TL, EUR, USD, GBP vb. fiyat sunumu için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin fiyat alma talebi (intent) metnin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya kalıp eşleştirme yapılmaz; misafir talebini hangi kelimelerle ifade ederse etsin asıl niyet kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer misafirin mesajında "Giriş Tarihi" ve "Çıkış Tarihi" bulunmuyorsa, sistem kesinlikle fiyat hesaplamasına veya sunumuna geçmez.
+
+İlk e-posta yanıtında eksik olan bilgiler (tarihler ve kişi sayıları), misafire kibarca sorulur.
+
+Tüm bilgiler eksiksiz toplandıktan sonra fiyat verme veya teklif sunma aşamasına geçilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon İşleyişi: Sistem fiyat teklifi öncesi gerekli verileri otonom olarak toplar ve bu aşamada canlı desteğe veya insan müdahalesine (eskalasyon) gerek duyulmaz.
+
+Hata Durumu: Misafir birden fazla e-postada hala anlaşılır tarihler veya yaş bilgisi vermezse, standart bilgi talep şablonu tekrarlanır veya süreç askıya alınır.
+
+💬 Standart Yanıt Mesajları (TR)
+
+1. İlk Karşılama ve Eksik Bilgi Talebi:
+
+"İlginiz için çok teşekkür ederiz! Size en uygun oda seçeneklerimizi ve net bir fiyat sunabilmem için; planladığınız giriş-çıkış tarihlerinizi, konaklayacak yetişkin sayısını ve eğer çocuk misafirimiz olacaksa çocukların yaşlarını da benimle paylaşabilir misiniz?"

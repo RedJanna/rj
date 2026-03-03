@@ -1,0 +1,69 @@
+📋 Senaryo: S031 - Transfer Rezervasyon Onay V1
+Senaryo Kodu ve Adı: S031 - Transfer Rezervasyon Onay V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin transfer özeti onayını sohbet akışı içinde net şekilde almak, onay sonrası transfer talebini otomasyon ile işleme alıp ilgili ekibe devretmek ve misafiri karşılama süreci hakkında bilgilendirmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Evet, transfer özeti doğru."
+
+"Onaylıyorum, bilgiler doğru."
+
+"Evet doğru, devam edebiliriz."
+
+"Tamamdır, onaylıyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Transfer Özeti Onayı: (Misafirin, paylaşılan özetin doğru olduğunu belirten onayı)
+
+Telefon: (İletişim numarası)
+
+Uçuş Numarası: (Örn: TK2410)
+
+Tarih-Saat: (Varış tarihi ve iniş saati)
+
+İsim: (Karşılamada kullanılacak isim)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin özeti onaylama niyeti (intent), mesajın ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Misafir özeti onaylarsa:
+- Transfer talebi otomasyon ile işleme alınır.
+- Talep ilgili ekibe devredilir (onay anında insan devri başlatılır).
+- Misafire “talep iletildi” bilgilendirmesi yapılır ve karşılama şekli net olarak aktarılır (isim tabelası).
+
+Eğer gerekli bilgilerden (telefon / uçuş no / tarih-saat / isim) biri eksikse:
+- Öncelikle eksik bilgiler tek mesajda istenir.
+- Bilgiler tamamlanınca aynı “talep iletildi” akışı uygulanır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon: Dalaman transfer sürecinde talep otomasyon tarafından tamamlanır.
+
+Canlı Desteğe Aktarma (İnsan Devri): Misafir özeti onayladığı anda talep ilgili ekibe devredilir.
+
+SLA: 20 dakika içinde süreç/sonraki adım bilgilendirmesi hedeflenir.
+
+Fallback: Misafir “onay” yerine dolaylı bir ifadeyle (örn: “tamamdır”, “uygun”) yanıt verirse, anlamdan onay algılanır ve aynı akış sürdürülür.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Onay Alındı / Talep İletildi:
+
+"Teşekkürler! ✅ Transfer talebinizi ekibimize ilettim. Şoförümüz sizi isminizin yazılı olduğu tabela ile karşılayacak."
+
+2. SLA Bilgilendirmesi:
+
+"En geç 20 dakika içinde süreçle ilgili bilgilendirmeyi buradan paylaşacağız."
+
+3. Eksik Bilgi Varsa (Örnek):
+
+"Teşekkürler, onayınızı aldım. Talebi iletebilmem için son olarak şu bilgileri paylaşır mısınız: telefon numaranız, uçuş numaranız ve varış tarih-saat bilginiz?"
+
+4. English (If Needed):
+
+"Thank you! ✅ I have forwarded your transfer request. Our driver will greet you with a name sign."
+
+"We will update you here within 20 minutes."

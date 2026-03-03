@@ -1,0 +1,54 @@
+📋 Senaryo: S045 - Evcil Hayvan Politikası V1
+Senaryo Kodu ve Adı: S045 - Evcil Hayvan Politikası V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin evcil hayvan kabul edilip edilmediğine dair sorusuna e-posta üzerinden hızlı yanıt vermek ve güncel/politika bazlı net bilgi için misafiri telefonla canlı kanala yönlendirmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Evcil hayvan kabul ediyor musunuz?"
+
+"Köpekle gelebilir miyiz?"
+
+"Kedi ile konaklama mümkün mü?"
+
+"Evcil hayvan politikası nedir?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Soru Konusu: (Evcil hayvan politikası)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+İletişim Numarası: (Misafirden dönüş için alınabilir - opsiyonel)
+
+Talep Notu: (Hayvan türü/ırkı/ağırlık bilgisi varsa not edilir)
+
+Takip Sorusu: (Misafirin hızlı yönlendirilmesi için)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin evcil hayvan politikası sorusu, e-posta içeriğinin anlamından algılandığında senaryo tetiklenir.
+
+Bu konuda en doğru ve güncel bilgilendirme için misafir telefonla canlı kanala yönlendirilir.
+
+Misafir hayvan türü veya ek detay paylaştıysa not edilir ve telefonda paylaşması önerilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Bilgi Yönlendirmesi: Evcil hayvan politikası için telefon üzerinden bilgilendirme yapılır.
+
+Fallback: Misafir telefonla arayamıyorsa, dönüş yapılabilmesi için iletişim numarası istenir ve ilgili ekibe iletilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Telefon Yönlendirmesi:
+
+"Evcil hayvan politikası için lütfen +90 533 250 32 77 numarasından bizimle iletişime geçebilir misiniz?"
+
+2. Takip Sorusu (Opsiyonel):
+
+"Evcil hayvanınızın türünü (kedi/köpek vb.) ve yaklaşık ağırlığını da paylaşırsanız, görüşmede daha hızlı yardımcı olabiliriz."
+
+3. English (If Needed):
+
+"For pet policy details, please contact us at +90 533 250 32 77."

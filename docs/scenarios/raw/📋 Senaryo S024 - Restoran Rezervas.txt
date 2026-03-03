@@ -1,0 +1,75 @@
+📋 Senaryo: S024 - Restoran Rezervasyon Başlangıcı V1
+Senaryo Kodu ve Adı: S024 - Restoran Rezervasyon Başlangıcı V1
+Kanal: E-posta
+
+🎯 Hedef: Misafirin akşam yemeği için restoran rezervasyonu talebini e-posta üzerinden almak, gerekli bilgileri eksiksiz şekilde toplamak ve bilgiler tam olduğunda restoran rezervasyon talebini oluşturup ilgili ekibe iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Akşam yemeği için masa ayırtmak istiyorum."
+
+"Bu akşam için restoran rezervasyonu yapabilir miyim?"
+
+"Yemeğe gelmek istiyoruz, masa ayırtabilir misiniz?"
+
+"Restoranınızda rezervasyon yaptırmak istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Tarih: (GG/AA/YYYY formatında)
+
+Saat: (Örn: 20:00)
+
+Kişi Sayısı: (Toplam kişi sayısı)
+
+Rezervasyon İsmi: (Rezervasyonun oluşturulacağı ad-soyad)
+
+Telefon: (İletişim numarası)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin restoran rezervasyonu talebi (intent), e-posta içeriğinin ANLAMINDAN (semantik) algılandığında senaryo tetiklenir; kelime/anahtar kelime eşleştirme yaklaşımı kullanılmaz.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Tarih + saat + kişi sayısı + rezervasyon ismi + telefon bilgileri tam ise restoran rezervasyon talebi oluşturulur ve restoran ekibine iletilir.
+
+Eksik bilgi varsa, eksik olan alanlar misafiri yormayacak şekilde tek e-postada topluca istenir.
+
+Bilgiler tamamlandığında misafire kısa bir özet/teyit ile bilgilendirme yapılır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon: Bilgiler tam ise rezervasyon talebi otomatik oluşturulur ve restoran ekibine iletilir.
+
+Canlı Desteğe Aktarma (Devir/Eskalasyon): Misafir büyük grup rezervasyonu olduğunu belirtirse veya özel düzen/özel talep (örn: kutlama, özel alan, özel istekler) iletirse ilgili ekip/operasyon sorumlusuna devredilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Talebi (Eksik Bilgi Varsa):
+
+"Memnuniyetle. Rezervasyonunuzu oluşturabilmem için lütfen tarih, saat, kişi sayısı, rezervasyon ismi ve iletişim telefon numaranızı paylaşır mısınız?"
+
+2. Bilgiler Tamamlandığında (Özet / Teyit):
+
+"Teşekkür ederim. Rezervasyon talebinizi aşağıdaki bilgilerle oluşturuyorum:
+🗓️ Tarih: [Tarih]
+🕒 Saat: [Saat]
+👥 Kişi Sayısı: [Kişi Sayısı]
+👤 Rezervasyon İsmi: [Rezervasyon İsmi]
+📞 Telefon: [Telefon]
+Bilgiler doğruysa bu e-postayı onaylayarak yanıtlayabilirsiniz."
+
+💬 Standart Yanıt Mesajları (EN)
+1. Information Request (If Details Are Missing):
+
+"With pleasure. To create your reservation, could you please share the date, time, guest count, reservation name, and a contact phone number?"
+
+2. When Details Are Complete (Summary / Confirmation):
+
+"Thank you. I’m creating your reservation request with the details below:
+🗓️ Date: [Date]
+🕒 Time: [Time]
+👥 Guest Count: [Guest Count]
+👤 Reservation Name: [Reservation Name]
+📞 Phone: [Phone]
+If everything is correct, you may confirm by replying to this email."

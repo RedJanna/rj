@@ -8,6 +8,11 @@ from app.services.metrics_service import (
     record_metric,
     list_events,
     metrics_summary,
+    reset_metrics,
+)
+from app.services.success_metrics_service import (
+    SUCCESS_TARGETS,
+    evaluate_success_scorecard,
 )
 
 router = APIRouter(prefix="/admin/metrics", tags=["metrics"])
@@ -19,9 +24,16 @@ def get_metrics_events(
     days: int = Query(7, ge=0, le=365),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    event_prefix: str = Query("", description="Event prefix filter, orn: security."),
 ) -> Dict[str, Any]:
-    items, total = list_events(days=days, limit=limit, offset=offset)
-    return {"items": items, "total": total, "days": int(days), "limit": int(limit)}
+    items, total = list_events(days=days, limit=limit, offset=offset, event_prefix=event_prefix)
+    return {
+        "items": items,
+        "total": total,
+        "days": int(days),
+        "limit": int(limit),
+        "event_prefix": (event_prefix or "").strip(),
+    }
 
 
 # Alias: /admin/metrics ve /admin/metrics/
@@ -31,9 +43,16 @@ def get_metrics_events_alias(
     days: int = Query(7, ge=0, le=365),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    event_prefix: str = Query("", description="Event prefix filter, orn: security."),
 ) -> Dict[str, Any]:
-    items, total = list_events(days=days, limit=limit, offset=offset)
-    return {"items": items, "total": total, "days": int(days), "limit": int(limit)}
+    items, total = list_events(days=days, limit=limit, offset=offset, event_prefix=event_prefix)
+    return {
+        "items": items,
+        "total": total,
+        "days": int(days),
+        "limit": int(limit),
+        "event_prefix": (event_prefix or "").strip(),
+    }
 
 
 # RECORD
@@ -60,3 +79,21 @@ def record_metrics_event(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 @router.get("/summary")
 def get_metrics_summary(days: int = Query(7, ge=0, le=365)) -> Dict[str, Any]:
     return metrics_summary(days=days)
+
+
+@router.post("/reset")
+def reset_metrics_events(
+    event_prefix: str = Query("", description="Optional event prefix filter."),
+) -> Dict[str, Any]:
+    deleted = reset_metrics(event_prefix=(event_prefix or "").strip())
+    return {"status": "ok", "deleted": int(deleted), "event_prefix": (event_prefix or "").strip()}
+
+
+@router.get("/success-targets")
+def get_success_targets() -> Dict[str, Any]:
+    return {"targets": SUCCESS_TARGETS}
+
+
+@router.get("/success-scorecard")
+def get_success_scorecard(days: int = Query(7, ge=1, le=365)) -> Dict[str, Any]:
+    return evaluate_success_scorecard(days=days)

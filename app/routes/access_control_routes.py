@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.core.admin_auth import require_permission
 
 from app.services.access_control_service import (
     add_to_blacklist,
@@ -29,11 +30,11 @@ def build_access_control_router(notify_critical_action: Optional[NotifyFn] = Non
     router = APIRouter(tags=["access-control"])
 
     @router.get("/blacklist")
-    async def get_blacklist_api():
+    async def get_blacklist_api(_=Depends(require_permission("access_control.manage"))):
         return {"blacklist": load_blacklist()}
 
     @router.post("/blacklist/add/{phone}")
-    async def add_blacklist_api(phone: str):
+    async def add_blacklist_api(phone: str, _=Depends(require_permission("access_control.manage"))):
         ok = add_to_blacklist(phone)
         # Eski davranış: başarılıysa admin'e kritik bildirim
         if ok and notify_critical_action:
@@ -41,7 +42,7 @@ def build_access_control_router(notify_critical_action: Optional[NotifyFn] = Non
         return {"success": ok}
 
     @router.post("/blacklist/remove/{phone}")
-    async def remove_blacklist_api(phone: str):
+    async def remove_blacklist_api(phone: str, _=Depends(require_permission("access_control.manage"))):
         ok = remove_from_blacklist(phone)
         # Eski davranış: başarılıysa admin'e kritik bildirim
         if ok and notify_critical_action:
@@ -49,12 +50,12 @@ def build_access_control_router(notify_critical_action: Optional[NotifyFn] = Non
         return {"success": ok}
 
     @router.post("/pause/{phone}")
-    async def pause_api(phone: str, reason: str = "manual"):
+    async def pause_api(phone: str, reason: str = "manual", _=Depends(require_permission("access_control.manage"))):
         pause_conversation(phone, reason=reason)
         return {"success": True}
 
     @router.post("/resume/{phone}")
-    async def resume_api(phone: str):
+    async def resume_api(phone: str, _=Depends(require_permission("access_control.manage"))):
         resume_conversation(phone)
         return {"success": True}
 
@@ -63,11 +64,11 @@ def build_access_control_router(notify_critical_action: Optional[NotifyFn] = Non
     # ======================================================
 
     @router.get("/purge/preview/{phone}")
-    async def purge_preview_api(phone: str):
+    async def purge_preview_api(phone: str, _=Depends(require_permission("access_control.manage"))):
         return preview_phone_data(phone)
 
     @router.post("/purge/{phone}")
-    async def purge_api(phone: str, hard: bool = False):
+    async def purge_api(phone: str, hard: bool = False, _=Depends(require_permission("access_control.manage"))):
         result = purge_phone_data(phone, hard_delete_bookings=bool(hard))
         if result.get("success") and notify_critical_action:
             cleared = ", ".join(result.get("cleared", []))

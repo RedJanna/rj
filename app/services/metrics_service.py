@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.services.request_context_service import get_current_correlation_id
 
 # ------------------------------------------------------
 # SQLite storage (single table: events)
@@ -113,7 +114,10 @@ def record_metric(
 
     category = (category or "general").strip() or "general"
 
-    meta_obj: Dict[str, Any] = meta if isinstance(meta, dict) else ({"_raw": meta} if meta is not None else {})
+    meta_obj: Dict[str, Any] = dict(meta) if isinstance(meta, dict) else ({"_raw": meta} if meta is not None else {})
+    correlation_id = get_current_correlation_id()
+    if correlation_id and "correlation_id" not in meta_obj:
+        meta_obj["correlation_id"] = correlation_id
     meta_json = json.dumps(meta_obj, ensure_ascii=False)
 
     with _connect() as conn:
@@ -127,9 +131,18 @@ def record_metric(
         return int(cur.lastrowid)
 
 
-def fetch_events(days: int = 7, limit: int = 100, offset: int = 0) -> List[MetricsEvent]:
+def fetch_events(
+    days: int = 7,
+    limit: int = 100,
+    offset: int = 0,
+    event_prefix: Optional[str] = None,
+) -> List[MetricsEvent]:
     init_metrics_db()
     since = _since_iso(int(days))
+    prefix = (event_prefix or "").strip()
+    filter_by_prefix = bool(prefix)
+    if filter_by_prefix:
+        prefix = f"{prefix}%"
 
     with _connect() as conn:
         rows = conn.execute(
@@ -137,11 +150,12 @@ def fetch_events(days: int = 7, limit: int = 100, offset: int = 0) -> List[Metri
             SELECT id, ts, event, category, response_time, meta_json
             FROM {_TABLE_NEW}
             WHERE ts >= ?
+              AND (? = 0 OR event LIKE ?)
             ORDER BY ts DESC
             LIMIT ?
             OFFSET ?
             """,
-            (since, int(limit), int(offset)),
+            (since, int(filter_by_prefix), prefix, int(limit), int(offset)),
         ).fetchall()
 
     events: List[MetricsEvent] = []
@@ -163,24 +177,38 @@ def fetch_events(days: int = 7, limit: int = 100, offset: int = 0) -> List[Metri
     return events
 
 
-def count_events(days: int = 7) -> int:
+def count_events(days: int = 7, event_prefix: Optional[str] = None) -> int:
     init_metrics_db()
     since = _since_iso(int(days))
+    prefix = (event_prefix or "").strip()
+    filter_by_prefix = bool(prefix)
+    if filter_by_prefix:
+        prefix = f"{prefix}%"
     with _connect() as conn:
         row = conn.execute(
-            f"SELECT COUNT(*) AS c FROM {_TABLE_NEW} WHERE ts >= ?",
-            (since,),
+            f"""
+            SELECT COUNT(*) AS c
+            FROM {_TABLE_NEW}
+            WHERE ts >= ?
+              AND (? = 0 OR event LIKE ?)
+            """,
+            (since, int(filter_by_prefix), prefix),
         ).fetchone()
     return int(row["c"]) if row and row["c"] is not None else 0
 
 
-def list_events(days: int = 7, limit: int = 50, offset: int = 0) -> Tuple[List[Dict[str, Any]], int]:
+def list_events(
+    days: int = 7,
+    limit: int = 50,
+    offset: int = 0,
+    event_prefix: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
     """
     Canonical API for routes:
     returns (items, total)
     """
-    evs = fetch_events(days=days, limit=limit, offset=offset)
-    total = count_events(days=days)
+    evs = fetch_events(days=days, limit=limit, offset=offset, event_prefix=event_prefix)
+    total = count_events(days=days, event_prefix=event_prefix)
     items = [
         {
             "id": e.id,
@@ -234,6 +262,29 @@ def metrics_summary(days: int = 7) -> Dict[str, Any]:
         "db_path": str(DB_PATH),
         "table": _TABLE_NEW,
     }
+
+
+def reset_metrics(event_prefix: Optional[str] = None) -> int:
+    """
+    Delete metrics rows and return affected row count.
+    If event_prefix is provided, only matching events are deleted.
+    """
+    init_metrics_db()
+    prefix = (event_prefix or "").strip()
+    filter_by_prefix = bool(prefix)
+    if filter_by_prefix:
+        prefix = f"{prefix}%"
+
+    with _connect() as conn:
+        cur = conn.execute(
+            f"""
+            DELETE FROM {_TABLE_NEW}
+            WHERE (? = 0 OR event LIKE ?)
+            """,
+            (int(filter_by_prefix), prefix),
+        )
+        deleted = int(cur.rowcount or 0)
+    return deleted
 
 
 # ------------------------------------------------------

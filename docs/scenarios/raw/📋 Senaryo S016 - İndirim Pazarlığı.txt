@@ -1,0 +1,53 @@
+📋 Senaryo: S016 - İndirim Pazarlığı V1
+Senaryo Kodu ve Adı: S016 - İndirim Pazarlığı V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Rezervasyon işlemi sırasında fiyat üzerinden indirim veya pazarlık talep eden misafirin konaklama detaylarını ve hedef bütçesini toplayarak, alternatif seçenekleri değerlendirmek üzere süreci canlı satış ekibine aktarmak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Bu fiyata indirim yapar mısınız?"
+
+"Biraz daha uygun bir fiyat verebilir misiniz?"
+
+"Bize özel bir kampanya veya son fiyatınız ne olur?"
+
+"Fiyatta bir şeyler yapma şansınız var mı?"
+
+"Bütçemizi biraz aşıyor, yardımcı olabilir misiniz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Tarih Aralığı: (GG/AA/YYYY formatında planlanan konaklama tarihleri)
+
+Kişi Sayısı: (Yetişkin/Çocuk bilgisi - doğru fiyatlandırma alternatifleri için)
+
+Oda Tipi: (Mevcut istenen veya daha uygun fiyatlı alternatif sunulabilecek oda kategorisi)
+
+Hedef Bütçe: (Misafirin ayırdığı veya aklındaki öngörülen tutar)
+
+İletişim: (Satış ekibinin teklif iletebilmesi için iletişim bilgisi)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin indirim veya pazarlık talebi (intent), kurduğu cümlenin genel anlamından (semantik) algılandığında sistem tetiklenir. "İndirim", "pazarlık", "uygun" gibi kelime bazlı eşleştirmeler kesinlikle yapılmaz; misafir niyetini dolaylı yollardan veya farklı sözcüklerle ifade etse dahi asıl fiyat düşürme beklentisi bot tarafından kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer sistem bir indirim veya pazarlık talebi saptarsa, kural olarak süreci reddetmez; misafirin bütçesini veya esnekliğini anlamaya çalışarak alternatif oda/tarih senaryolarını devreye sokar ve nihai teklif için talebi satış ekibine yönlendirir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Canlı Desteğe Aktarma (Soft Devir): Fiyat pazarlığı inisiyatif ve özel onay gerektiren bir durum (Fiyat_pazarlik) olduğu için sohbet botta sonlandırılmaz; "Soft Devir" yöntemiyle canlı satış ekibine aktarılır.
+
+SLA Süresi: Aktarılan bu talebe operasyon/satış ekibi tarafından en geç 30 dakika (SLA hedefi) içerisinde dönüş yapılması beklenir.
+
+💬 Standart Yanıt Mesajları
+
+1. İşlem Alındı ve Yönlendirme (TR):
+
+"Bütçenize uygun alternatifleri kontrol edip talebinizi satış ekibimize iletiyorum."
+
+2. İşlem Alındı ve Yönlendirme (EN):
+
+"I will check budget-friendly alternatives and forward your request to our sales team."

@@ -1,5 +1,11 @@
 # app/services/cancel_service.py
 
+import re
+from datetime import datetime
+
+from app.content.automation_info import get_runtime_text
+
+
 def init_cancel_service(**deps):
     """
     Ana dosyadaki fonksiyon/ayarları bu modüle enjekte eder.
@@ -54,14 +60,79 @@ def _cancel_state_clear(phone: str):
 
 def _is_cancel_intent_v2(text: str) -> bool:
     t = (text or "").lower()
-    # "ücretsiz iptal" = fiyat tipi seçimi, gerçek iptal değil
-    non_cancel = ["ucretsiz iptal", "ücretsiz iptal", "free cancel", "free cancellation",
-                  "iptal edilemez", "iptal edilemeyen"]
-    for phrase in non_cancel:
-        if phrase in t:
-            return False
-    kws = ["iptal", "vazgeç", "vazgec", "cancel", "cancellation", "rezervasyon iptal", "rezervasyonu iptal"]
-    return any(k in t for k in kws)
+    t_norm = (
+        t.replace("ı", "i")
+        .replace("ğ", "g")
+        .replace("ş", "s")
+        .replace("ö", "o")
+        .replace("ü", "u")
+        .replace("ç", "c")
+    )
+
+    # "ücretsiz iptal / refundable / non-refundable" gibi tarif sorulari gercek iptal niyeti degil.
+    non_cancel_terms = [
+        "ucretsiz iptal", "free cancellation", "free cancel",
+        "iptal edilemez", "non-refundable", "non refundable", "refundable",
+        "cancelation policy", "cancellation policy", "cancellation rules",
+        "refund policy", "refund rules", "terms and conditions",
+        "tarife", "tarif", "rate type", "rate plan",
+        "cancelacion", "cancelación", "reembolso",
+        "annulation", "remboursement",
+        "stornierung", "ruckerstattung", "rückerstattung",
+        "cancelamento",
+        "отмена", "возврат", "услов",
+        "إلغاء", "استرداد",
+        "取消", "退款",
+        "रद्द", "रिफंड",
+    ]
+
+    # Güçlü direkt iptal talebi (sorudan/politikadan ayir).
+    direct_cancel_regex = [
+        r"\brezervasyonumu iptal\b",
+        r"\brezervasyonu iptal\b",
+        r"\biptal etmek istiyorum\b",
+        r"\biptal edin\b",
+        r"\bvazgectim\b",
+        r"\bvazgectim\b",
+        r"\bcancel my reservation\b",
+        r"\bcancel reservation\b",
+        r"\bi want to cancel\b",
+        r"\bquiero cancelar\b",
+        r"\bannuler\b",
+        r"\bstornieren\b",
+        r"\bcancelar\b",
+        r"\bотменить\b",
+        r"\bإلغاء\b",
+        r"\b取消\b",
+        r"\bरद्द\b",
+    ]
+    if any(re.search(pattern, t_norm, flags=re.IGNORECASE) for pattern in direct_cancel_regex):
+        return True
+
+    # Politika/koşul sorularini iptal akışına sokma.
+    has_cancel_noun = any(
+        token in t_norm
+        for token in [
+            "iptal", "cancellation", "cancelation", "refund",
+            "cancelacion", "cancelación", "annulation",
+            "storno", "stornierung", "cancelamento",
+            "отмена", "إلغاء", "取消", "रद्द",
+        ]
+    )
+    if has_cancel_noun and any(term in t_norm for term in non_cancel_terms):
+        return False
+
+    # Son çare: yalnizca tek basina fiil oldugunda.
+    fallback_verbs = [
+        r"\bcancel\b",
+        r"\bvazgec\b",
+        r"\biptal et\b",
+        r"\bcancelar\b",
+        r"\bannuler\b",
+        r"\bstornieren\b",
+        r"\bотменить\b",
+    ]
+    return any(re.search(pattern, t_norm, flags=re.IGNORECASE) for pattern in fallback_verbs)
 
 def _infer_kind_v2(text: str):
     t = (text or "").lower()
@@ -90,6 +161,37 @@ def _fmt_res_v2(i: int, r: dict) -> str:
     g = r.get("guest_count", "-")
     n = r.get("customer_name", "-")
     return f"{i}) #{rid} • {d} {tm} • {g} kişi • {n}"
+
+
+def _extract_hotel_cancel_rez_id(text: str) -> str:
+    t = (text or "").lower()
+    patterns = [
+        r"\brez(?:ervasyon)?\s*id\s*[:#]?\s*([a-z0-9\-.]{4,})\b",
+        r"\brez(?:ervasyon)?\s*no\s*[:#]?\s*([a-z0-9\-.]{4,})\b",
+        r"\bvoucher\s*(?:no|number)?\s*[:#]?\s*([a-z0-9\-.]{4,})\b",
+        r"#\s*([0-9][0-9\.]{3,})\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, t, flags=re.IGNORECASE)
+        if m:
+            return (m.group(1) or "").strip()
+    return ""
+
+
+def _extract_hotel_cancel_rate_type(text: str) -> str:
+    t = (text or "").lower().strip()
+    if t in {"1", "1.", "1-", "1)"}:
+        return "iptal_edilemez"
+    if t in {"2", "2.", "2-", "2)"}:
+        return "ucretsiz_iptal"
+    if any(k in t for k in ["iptal edilemez", "non-refundable", "non refundable", "iade edilmez"]):
+        return "iptal_edilemez"
+    if any(k in t for k in ["ücretsiz iptal", "ucretsiz iptal", "free cancellation", "free cancel", "refundable"]):
+        return "ucretsiz_iptal"
+    short_token = re.search(r"(?:^|[,;:\-\s])([12])(?:\s*$|\s*(?:\)|\.|,|;))", t)
+    if short_token:
+        return "iptal_edilemez" if short_token.group(1) == "1" else "ucretsiz_iptal"
+    return ""
 
 async def _notify_admin_cancel_v2(reservation, phone: str, reason: str, source: str):
     try:
@@ -146,9 +248,40 @@ async def handle_cancel_flow_v2(phone: str, user_message: str):
                 elif tl in ["4", "transfer"]:
                     kind = "transfer"
             if not kind:
+                # Eski/yanlış kalan cancel state, normal konuşmayı bloke etmesin.
+                if not _is_cancel_intent_v2(tl):
+                    _cancel_state_clear(phone)
+                    return None
                 return "Hangi rezervasyon olduğunu belirtir misiniz? Örn: restoran / otel / tur / transfer"
             _cancel_state_clear(phone)
             return await _cancel_start_kind_v2(phone, kind, user_message)
+
+        if step == "hotel_collect":
+            rez_id = (st.get("rez_id") or "").strip()
+            rate_type = (st.get("rate_type") or "").strip()
+            if not rez_id:
+                rez_id = _extract_hotel_cancel_rez_id(tl)
+            if not rate_type:
+                rate_type = _extract_hotel_cancel_rate_type(tl)
+
+            _cancel_state_set(phone, {"step": "hotel_collect", "rez_id": rez_id, "rate_type": rate_type})
+
+            missing = []
+            if not rez_id:
+                missing.append("reservation_id_or_voucher_no")
+            if not rate_type:
+                missing.append("rate_type")
+            if missing:
+                return get_runtime_text(("hotel_cancel_v1", "messages", "missing_slots"), lang="tr")
+
+            _cancel_state_clear(phone)
+            await _notify_admin_cancel_v2(
+                None,
+                phone,
+                f"hotel_cancel_v1 rez_id={rez_id} rate_type={rate_type}",
+                "customer_whatsapp_hotel_cancel_v1",
+            )
+            return get_runtime_text(("hotel_cancel_v1", "messages", "handoff"), lang="tr")
 
         if step == "pick_restaurant":
             choices = st.get("choices") or {}
@@ -240,11 +373,19 @@ async def _cancel_start_kind_v2(phone: str, kind: str, original_message: str):
     await _notify_admin_cancel_v2(None, phone, original_message[:200], f"customer_whatsapp_{kind}")
 
     if kind == "hotel":
-        return (
-            "Otel rezervasyonu iptali için birkaç bilgiye ihtiyacım var:\n"
-            "• Misafir adı\n• Giriş tarihi (check-in)\n• Varsa rezervasyon numarası\n\n"
-            "Bu bilgileri yazarsanız rezervasyon ekibimiz iptal sürecini başlatacaktır."
-        )
+        rez_id = _extract_hotel_cancel_rez_id(original_message)
+        rate_type = _extract_hotel_cancel_rate_type(original_message)
+        _cancel_state_set(phone, {"step": "hotel_collect", "rez_id": rez_id, "rate_type": rate_type})
+        if rez_id and rate_type:
+            _cancel_state_clear(phone)
+            await _notify_admin_cancel_v2(
+                None,
+                phone,
+                f"hotel_cancel_v1 rez_id={rez_id} rate_type={rate_type}",
+                "customer_whatsapp_hotel_cancel_v1",
+            )
+            return get_runtime_text(("hotel_cancel_v1", "messages", "handoff"), lang="tr")
+        return get_runtime_text(("hotel_cancel_v1", "messages", "start"), lang="tr")
     if kind == "transfer":
         return (
             "Transfer iptali için lütfen şunları paylaşır mısınız?\n"

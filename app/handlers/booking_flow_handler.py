@@ -15,6 +15,7 @@ import os
 import json
 import re
 import hashlib
+import unicodedata
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -25,7 +26,10 @@ from app.services.elektra_hoteladvisor_service import (
     hoteladvisor_update,
 )
 from app.services.notification_service import notify_admin_handoff
+from app.services.access_control_service import activate_human_takeover
+from app.services.metrics_service import record_metric
 from app.services.elektraweb_booking_service import fetch_price
+from app.services.elektraweb_booking_service import update_elektraweb_reservation
 
 from app.services.booking_flow_service import (
     BookingFlowState,
@@ -39,6 +43,7 @@ from app.services.booking_flow_service import (
     find_offer_by_selection,
     create_hotel_booking,
     get_latest_booking_by_phone,
+    get_hotel_booking,
     get_booking_by_context_id,
     get_active_bookings_by_phone,
     save_payment_context,
@@ -46,6 +51,7 @@ from app.services.booking_flow_service import (
     clear_payment_context,
     ROOM_TYPE_MAP,
 )
+from app.core.settings_service import get_quiet_room_policy
 
 
 # ============================
@@ -79,7 +85,6 @@ BOOKING_INTENT_TR = [
     "rezervasyon yaptirmak", "rezervasyon yaptirmak istiyorum",
     "oda ayirtmak", "oda ayirmak",
     "rezervasyon yapmak", "rez yapmak",
-    "bu fiyattan", "bu fiyata",
     "ayirtmak istiyorum",
     "superior istiyorum", "deluxe istiyorum", "exclusive istiyorum",
     "penthouse istiyorum", "premium istiyorum",
@@ -107,6 +112,13 @@ BOOKING_INTENT_TR = [
     "rez yapabilir miyiz", "rez yapabilir miyim",
     "konaklama istiyorum", "konaklamak istiyorum",
     "kalmak istiyorum", "oda tutmak",
+    # Rezervasyonu başlatma / bilgi paylaşma niyeti
+    "rezervasyonu baslatalim", "rezervasyonu baslatalim",
+    "rezervasyonu baslatalım", "rezervasyonu baslat",
+    "rezervasyonu olusturalim", "rezervasyonu olustur",
+    "rezervasyon baslatalim", "rezervasyonu baslatmak istiyorum",
+    "isim soyisim ve telefonumu gondereyim",
+    "ad soyad ve telefonumu gondereyim",
 ]
 
 BOOKING_INTENT_EN = [
@@ -137,7 +149,78 @@ def detect_booking_intent(message: str) -> bool:
     for kw in BOOKING_INTENT_EN:
         if _normalize_match_text(kw) in low:
             return True
+
+    # Regex tabanli yakalama: "rezervasyonu başlatalım/oluşturalım" gibi varyantlar
+    if re.search(r"\brezerv\w*\s*(?:baslat|olustur|onay)\w*", low):
+        return True
+    if re.search(r"\b(?:start|create)\s*(?:the\s*)?(?:booking|reservation)\b", low):
+        return True
+
+    # "İsim-soyisim + telefon paylaşayım mı?" ifadesi booking bağlamıyla geldiyse intent kabul et.
+    has_booking_cue = any(k in low for k in ("rezerv", "reservation", "booking", "book"))
+    has_identity_share = any(k in low for k in ("isim", "ad soyad", "name", "full name"))
+    has_contact_share = any(k in low for k in ("telefon", "phone", "numara", "contact"))
+    has_share_verb = any(k in low for k in ("gondereyim", "paylas", "share", "send"))
+    if has_booking_cue and has_identity_share and has_contact_share and (has_share_verb or "?" in low):
+        return True
+
     return False
+
+
+def _is_booking_requirements_question(message: str) -> bool:
+    """Kullanici rezervasyon icin hangi bilgilerin gerekli oldugunu soruyor mu?"""
+    low = _normalize_match_text(message or "")
+    if not low:
+        return False
+
+    has_booking_cue = any(k in low for k in ("rezerv", "reservation", "booking", "book"))
+    if not has_booking_cue:
+        return False
+
+    info_markers = (
+        "hangi bilgi",
+        "hangi bilgileri",
+        "hangi detay",
+        "hangi bilgileri ilet",
+        "hangi bilgileri gondere",
+        "hangi bilgi gerekli",
+        "hangi belg",
+        "what information",
+        "which information",
+        "which details",
+        "what details",
+        "what should i send",
+        "what do i need",
+        "what do you need",
+        "isim-soyisim ve telefonumu gondereyim",
+        "isim soyisim ve telefonumu gondereyim",
+        "ad soyad ve telefonumu gondereyim",
+        "name surname and phone",
+        "name and phone",
+    )
+    if any(k in low for k in info_markers):
+        return True
+
+    # "isim-soyisim ve telefonumu göndereyim mi?" gibi niyet/soru kaliplari
+    has_identity = any(k in low for k in ("isim", "ad soyad", "name", "surname", "full name"))
+    has_contact = any(k in low for k in ("telefon", "phone", "numara", "contact"))
+    has_share = any(k in low for k in ("gondereyim", "paylasayim", "send", "share"))
+    if has_identity and has_contact and has_share and "?" in low:
+        return True
+
+    return False
+
+
+def _build_booking_requirements_reply(lang: str = "tr") -> str:
+    if lang == "en":
+        return (
+            "To start your reservation, we will collect your details step by step.\n"
+            "First step: Please share your full name (first and last name)."
+        )
+    return (
+        "Rezervasyonu başlatmak için bilgileri tek tek alacağım.\n"
+        "İlk adım: Lütfen ad soyad bilginizi paylaşın."
+    )
 
 
 def _message_looks_like_booking_intent(message: str) -> bool:
@@ -145,15 +228,30 @@ def _message_looks_like_booking_intent(message: str) -> bool:
     return detect_booking_intent(message or "")
 
 
-def _has_contact_info(phone: str = "", email: str = "") -> bool:
-    return bool((phone or "").strip() or (email or "").strip())
+def _next_guest_info_state(data: Dict[str, Any]) -> str:
+    if not data.get("guest_first_name"):
+        return BookingFlowState.ASK_NAME
+    if not data.get("guest_phone"):
+        return BookingFlowState.ASK_PHONE
+    if not data.get("guest_email"):
+        return BookingFlowState.ASK_EMAIL
+    return BookingFlowState.ASK_SPECIAL
 
 
-def _has_required_guest_contact(data: Dict[str, Any]) -> bool:
-    return bool(data.get("guest_first_name")) and _has_contact_info(
-        data.get("guest_phone", ""),
-        data.get("guest_email", ""),
-    )
+def _guest_info_step_prompt(state: str, lang: str) -> str:
+    if state == BookingFlowState.ASK_NAME:
+        if lang == "en":
+            return "Please provide the following details one by one. First step: Full name (first and last name)."
+        return "Lütfen aşağıdaki bilgileri yazın.\nTek tek ilerleyeceğiz. İlk adım: Ad Soyad"
+    if state == BookingFlowState.ASK_PHONE:
+        if lang == "en":
+            return "Please share your phone number."
+        return "Lütfen telefon numaranızı paylaşır mısınız?"
+    if state == BookingFlowState.ASK_EMAIL:
+        if lang == "en":
+            return "Please share your email address. (Optional: type 'skip')"
+        return "Lütfen e-posta adresinizi paylaşır mısınız? (Opsiyonel: 'geç' yazabilirsiniz)"
+    return ""
 
 
 # ============================
@@ -241,7 +339,7 @@ def _parse_room_selection(message: str, rooms: List[Dict]) -> Optional[Dict]:
 
 def _parse_guest_name(message: str) -> Optional[Dict[str, str]]:
     """Ad-soyad parse et. Returns {"first_name": ..., "last_name": ...} or None."""
-    text = (message or "").strip()
+    text = unicodedata.normalize("NFKC", (message or "").strip())
 
     # "Adim X Y" veya "ismim X Y" veya "My name is X Y" kaliplarini temizle
     patterns = [
@@ -258,10 +356,21 @@ def _parse_guest_name(message: str) -> Optional[Dict[str, str]]:
     if not words:
         return None
 
+    def _is_valid_name_piece(value: str) -> bool:
+        v = (value or "").strip()
+        if len(v) < 2:
+            return False
+        for ch in v:
+            if ch in {" ", "-", "'", "."}:
+                continue
+            if not ch.isalpha():
+                return False
+        return True
+
     # Tek kelime: first_name olarak kabul et, last_name bos
     if len(words) == 1:
         name = words[0].strip()
-        if len(name) >= 2 and name.isalpha():
+        if _is_valid_name_piece(name):
             return {"first_name": name.title(), "last_name": ""}
         return None
 
@@ -274,9 +383,9 @@ def _parse_guest_name(message: str) -> Optional[Dict[str, str]]:
     last = " ".join(words[1:]).strip()
 
     # Gecerlilik: en az 2 karakter, harflerden olussin
-    if len(first) < 2 or not re.match(r"^[a-zA-ZçğıöşüÇĞİÖŞÜ\s\-]+$", first):
+    if not _is_valid_name_piece(first):
         return None
-    if last and not re.match(r"^[a-zA-ZçğıöşüÇĞİÖŞÜ\s\-]+$", last):
+    if last and not _is_valid_name_piece(last):
         return None
 
     return {"first_name": first.title(), "last_name": last.title()}
@@ -374,6 +483,41 @@ def _build_booking_summary(flow_data: Dict, lang: str = "tr") -> str:
     lines.append("=" * 25)
     lines.append("\nOnaylıyor musunuz? (Evet / Hayır)")
     return "\n".join(lines)
+
+
+def _build_booking_pending_reply(
+    *,
+    lang: str,
+    booking_id: Any,
+    booking_ctx: str,
+    room_display: str,
+    check_in: str,
+    check_out: str,
+    price: Any,
+    currency: str,
+) -> str:
+    """Onay sonrası müşteriye giden rezervasyon alındı mesajı."""
+    if lang == "en":
+        return (
+            f"✅ Your reservation request has been received.\n\n"
+            f"📋 Request No: #{booking_id}\n"
+            f"🔖 Reference: {booking_ctx}\n"
+            f"🛏️ Room: {room_display}\n"
+            f"📅 Dates: {check_in} - {check_out}\n"
+            f"💶 Price: {_format_money(price)} {currency}\n\n"
+            f"Our team will review your request as soon as possible and send you a confirmation message.\n"
+            f"After Elektra confirmation, we will share your official reservation number / Voucher No."
+        )
+    return (
+        f"✅ Rezervasyon talebiniz alındı.\n\n"
+        f"📋 Talep No: #{booking_id}\n"
+        f"🔖 Referans: {booking_ctx}\n"
+        f"🛏️ Oda: {room_display}\n"
+        f"📅 Tarih: {check_in} - {check_out}\n"
+        f"💶 Fiyat: {_format_money(price)} {currency}\n\n"
+        f"Ekibimiz talebinizi en kısa sürede inceleyip sizi bilgilendirecektir.\n"
+        f"Elektra onayı sonrası resmi rezervasyon numarası / Voucher No bilginizi sizinle mutlaka paylaşacağız."
+    )
 
 
 # ============================
@@ -474,12 +618,40 @@ PAYMENT_ACTION_KEYWORDS = [
 
 def _is_generic_payment_method_question(message: str) -> bool:
     low = _turkish_lower(message or "").strip()
+    # Acik odeme-link aksiyonlarini "genel bilgi sorusu" sayma.
+    if any(kw in low for kw in ["odeme link", "ödeme link", "payment link", "pay online", "link gonder", "link gönder"]):
+        return False
     if any(kw in low for kw in PAYMENT_METHOD_INFO_KEYWORDS):
         return True
     # Soru cümlesi + yöntem/seçenek kelimeleri → bilgi talebi (aksiyon değil)
     if "?" in low and any(k in low for k in ["yontem", "yöntem", "secenek", "seçenek", "method"]):
         return True
     return False
+
+
+def _build_payment_method_info_reply(lang: str) -> str:
+    code = _turkish_lower(lang or "tr")
+    if code.startswith("en"):
+        return (
+            "You can pay via credit card payment link, mail order form, or bank transfer (EFT/wire). "
+            "If you want, I can continue with the suitable payment option for your reservation."
+        )
+    return (
+        "Ödeme yöntemlerimiz: kredi kartı ile ödeme linki, mail order formu ve banka havalesi/EFT. "
+        "İsterseniz rezervasyonunuz için uygun ödeme adımıyla devam edebilirim."
+    )
+
+
+def _should_allow_automated_payment_link(message: str, booking: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(booking, dict):
+        return False
+    explicit_ref = bool(_extract_context_id(message) or _extract_booking_alias_index(message))
+    if not explicit_ref:
+        return False
+    if _env_flag("PAYMENT_LINK_AUTOMATION_ENABLED", default=False):
+        return True
+    env_name = str(os.getenv("KASSANDRA_ENV", "production") or "").strip().lower()
+    return env_name in {"test", "local", "dev", "development"}
 
 
 def _extract_multi_room_request(message: str) -> Dict[str, int]:
@@ -525,6 +697,44 @@ def _is_group_quote_request(message: str) -> bool:
         or (multi.get("family_count", 0) >= 2 and is_price_like)
         or any(k in low for k in group_keywords)
     )
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _allow_legacy_hoteladvisor_payment_fallback() -> bool:
+    """Odeme tarafinda eski HOTEL_RES/SP akisini sadece acikca istenirse kullan."""
+    mode = str(os.getenv("PAYMENT_SUPPLIER_MODE", "bookingapi") or "").strip().lower()
+    # Varsayilan: bookingapi-only.
+    if mode in {"bookingapi", "booking_api", "api_only"}:
+        return False
+    return _env_flag("PAYMENT_SUPPLIER_FALLBACK_HOTELADVISOR", default=False)
+
+
+def _allow_auto_try_hoteladvisor_fallback(profile: str) -> bool:
+    """TRY odemesinde bookingapi basarisiz olursa tenant-bazli fallback izni."""
+    forced = _env_flag("PAYMENT_TRY_FORCE_HOTELADVISOR_FALLBACK", default=True)
+    if not forced:
+        return False
+    return str(profile or "").strip().lower() in {"tenant_21966", "legacy_ota"}
+
+
+def _payment_update_profile(hotel_id: int, booking: Optional[Dict[str, Any]]) -> str:
+    """Tenant'e gore update payload profilini sec."""
+    raw = str(os.getenv("PAYMENT_UPDATE_PROFILE", "auto") or "").strip().lower()
+    if raw and raw != "auto":
+        return raw
+    if int(hotel_id or 0) == 21966:
+        return "tenant_21966"
+    if isinstance(booking, dict) and int(booking.get("hotel_id") or 0) == 21966:
+        return "tenant_21966"
+    return "default"
 
 
 def _build_group_stage1_template(lang: str = "tr") -> str:
@@ -923,22 +1133,60 @@ def _build_payment_link(
     base = "https://kassandra-butik-otel.rezervasyonal.com/Online"
     cur = str(currency or "").strip().upper()
     amt = int(amount or 0)
-    params = {
-        "Voucherno": str(voucher_no or ""),
-        "LastName": str(last_name or ""),
-        "CheckInDate": str(check_in or ""),
-        "RoomTypeId": str(room_type_id or ""),
-        "submit": "true",
-        "redirect": "Deposit",
+    currency_id_map = {"TRY": "142"}
+    cur_id = currency_id_map.get(cur, "")
+
+    params: List[tuple[str, str]] = [
+        ("Voucherno", str(voucher_no or "")),
+        ("LastName", str(last_name or "")),
+        ("CheckInDate", str(check_in or "")),
+        ("RoomTypeId", str(room_type_id or "")),
+        ("submit", "true"),
+        ("redirect", "Deposit"),
         # Tenant farklari icin para birimi/tutar alias'lari.
-        "Currency": cur,
-        "CurrencyCode": cur,
-        "CurCode": cur,
-        "Amount": str(amt),
-        "PaymentAmount": str(amt),
-        "DepositAmount": str(amt),
-    }
+        ("Currency", cur),
+        ("currency", cur),
+        ("CurrencyCode", cur),
+        ("currencyCode", cur),
+        ("CurCode", cur),
+        ("curcode", cur),
+        ("Amount", str(amt)),
+        ("amount", str(amt)),
+        ("PaymentAmount", str(amt)),
+        ("paymentAmount", str(amt)),
+        ("DepositAmount", str(amt)),
+        ("depositAmount", str(amt)),
+        ("DEPOSITPRICE", str(amt)),
+    ]
+    if cur_id:
+        params.extend(
+            [
+                ("CurrencyId", cur_id),
+                ("currencyId", cur_id),
+                ("CURRENCYID", cur_id),
+                ("DEPOSITCURRENCYID", cur_id),
+            ]
+        )
+    if cur == "TRY":
+        params.extend(
+            [
+                ("DEPOSITCURRENCYCODE", "TRY"),
+                ("depositCurrencyCode", "TRY"),
+                # Bazi tenant'larda legacy kod "TL" olarak beklenebiliyor.
+                ("DOVIZKODU", "TL"),
+                ("DOVIZKODUISO", "TRY"),
+                ("CurrencyLocal", "TL"),
+                ("CurrencySymbol", "₺"),
+            ]
+        )
     return f"{base}?{urlencode(params)}"
+
+
+def _currency_display_label(currency_code: str) -> str:
+    code = str(currency_code or "").strip().upper()
+    if code == "TRY":
+        return "TRY (₺)"
+    return code
 
 
 def _extract_rows_from_hoteladvisor(raw: Any) -> List[Dict[str, Any]]:
@@ -960,15 +1208,509 @@ def _extract_rows_from_hoteladvisor(raw: Any) -> List[Dict[str, Any]]:
     return rows
 
 
+def _parse_booking_child_ages(booking: Optional[Dict[str, Any]]) -> List[int]:
+    if not isinstance(booking, dict):
+        return []
+    raw = booking.get("child_ages")
+    if isinstance(raw, list):
+        values = raw
+    elif isinstance(raw, str):
+        try:
+            values = json.loads(raw)
+        except Exception:
+            values = []
+    else:
+        values = []
+    ages: List[int] = []
+    for v in values:
+        try:
+            age = int(v)
+            if 0 <= age <= 17:
+                ages.append(age)
+        except Exception:
+            continue
+    return ages
+
+
+def _build_update_guest_list_from_booking(booking: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not isinstance(booking, dict):
+        return []
+    first = str(booking.get("guest_first_name") or "").strip() or "Guest"
+    last = str(booking.get("guest_last_name") or "").strip() or "Guest"
+    phone = str(booking.get("guest_phone") or "").strip()
+    email = str(booking.get("guest_email") or "").strip()
+    adults = max(1, int(booking.get("adult_count") or 1))
+    child_ages = _parse_booking_child_ages(booking)
+
+    guest_list: List[Dict[str, Any]] = []
+    first_adult: Dict[str, Any] = {
+        "title-id": 1,
+        "gender": 0,
+        "country": "TR",
+        "name": first,
+        "surname": last,
+    }
+    if phone:
+        first_adult["phone"] = phone
+    if email:
+        first_adult["email"] = email
+    guest_list.append(first_adult)
+
+    for _ in range(max(0, adults - 1)):
+        guest_list.append(
+            {
+                "title-id": 1,
+                "gender": 0,
+                "country": "TR",
+                "name": "",
+                "surname": "",
+            }
+        )
+
+    base_year = 2026
+    for idx, age in enumerate(child_ages, start=1):
+        year = max(2008, base_year - int(age))
+        birth = f"{year}-01-01"
+        guest_list.append(
+            {
+                "title-id": 2,
+                "gender": 0,
+                "country": "TR",
+                "name": f"CHILD{idx}",
+                "surname": "",
+                "birthday": birth,
+                "birth-date": birth,
+            }
+        )
+    return guest_list
+
+
+def _extract_supplier_pax_from_error(err_text: str) -> Optional[Dict[str, int]]:
+    txt = str(err_text or "")
+    m = re.search(
+        r"as found adult:\s*(\d+)\s*,\s*and elder-child-count:\s*(\d+)\s*younger-child-count:\s*(\d+)\s*baby-count:\s*(\d+)",
+        txt,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    try:
+        return {
+            "adult": int(m.group(1)),
+            "elder": int(m.group(2)),
+            "younger": int(m.group(3)),
+            "baby": int(m.group(4)),
+        }
+    except Exception:
+        return None
+
+
+def _build_guest_list_for_supplier_pax(booking: Optional[Dict[str, Any]], pax: Dict[str, int]) -> List[Dict[str, Any]]:
+    if not isinstance(booking, dict):
+        return []
+    first = str(booking.get("guest_first_name") or "").strip() or "Guest"
+    last = str(booking.get("guest_last_name") or "").strip() or "Guest"
+    phone = str(booking.get("guest_phone") or "").strip()
+    email = str(booking.get("guest_email") or "").strip()
+
+    adult_n = max(1, int(pax.get("adult") or 1))
+    elder_n = max(0, int(pax.get("elder") or 0))
+    younger_n = max(0, int(pax.get("younger") or 0))
+    baby_n = max(0, int(pax.get("baby") or 0))
+
+    guest_list: List[Dict[str, Any]] = []
+    first_adult: Dict[str, Any] = {
+        "title-id": 1,
+        "gender": 0,
+        "country": "TR",
+        "name": first,
+        "surname": last,
+    }
+    if phone:
+        first_adult["phone"] = phone
+    if email:
+        first_adult["email"] = email
+    guest_list.append(first_adult)
+
+    for _ in range(max(0, adult_n - 1)):
+        guest_list.append(
+            {
+                "title-id": 1,
+                "gender": 0,
+                "country": "TR",
+                "name": "",
+                "surname": "",
+            }
+        )
+
+    def _add_child(idx: int, age: int) -> None:
+        year = 2026 - int(age)
+        birth = f"{max(2008, year):04d}-01-01"
+        guest_list.append(
+            {
+                "title-id": 2,
+                "gender": 0,
+                "country": "TR",
+                "name": f"CHILD{idx}",
+                "surname": "",
+                "birthday": birth,
+                "birth-date": birth,
+            }
+        )
+
+    c_idx = 1
+    for _ in range(elder_n):
+        _add_child(c_idx, 11)
+        c_idx += 1
+    for _ in range(younger_n):
+        _add_child(c_idx, 5)
+        c_idx += 1
+    for _ in range(baby_n):
+        _add_child(c_idx, 1)
+        c_idx += 1
+    return guest_list
+
+
+def _attach_ota_required_alias_fields(
+    payload: Dict[str, Any],
+    booking: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """SP_EASYPMS_RESUPDATE_OTA icin ROOMID vb alanlarin aliaslarini ekle."""
+    out = dict(payload or {})
+    if not isinstance(booking, dict):
+        return out
+
+    alias_sources = {
+        "ROOMID": int(booking.get("room_type_id") or 0),
+        "BOARDID": int(booking.get("board_type_id") or 0),
+        "RATETYPEID": int(booking.get("rate_type_id") or 0),
+        "RATECODEID": int(booking.get("rate_code_id") or 0),
+        "PRICEAGENCYID": int(booking.get("price_agency_id") or 0),
+    }
+    for key, value in alias_sources.items():
+        if value <= 0:
+            continue
+        out[key] = value
+        out[f"@{key}"] = value
+        out[key.lower()] = value
+
+    try:
+        total_price = float(booking.get("discounted_price") or booking.get("total_price") or 0.0)
+    except Exception:
+        total_price = 0.0
+    if total_price > 0:
+        out["TOTALPRICE"] = total_price
+        out["@TOTALPRICE"] = total_price
+
+    currency_code = str(booking.get("currency") or "EUR").strip().upper()
+    if currency_code:
+        out["CURRENCYCODE"] = currency_code
+        out["@CURRENCYCODE"] = currency_code
+
+    return out
+
+
+def _payment_payload_log_view(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Loglarda gereksiz buyuk alanlari kisaltarak goster."""
+    out = dict(payload or {})
+    guest_list = out.get("guest-list")
+    if isinstance(guest_list, list):
+        out["guest-list-count"] = len(guest_list)
+        out.pop("guest-list", None)
+    return out
+
+
+def _extract_required_try_quote_from_error(err_text: str) -> Optional[float]:
+    txt = str(err_text or "")
+    m = re.search(r"must be\s*([0-9]+(?:\.[0-9]+)?)\s*TRY", txt, re.IGNORECASE)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except Exception:
+        return None
+
+
 async def _prepare_try_payment_on_supplier(
     *,
     reservation_id: str,
     hotel_id: int,
     try_amount: int,
+    booking: Optional[Dict[str, Any]] = None,
 ) -> bool:
     if try_amount <= 0:
         return False
     try:
+        profile = _payment_update_profile(hotel_id, booking)
+        last_supplier_pax: Optional[Dict[str, int]] = None
+        # 0) bookingapi updateReservation ile TRY alanlarini farkli payload varyantlariyla dene.
+        base_update: Dict[str, Any] = {}
+        if isinstance(booking, dict):
+            # bookingapi updateReservation bu tenant'ta zorunlu alanlar bekliyor.
+            # Bu nedenle yerel booking kaydindaki cekirdek alanlari da gonder.
+            base_update = {
+                "room-type-id": int(booking.get("room_type_id") or 0),
+                "board-type-id": int(booking.get("board_type_id") or 0),
+                "rate-type-id": int(booking.get("rate_type_id") or 0),
+                "rate-code-id": int(booking.get("rate_code_id") or 0),
+                "price-agency-id": int(booking.get("price_agency_id") or 0),
+                "currency-code": str(booking.get("currency") or "EUR").strip().upper(),
+                "total-price": float(booking.get("discounted_price") or booking.get("total_price") or 0.0),
+                "adult-count": int(booking.get("adult_count") or 1),
+                "check-in": str(booking.get("check_in") or ""),
+                "check-out": str(booking.get("check_out") or ""),
+                "room-count": 1,
+                "contact-first-name": str(booking.get("guest_first_name") or ""),
+                "contact-last-name": str(booking.get("guest_last_name") or ""),
+                "contact-phone": str(booking.get("guest_phone") or ""),
+                "contact-email": str(booking.get("guest_email") or ""),
+                "nationality": "TR",
+            }
+            # Tenant SP_EASYPMS_RESUPDATE_OTA bazen legacy alan adlari istiyor.
+            if profile in {"tenant_21966", "legacy_ota"}:
+                if int(booking.get("room_type_id") or 0) > 0:
+                    base_update["ROOMID"] = int(booking.get("room_type_id"))
+                if int(booking.get("board_type_id") or 0) > 0:
+                    base_update["BOARDID"] = int(booking.get("board_type_id"))
+                if int(booking.get("rate_type_id") or 0) > 0:
+                    base_update["RATETYPEID"] = int(booking.get("rate_type_id"))
+                if int(booking.get("rate_code_id") or 0) > 0:
+                    base_update["RATECODEID"] = int(booking.get("rate_code_id"))
+            guest_list = _build_update_guest_list_from_booking(booking)
+            if guest_list:
+                base_update["guest-list"] = guest_list
+            # Bos/0 degerleri gondermeyelim.
+            base_update = {
+                k: v for k, v in base_update.items()
+                if v not in ("", None, 0, 0.0)
+            }
+            base_update = _attach_ota_required_alias_fields(base_update, booking)
+
+        bookingapi_payloads: List[Dict[str, Any]] = [
+            {
+                **base_update,
+                "DEPOSITPERCENT": 0,
+                "deposit-percent": 0,
+                "DEPOSITPRICE": int(try_amount),
+                "deposit-amount": int(try_amount),
+                "payment-amount": int(try_amount),
+                "prepayment-amount": int(try_amount),
+                "DEPOSITCURRENCYID": 142,
+                "DEPOSITCURRENCYCODE": "TRY",
+                "deposit-currency": "TRY",
+            },
+            {
+                **base_update,
+                # HAR'daki update/HOTEL_RES'e daha yakin varyant
+                "DEPOSITCURRENCYID": "142",
+                "DEPOSITPERCENT": "",
+                "DEPOSITPRICE": str(int(try_amount)),
+                "DEPOSITCURRENCYCODE": "TRY",
+            },
+            {
+                **base_update,
+                # Daha minimal varyant
+                "DEPOSITPRICE": int(try_amount),
+                "DEPOSITCURRENCYID": 142,
+                "DEPOSITCURRENCYCODE": "TRY",
+            },
+        ]
+        for idx, update_payload in enumerate(bookingapi_payloads, start=1):
+            try:
+                up_resp = await update_elektraweb_reservation(
+                    hotel_id=int(hotel_id),
+                    reservation_id=str(reservation_id),
+                    updates=update_payload,
+                    timeout_sec=20,
+                )
+                print(
+                    "[PAYMENT] bookingapi updateReservation TRY fields OK | "
+                    f"profile={profile} variant={idx} res_id={reservation_id} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                )
+                record_metric(
+                    event="payment_update_ok",
+                    category="bookingapi_try_fields",
+                    meta={
+                        "hotel_id": int(hotel_id),
+                        "reservation_id": str(reservation_id),
+                        "profile": profile,
+                        "variant": int(idx),
+                    },
+                )
+                return True
+            except Exception as bookingapi_exc:
+                pax = _extract_supplier_pax_from_error(str(bookingapi_exc))
+                if pax:
+                    last_supplier_pax = pax
+                    retry_payload = dict(update_payload)
+                    retry_payload.update(
+                        {
+                            "adult-count": int(pax["adult"]),
+                            "elder-child-count": int(pax["elder"]),
+                            "younger-child-count": int(pax["younger"]),
+                            "baby-count": int(pax["baby"]),
+                            "child-count": int(pax["elder"] + pax["younger"] + pax["baby"]),
+                            "children-count": int(pax["elder"] + pax["younger"] + pax["baby"]),
+                            "CHD1": int(pax["elder"]),
+                            "CHD2": int(pax["younger"]),
+                            "BABY": int(pax["baby"]),
+                        }
+                    )
+                    retry_guest_list = _build_guest_list_for_supplier_pax(booking, pax)
+                    if retry_guest_list:
+                        retry_payload["guest-list"] = retry_guest_list
+                    try:
+                        up_resp = await update_elektraweb_reservation(
+                            hotel_id=int(hotel_id),
+                            reservation_id=str(reservation_id),
+                            updates=retry_payload,
+                            timeout_sec=20,
+                        )
+                        print(
+                            "[PAYMENT] bookingapi updateReservation TRY fields OK after pax remap | "
+                            f"profile={profile} variant={idx} pax={pax} res_id={reservation_id} "
+                            f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                        )
+                        record_metric(
+                            event="payment_pax_remap_ok",
+                            category="bookingapi_try_fields",
+                            meta={
+                                "hotel_id": int(hotel_id),
+                                "reservation_id": str(reservation_id),
+                                "profile": profile,
+                                "variant": int(idx),
+                                "pax": pax,
+                            },
+                        )
+                        return True
+                    except Exception as retry_exc:
+                        required_try_quote = _extract_required_try_quote_from_error(str(retry_exc))
+                        if required_try_quote and required_try_quote > 0:
+                            quote_payload = dict(retry_payload)
+                            quote_payload["currency-code"] = "TRY"
+                            quote_payload["CURRENCYCODE"] = "TRY"
+                            quote_payload["total-price"] = float(required_try_quote)
+                            try:
+                                up_resp = await update_elektraweb_reservation(
+                                    hotel_id=int(hotel_id),
+                                    reservation_id=str(reservation_id),
+                                    updates=quote_payload,
+                                    timeout_sec=20,
+                                )
+                                print(
+                                    "[PAYMENT] bookingapi updateReservation TRY fields OK after quote remap | "
+                                    f"profile={profile} variant={idx} quote={required_try_quote} res_id={reservation_id} "
+                                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                                )
+                                record_metric(
+                                    event="payment_quote_remap_ok",
+                                    category="bookingapi_try_fields",
+                                    meta={
+                                        "hotel_id": int(hotel_id),
+                                        "reservation_id": str(reservation_id),
+                                        "profile": profile,
+                                        "variant": int(idx),
+                                        "required_try_quote": float(required_try_quote),
+                                    },
+                                )
+                                return True
+                            except Exception as quote_exc:
+                                print(
+                                    "[PAYMENT] WARN: bookingapi TRY quote-remap retry failed | "
+                                    f"profile={profile} variant={idx} quote={required_try_quote} err={quote_exc}"
+                                )
+                        print(
+                            "[PAYMENT] WARN: bookingapi TRY pax-remap retry failed | "
+                            f"profile={profile} variant={idx} pax={pax} err={retry_exc}"
+                        )
+                print(
+                    "[PAYMENT] WARN: bookingapi updateReservation TRY fields failed | "
+                    f"profile={profile} variant={idx} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"err={bookingapi_exc}"
+                )
+
+        # 0b) Fallback: fiyat/oda reprice tetiklememek icin minimal TRY payload dene.
+        minimal_try_payloads: List[Dict[str, Any]] = [
+            {
+                "DEPOSITPRICE": int(try_amount),
+                "DEPOSITCURRENCYID": 142,
+                "DEPOSITCURRENCYCODE": "TRY",
+                "deposit-currency": "TRY",
+                "CurrencyCode": "TRY",
+                "currencyCode": "TRY",
+            },
+            {
+                "DEPOSITPRICE": str(int(try_amount)),
+                "DEPOSITCURRENCYID": "142",
+                "DEPOSITCURRENCYCODE": "TRY",
+                "DOVIZKODU": "TL",
+            },
+            {
+                "DEPOSITPERCENT": 0,
+                "DEPOSITPRICE": int(try_amount),
+                "DEPOSITCURRENCYID": 142,
+                "DEPOSITCURRENCYCODE": "TRY",
+            },
+        ]
+        for idx, minimal_payload in enumerate(minimal_try_payloads, start=1):
+            if last_supplier_pax:
+                minimal_payload.update(
+                    {
+                        "adult-count": int(last_supplier_pax["adult"]),
+                        "elder-child-count": int(last_supplier_pax["elder"]),
+                        "younger-child-count": int(last_supplier_pax["younger"]),
+                        "baby-count": int(last_supplier_pax["baby"]),
+                        "child-count": int(
+                            last_supplier_pax["elder"]
+                            + last_supplier_pax["younger"]
+                            + last_supplier_pax["baby"]
+                        ),
+                        "children-count": int(
+                            last_supplier_pax["elder"]
+                            + last_supplier_pax["younger"]
+                            + last_supplier_pax["baby"]
+                        ),
+                    }
+                )
+            try:
+                up_resp = await update_elektraweb_reservation(
+                    hotel_id=int(hotel_id),
+                    reservation_id=str(reservation_id),
+                    updates=minimal_payload,
+                    timeout_sec=20,
+                )
+                print(
+                    "[PAYMENT] bookingapi minimal TRY update OK | "
+                    f"profile={profile} variant={idx} res_id={reservation_id} "
+                    f"payload={json.dumps(_payment_payload_log_view(minimal_payload), ensure_ascii=False)} "
+                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                )
+                record_metric(
+                    event="payment_update_ok",
+                    category="bookingapi_try_fields_minimal",
+                    meta={
+                        "hotel_id": int(hotel_id),
+                        "reservation_id": str(reservation_id),
+                        "profile": profile,
+                        "variant": int(idx),
+                    },
+                )
+                return True
+            except Exception as minimal_exc:
+                print(
+                    "[PAYMENT] WARN: bookingapi minimal TRY update failed | "
+                    f"profile={profile} variant={idx} err={minimal_exc}"
+                )
+        if not (_allow_legacy_hoteladvisor_payment_fallback() or _allow_auto_try_hoteladvisor_fallback(profile)):
+            print(
+                "[PAYMENT] bookingapi TRY update failed for all variants; "
+                "legacy HOTEL_RES fallback is disabled (bookingapi-only mode)."
+            )
+            return False
+
         # 0) HAR'daki manuel akış ile birebir:
         #    a) once DEPOSITPERCENT=0
         #    b) sonra DEPOSITPRICE + DEPOSITCURRENCY(TRY)
@@ -1082,14 +1824,315 @@ async def _prepare_try_payment_on_supplier(
         return False
 
 
+async def _prepare_non_try_payment_on_supplier(
+    *,
+    reservation_id: str,
+    hotel_id: int,
+    amount: int,
+    currency_code: str,
+    booking: Optional[Dict[str, Any]] = None,
+) -> bool:
+    cur = str(currency_code or "").strip().upper()
+    if amount <= 0 or cur in {"", "TRY"}:
+        return False
+    try:
+        profile = _payment_update_profile(hotel_id, booking)
+        base_update: Dict[str, Any] = {}
+        if isinstance(booking, dict):
+            base_update = {
+                "room-type-id": int(booking.get("room_type_id") or 0),
+                "board-type-id": int(booking.get("board_type_id") or 0),
+                "rate-type-id": int(booking.get("rate_type_id") or 0),
+                "rate-code-id": int(booking.get("rate_code_id") or 0),
+                "price-agency-id": int(booking.get("price_agency_id") or 0),
+                "currency-code": str(booking.get("currency") or "EUR").strip().upper(),
+                "total-price": float(booking.get("discounted_price") or booking.get("total_price") or 0.0),
+                "adult-count": int(booking.get("adult_count") or 1),
+                "check-in": str(booking.get("check_in") or ""),
+                "check-out": str(booking.get("check_out") or ""),
+                "room-count": 1,
+                "contact-first-name": str(booking.get("guest_first_name") or ""),
+                "contact-last-name": str(booking.get("guest_last_name") or ""),
+                "contact-phone": str(booking.get("guest_phone") or ""),
+                "contact-email": str(booking.get("guest_email") or ""),
+                "nationality": "TR",
+            }
+            if profile in {"tenant_21966", "legacy_ota"}:
+                if int(booking.get("room_type_id") or 0) > 0:
+                    base_update["ROOMID"] = int(booking.get("room_type_id"))
+                if int(booking.get("board_type_id") or 0) > 0:
+                    base_update["BOARDID"] = int(booking.get("board_type_id"))
+                if int(booking.get("rate_type_id") or 0) > 0:
+                    base_update["RATETYPEID"] = int(booking.get("rate_type_id"))
+                if int(booking.get("rate_code_id") or 0) > 0:
+                    base_update["RATECODEID"] = int(booking.get("rate_code_id"))
+            guest_list = _build_update_guest_list_from_booking(booking)
+            if guest_list:
+                base_update["guest-list"] = guest_list
+            base_update = {
+                k: v for k, v in base_update.items()
+                if v not in ("", None, 0, 0.0)
+            }
+            base_update = _attach_ota_required_alias_fields(base_update, booking)
+
+        payloads: List[Dict[str, Any]] = [
+            {
+                **base_update,
+                "DEPOSITPERCENT": 0,
+                "deposit-percent": 0,
+                "DEPOSITPRICE": int(amount),
+                "deposit-amount": int(amount),
+                "payment-amount": int(amount),
+                "prepayment-amount": int(amount),
+                "DEPOSITCURRENCYCODE": cur,
+                "deposit-currency": cur,
+                "CurrencyCode": cur,
+                "currencyCode": cur,
+                "CurCode": cur,
+                "curcode": cur,
+            },
+            {
+                **base_update,
+                "DEPOSITPRICE": int(amount),
+                "DEPOSITCURRENCYCODE": cur,
+                "CurrencyCode": cur,
+                "currencyCode": cur,
+            },
+            {
+                "DEPOSITPRICE": int(amount),
+                "DEPOSITCURRENCYCODE": cur,
+                "CurrencyCode": cur,
+                "currencyCode": cur,
+            },
+        ]
+        for idx, update_payload in enumerate(payloads, start=1):
+            try:
+                up_resp = await update_elektraweb_reservation(
+                    hotel_id=int(hotel_id),
+                    reservation_id=str(reservation_id).strip(),
+                    updates=update_payload,
+                    timeout_sec=20,
+                )
+                print(
+                    "[PAYMENT] bookingapi updateReservation FX fields OK | "
+                    f"profile={profile} currency={cur} variant={idx} res_id={reservation_id} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                )
+                record_metric(
+                    event="payment_update_ok",
+                    category="bookingapi_fx_fields",
+                    meta={
+                        "hotel_id": int(hotel_id),
+                        "reservation_id": str(reservation_id),
+                        "profile": profile,
+                        "currency": cur,
+                        "variant": int(idx),
+                    },
+                )
+                return True
+            except Exception as bookingapi_exc:
+                print(
+                    "[PAYMENT] WARN: bookingapi updateReservation FX fields failed | "
+                    f"profile={profile} currency={cur} variant={idx} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"err={bookingapi_exc}"
+                )
+        return False
+    except Exception as e:
+        print(f"[PAYMENT] WARN: non-TRY payment prepare failed ({cur}): {e}")
+        return False
+
+
 async def _force_deposit_percent_zero_on_supplier(
     *,
     reservation_id: str,
     hotel_id: int,
+    booking: Optional[Dict[str, Any]] = None,
 ) -> bool:
     if not str(reservation_id or "").strip():
         return False
     try:
+        profile = _payment_update_profile(hotel_id, booking)
+        last_supplier_pax: Optional[Dict[str, int]] = None
+        # 0) bookingapi updateReservation ile DEPOSITPERCENT=0 varyantlarini dene.
+        base_update: Dict[str, Any] = {}
+        if isinstance(booking, dict):
+            base_update = {
+                "room-type-id": int(booking.get("room_type_id") or 0),
+                "board-type-id": int(booking.get("board_type_id") or 0),
+                "rate-type-id": int(booking.get("rate_type_id") or 0),
+                "rate-code-id": int(booking.get("rate_code_id") or 0),
+                "price-agency-id": int(booking.get("price_agency_id") or 0),
+                "currency-code": str(booking.get("currency") or "EUR").strip().upper(),
+                "total-price": float(booking.get("discounted_price") or booking.get("total_price") or 0.0),
+                "adult-count": int(booking.get("adult_count") or 1),
+                "check-in": str(booking.get("check_in") or ""),
+                "check-out": str(booking.get("check_out") or ""),
+                "room-count": 1,
+                "contact-first-name": str(booking.get("guest_first_name") or ""),
+                "contact-last-name": str(booking.get("guest_last_name") or ""),
+                "contact-phone": str(booking.get("guest_phone") or ""),
+                "contact-email": str(booking.get("guest_email") or ""),
+                "nationality": "TR",
+            }
+            if profile in {"tenant_21966", "legacy_ota"}:
+                if int(booking.get("room_type_id") or 0) > 0:
+                    base_update["ROOMID"] = int(booking.get("room_type_id"))
+                if int(booking.get("board_type_id") or 0) > 0:
+                    base_update["BOARDID"] = int(booking.get("board_type_id"))
+                if int(booking.get("rate_type_id") or 0) > 0:
+                    base_update["RATETYPEID"] = int(booking.get("rate_type_id"))
+                if int(booking.get("rate_code_id") or 0) > 0:
+                    base_update["RATECODEID"] = int(booking.get("rate_code_id"))
+            guest_list = _build_update_guest_list_from_booking(booking)
+            if guest_list:
+                base_update["guest-list"] = guest_list
+            base_update = {
+                k: v for k, v in base_update.items()
+                if v not in ("", None, 0, 0.0)
+            }
+            base_update = _attach_ota_required_alias_fields(base_update, booking)
+
+        bookingapi_payloads: List[Dict[str, Any]] = [
+            {**base_update, "DEPOSITPERCENT": 0, "deposit-percent": 0},
+            {**base_update, "DEPOSITPERCENT": "0"},
+            {**base_update, "DEPOSITPERCENT": ""},
+        ]
+        for idx, update_payload in enumerate(bookingapi_payloads, start=1):
+            try:
+                up_resp = await update_elektraweb_reservation(
+                    hotel_id=int(hotel_id),
+                    reservation_id=str(reservation_id).strip(),
+                    updates=update_payload,
+                    timeout_sec=20,
+                )
+                print(
+                    "[PAYMENT] bookingapi updateReservation DEPOSITPERCENT=0 OK | "
+                    f"profile={profile} variant={idx} res_id={reservation_id} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                )
+                record_metric(
+                    event="payment_update_ok",
+                    category="bookingapi_deposit_percent",
+                    meta={
+                        "hotel_id": int(hotel_id),
+                        "reservation_id": str(reservation_id),
+                        "profile": profile,
+                        "variant": int(idx),
+                    },
+                )
+                return True
+            except Exception as bookingapi_exc:
+                pax = _extract_supplier_pax_from_error(str(bookingapi_exc))
+                if pax:
+                    last_supplier_pax = pax
+                    retry_payload = dict(update_payload)
+                    retry_payload.update(
+                        {
+                            "adult-count": int(pax["adult"]),
+                            "elder-child-count": int(pax["elder"]),
+                            "younger-child-count": int(pax["younger"]),
+                            "baby-count": int(pax["baby"]),
+                            "child-count": int(pax["elder"] + pax["younger"] + pax["baby"]),
+                            "children-count": int(pax["elder"] + pax["younger"] + pax["baby"]),
+                            "CHD1": int(pax["elder"]),
+                            "CHD2": int(pax["younger"]),
+                            "BABY": int(pax["baby"]),
+                        }
+                    )
+                    retry_guest_list = _build_guest_list_for_supplier_pax(booking, pax)
+                    if retry_guest_list:
+                        retry_payload["guest-list"] = retry_guest_list
+                    try:
+                        up_resp = await update_elektraweb_reservation(
+                            hotel_id=int(hotel_id),
+                            reservation_id=str(reservation_id).strip(),
+                            updates=retry_payload,
+                            timeout_sec=20,
+                        )
+                        print(
+                            "[PAYMENT] bookingapi updateReservation DEPOSITPERCENT=0 OK after pax remap | "
+                            f"profile={profile} variant={idx} pax={pax} res_id={reservation_id} "
+                            f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                        )
+                        record_metric(
+                            event="payment_pax_remap_ok",
+                            category="bookingapi_deposit_percent",
+                            meta={
+                                "hotel_id": int(hotel_id),
+                                "reservation_id": str(reservation_id),
+                                "profile": profile,
+                                "variant": int(idx),
+                                "pax": pax,
+                            },
+                        )
+                        return True
+                    except Exception as retry_exc:
+                        print(
+                            "[PAYMENT] WARN: bookingapi DEPOSITPERCENT pax-remap retry failed | "
+                            f"profile={profile} variant={idx} pax={pax} err={retry_exc}"
+                        )
+                print(
+                    "[PAYMENT] WARN: bookingapi updateReservation DEPOSITPERCENT=0 failed | "
+                    f"profile={profile} variant={idx} "
+                    f"payload={json.dumps(_payment_payload_log_view(update_payload), ensure_ascii=False)} "
+                    f"err={bookingapi_exc}"
+                )
+
+        # 0b) Fallback: zorunlu fiyat/oda alanlari olmadan sadece deposit percent guncelle.
+        minimal_percent_payloads: List[Dict[str, Any]] = [
+            {"DEPOSITPERCENT": 0, "deposit-percent": 0},
+            {"DEPOSITPERCENT": "0"},
+            {"DEPOSITPERCENT": "", "deposit-percent": 0},
+        ]
+        for idx, minimal_payload in enumerate(minimal_percent_payloads, start=1):
+            if last_supplier_pax:
+                minimal_payload.update(
+                    {
+                        "adult-count": int(last_supplier_pax["adult"]),
+                        "elder-child-count": int(last_supplier_pax["elder"]),
+                        "younger-child-count": int(last_supplier_pax["younger"]),
+                        "baby-count": int(last_supplier_pax["baby"]),
+                    }
+                )
+            try:
+                up_resp = await update_elektraweb_reservation(
+                    hotel_id=int(hotel_id),
+                    reservation_id=str(reservation_id).strip(),
+                    updates=minimal_payload,
+                    timeout_sec=20,
+                )
+                print(
+                    "[PAYMENT] bookingapi minimal DEPOSITPERCENT=0 update OK | "
+                    f"profile={profile} variant={idx} res_id={reservation_id} "
+                    f"payload={json.dumps(_payment_payload_log_view(minimal_payload), ensure_ascii=False)} "
+                    f"resp={json.dumps(up_resp, ensure_ascii=False)[:220]}"
+                )
+                record_metric(
+                    event="payment_update_ok",
+                    category="bookingapi_deposit_percent_minimal",
+                    meta={
+                        "hotel_id": int(hotel_id),
+                        "reservation_id": str(reservation_id),
+                        "profile": profile,
+                        "variant": int(idx),
+                    },
+                )
+                return True
+            except Exception as minimal_exc:
+                print(
+                    "[PAYMENT] WARN: bookingapi minimal DEPOSITPERCENT=0 update failed | "
+                    f"profile={profile} variant={idx} err={minimal_exc}"
+                )
+        if not (_allow_legacy_hoteladvisor_payment_fallback() or _allow_auto_try_hoteladvisor_fallback(profile)):
+            print(
+                "[PAYMENT] bookingapi DEPOSITPERCENT update failed for all variants; "
+                "legacy HOTEL_RES fallback is disabled (bookingapi-only mode)."
+            )
+            return False
+
         row = {
             "ID": str(reservation_id).strip(),
             "HOTELID": int(hotel_id),
@@ -1111,14 +2154,74 @@ async def _force_deposit_percent_zero_on_supplier(
         return False
 
 
+async def _handle_payment_link_handoff(
+    *,
+    phone: str,
+    message: str,
+    lang: str,
+    booking: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    booking_ctx = ""
+    booking_id = ""
+    if isinstance(booking, dict):
+        booking_ctx = str(booking.get("booking_context_id") or "").strip()
+        booking_id = str(booking.get("id") or "").strip()
+    try:
+        activate_human_takeover(phone, reason="payment_link_request")
+    except Exception:
+        pass
+    try:
+        await notify_admin_handoff(
+            category="canli_destek",
+            priority="high",
+            customer_phone=phone or "Bilinmiyor",
+            customer_message=f"Ödeme linki / ön ödeme talebi: {message}",
+            source="booking_flow_handler.payment_link",
+            detected_intent="PAYMENT_LINK_REQUEST",
+            confidence=0.95,
+            conversation_summary=(
+                f"payment_link_requested booking_id={booking_id or '-'} booking_ctx={booking_ctx or '-'}"
+            ),
+            attempted_actions=["payment_link_blocked", "human_takeover_activated"],
+            suggested_reply="Ödeme linki paylaşılmadı; müşteri canlı temsilciye aktarıldı.",
+            tags=["payment_link", "prepayment", "handoff"],
+        )
+    except Exception:
+        pass
+    record_metric("handoff")
+    clear_payment_context(phone)
+    if lang == "en":
+        return {
+            "reply": (
+                "For payment link and prepayment requests, our live representative will assist you directly. "
+                "I am connecting you now."
+            ),
+            "status": "handoff",
+            "log": None,
+        }
+    return {
+        "reply": (
+            "Ödeme linki ve ön ödeme taleplerinizi canlı müşteri temsilcimiz yönetmektedir. "
+            "Sizi şimdi temsilcimize bağlıyorum."
+        ),
+        "status": "handoff",
+        "log": None,
+    }
+
+
 async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optional[Dict[str, Any]]:
     """Odeme yontemi ve konfirmasyon formu taleplerini yonet."""
     low = _turkish_lower(message or "").strip()
     is_short = len(low) <= 3
+    has_explicit_link_word = bool(re.search(r"\blink(?:i)?\b", low))
 
     # Genel bilgi sorulari booking odeme akisini tetiklememeli.
     if _is_generic_payment_method_question(message):
-        return None
+        return {
+            "reply": _build_payment_method_info_reply(lang),
+            "status": "payment_method_info",
+            "log": None,
+        }
 
     wants_link = False
     wants_transfer = False
@@ -1131,11 +2234,30 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
         kw in low for kw in ["gonder", "gönder", "odeme", "ödeme", "pay", "link", "para birimi", "lira"]
     )
 
+    include_test = _is_test_phone(phone)
+    recent_booking_probe = get_latest_booking_by_phone(phone, include_test=include_test)
+    if not recent_booking_probe and not include_test:
+        # Bazi kayitlar test bayragi ile gelebiliyor; bulamazsak test kayitlarini da dene.
+        recent_booking_probe = get_latest_booking_by_phone(phone, include_test=True)
+
     if is_short and low in ("1", "bir"):
-        wants_link = True
+        # "1" ana menu secimi de olabilecegi icin yalnizca odeme baglami varsa yorumla.
+        if pending_ctx or (
+            recent_booking_probe
+            and recent_booking_probe.get("status") in {"pending_approval", "elektra_created"}
+            and _is_recent_booking_for_payment(recent_booking_probe, max_hours=48)
+        ):
+            wants_link = True
     elif is_short and low in ("2", "iki"):
-        wants_transfer = True
+        if pending_ctx or (
+            recent_booking_probe
+            and recent_booking_probe.get("status") in {"pending_approval", "elektra_created"}
+            and _is_recent_booking_for_payment(recent_booking_probe, max_hours=48)
+        ):
+            wants_transfer = True
     else:
+        if has_explicit_link_word:
+            wants_link = True
         for kw in PAYMENT_LINK_KEYWORDS:
             if kw in low and kw not in ("1",):
                 wants_link = True
@@ -1145,6 +2267,9 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
                 if kw in low and kw not in ("2",):
                     wants_transfer = True
                     break
+    # Mesaj hem link hem havale anahtar kelimesi icerirse link akisini onceliklendir.
+    if wants_link and wants_transfer:
+        wants_transfer = False
 
     # Devam adimi: sadece para birimi/tutar mesaji geldiyse onceki secimi devam ettir
     if not wants_link and not wants_transfer and pending_method:
@@ -1153,12 +2278,20 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
         elif pending_method == "transfer":
             wants_transfer = True
 
-    include_test = _is_test_phone(phone)
+    # Kisa "1/2" secimlerinde son rezervasyon probe'u gecersizse, aktif rezervasyon varsa
+    # odeme akisina girmeye izin ver.
+    if is_short and low in ("1", "bir", "2", "iki") and not wants_link and not wants_transfer:
+        recent_candidates = get_active_bookings_by_phone(phone, max_hours=48, include_test=include_test, limit=2)
+        if not recent_candidates and not include_test:
+            recent_candidates = get_active_bookings_by_phone(phone, max_hours=48, include_test=True, limit=2)
+        if recent_candidates:
+            wants_link = low in ("1", "bir")
+            wants_transfer = low in ("2", "iki")
 
     if not wants_link and not wants_transfer and not wants_confirmation_form:
         # Kullanici sadece para birimi degistirmek istiyor olabilir (orn: "TRY", "TL olarak gonder")
         # Son rezervasyon Elektra'da olusturulmussa bunu odeme-link follow-up olarak ele al.
-        booking_probe = get_latest_booking_by_phone(phone, include_test=include_test)
+        booking_probe = recent_booking_probe
         if booking_probe and booking_probe.get("status") == "elektra_created" and currency_followup_hint:
             wants_link = True
         else:
@@ -1168,22 +2301,53 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
     alias_idx = _extract_booking_alias_index(message)
 
     booking: Optional[Dict[str, Any]] = None
+    pending_booking_id = pending_ctx.get("booking_id")
+    if pending_booking_id:
+        try:
+            booking = get_hotel_booking(int(pending_booking_id))
+        except Exception:
+            booking = None
     if context_id:
         booking = get_booking_by_context_id(context_id)
     if not booking:
         candidates = get_active_bookings_by_phone(phone, max_hours=48, include_test=include_test, limit=10)
+        if not candidates and not include_test:
+            candidates = get_active_bookings_by_phone(phone, max_hours=48, include_test=True, limit=10)
         if alias_idx > 0 and alias_idx <= len(candidates):
             booking = candidates[alias_idx - 1]
         elif len(candidates) == 1:
             booking = candidates[0]
         elif len(candidates) > 1:
             # Genel sorularda seçim zorunlu: belirsizliği kaldır.
+            if wants_link:
+                save_payment_context(phone, {"method": "link"})
             return {"reply": _format_booking_selection_list(candidates, lang), "status": "booking_context_required", "log": None}
         else:
             booking = get_latest_booking_by_phone(phone, include_test=include_test)
+            if not booking and not include_test:
+                booking = get_latest_booking_by_phone(phone, include_test=True)
 
     if not booking:
+        if wants_link:
+            return await _handle_payment_link_handoff(
+                phone=phone,
+                message=message,
+                lang=lang,
+                booking=None,
+            )
         clear_payment_context(phone)
+        if wants_transfer or wants_confirmation_form:
+            if lang == "en":
+                return {
+                    "reply": "I couldn't find an active reservation for payment. Please share your reservation reference (CTX-XXXXXXX) or create a reservation first.",
+                    "status": "payment_booking_not_found",
+                    "log": None,
+                }
+            return {
+                "reply": "Ödeme için aktif bir rezervasyon bulamadım. Lütfen rezervasyon referansınızı (CTX-XXXXXXX) paylaşın veya önce rezervasyon oluşturun.",
+                "status": "payment_booking_not_found",
+                "log": None,
+            }
         return None
 
     # Aktif payment context yoksa, booking odeme akisini sadece yakin tarihli ve
@@ -1194,8 +2358,8 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
         if not (_is_recent_booking_for_payment(booking, max_hours=24) and has_explicit_action):
             return None
 
-    b_status = booking.get("status", "")
-    if b_status == "pending_approval":
+    b_status = str(booking.get("status", "") or "").strip().lower()
+    if b_status in {"pending_approval", "approved"}:
         if lang == "en":
             reply = (
                 "Your reservation request is currently under review by our team. "
@@ -1210,7 +2374,34 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
 
     if b_status != "elektra_created":
         clear_payment_context(phone)
-        return None
+        if lang == "en":
+            return {
+                "reply": "Payment link cannot be generated for this reservation yet. Please try again shortly.",
+                "status": "payment_link_unavailable",
+                "log": None,
+            }
+        return {
+            "reply": "Bu rezervasyon için ödeme linki henüz üretilemiyor. Lütfen kısa süre sonra tekrar deneyin.",
+            "status": "payment_link_unavailable",
+            "log": None,
+        }
+
+    pending_booking_id = str(pending_ctx.get("booking_id") or "").strip()
+    current_booking_id = str(booking.get("id") or "").strip()
+    is_followup_for_same_booking = (
+        str(pending_ctx.get("method") or "").strip().lower() == "link"
+        and pending_booking_id
+        and current_booking_id
+        and pending_booking_id == current_booking_id
+    )
+    if wants_link and not _should_allow_automated_payment_link(message, booking):
+        if not is_followup_for_same_booking:
+            return await _handle_payment_link_handoff(
+                phone=phone,
+                message=message,
+                lang=lang,
+                booking=booking,
+            )
 
     voucher_no = ""
     booking_ctx = str(booking.get("booking_context_id", "") or "").strip()
@@ -1265,39 +2456,6 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
         return {"reply": reply, "status": "confirmation_form_unavailable", "log": None}
 
     if wants_link:
-        # Is kurali: odeme linki talepleri guvenlik nedeniyle daima insana devredilir.
-        clear_payment_context(phone)
-        try:
-            await notify_admin_handoff(
-                category="canli_destek",
-                priority="high",
-                customer_phone=phone or "Bilinmiyor",
-                customer_message=(
-                    f"Odeme linki talebi | booking_id={booking.get('id')} "
-                    f"res_id={reservation_id or '-'} | msg={message[:160]}"
-                ),
-            )
-        except Exception as notify_err:
-            print(f"[PAYMENT] WARN: handoff notify failed: {notify_err}")
-
-        if lang == "en":
-            return {
-                "reply": (
-                    "For payment link requests, our team will assist you directly for security reasons. "
-                    "We have forwarded your request and will contact you shortly."
-                ),
-                "status": "handoff_payment_link",
-                "log": None,
-            }
-        return {
-            "reply": (
-                "Ödeme linki taleplerinde güvenlik nedeniyle ekibimiz manuel destek sağlar. "
-                "Talebinizi ekibimize ilettik, kısa süre içinde sizinle iletişime geçeceğiz."
-            ),
-            "status": "handoff_payment_link",
-            "log": None,
-        }
-
         if not voucher_no and reservation_id:
             voucher_no = reservation_id
             print(
@@ -1370,26 +2528,14 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
             percent_zero_ok = await _force_deposit_percent_zero_on_supplier(
                 reservation_id=reservation_id,
                 hotel_id=hotel_id,
+                booking=booking,
             )
             if not percent_zero_ok:
-                clear_payment_context(phone)
-                if lang == "en":
-                    return {
-                        "reply": (
-                            "Payment link could not be prepared because DEPOSITPERCENT could not be set to 0 "
-                            "on supplier side. Please check API permissions for Update/HOTEL_RES."
-                        ),
-                        "status": "payment_link_unavailable",
-                        "log": None,
-                    }
-                return {
-                    "reply": (
-                        "Ödeme linki hazırlanamadı çünkü supplier tarafında DEPOSITPERCENT=0 ayarlanamadı. "
-                        "Lütfen API kullanıcısı için Update/HOTEL_RES yetkisini kontrol edin."
-                    ),
-                    "status": "payment_link_unavailable",
-                    "log": None,
-                }
+                # Akisi durdurma: supplier update yetkisi/path'i olmasa bile linki gonder.
+                print(
+                    "[PAYMENT] WARN: DEPOSITPERCENT=0 could not be updated; continuing with link generation | "
+                    f"booking_id={booking.get('id')} reservation_id={reservation_id}"
+                )
 
         nights = int(booking.get("nights") or 1)
         if nights <= 0:
@@ -1420,36 +2566,52 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
                 payment_amount = int(round(converted_amount))
             except Exception as e:
                 # Yanlis para birimi etiketiyle tutar gondermeyelim.
-                # Kur donusumu yoksa rezervasyon para biriminde devam et.
+                # Kullanici hangi para birimini istediyse o para biriminde devam et.
                 print(f"[PAYMENT] WARN: exchange rate conversion failed ({booking_currency}->{requested_currency}): {e}")
-                effective_currency = booking_currency
+                effective_currency = requested_currency
                 payment_amount = int(round(float(requested_amount)))
-                if requested_currency != booking_currency:
-                    conversion_note_tr = (
-                        f"Kur servisine ulaşılamadığı için tutar geçici olarak {booking_currency} olarak paylaşıldı.\n\n"
-                    )
-                    conversion_note_en = (
-                        f"Exchange service is temporarily unavailable, so the amount is shared in {booking_currency} for now.\n\n"
-                    )
 
-        if effective_currency == "TRY" and str(reservation_id or "").strip():
-            supplier_try_ok = await _prepare_try_payment_on_supplier(
-                reservation_id=str(reservation_id).strip(),
-                hotel_id=hotel_id,
-                try_amount=payment_amount,
-            )
-            if not supplier_try_ok:
-                # Kullanici talebi: link gonderimi kapanmasin, fallback ile devam et.
-                effective_currency = booking_currency
-                payment_amount = int(round(float(requested_amount)))
-                conversion_note_tr = (
-                    "TRY ödeme alanı supplier tarafında güncellenemedi; "
-                    f"bağlantı {booking_currency} olarak paylaşıldı.\n\n"
+        if str(reservation_id or "").strip() and effective_currency != booking_currency:
+            supplier_currency_ok = False
+            if effective_currency == "TRY":
+                supplier_currency_ok = await _prepare_try_payment_on_supplier(
+                    reservation_id=str(reservation_id).strip(),
+                    hotel_id=hotel_id,
+                    try_amount=payment_amount,
+                    booking=booking,
                 )
-                conversion_note_en = (
-                    "TRY payment fields could not be updated on supplier side; "
-                    f"the link is shared in {booking_currency}.\n\n"
+            else:
+                supplier_currency_ok = await _prepare_non_try_payment_on_supplier(
+                    reservation_id=str(reservation_id).strip(),
+                    hotel_id=hotel_id,
+                    amount=payment_amount,
+                    currency_code=effective_currency,
+                    booking=booking,
                 )
+            if not supplier_currency_ok:
+                print(
+                    "[PAYMENT] WARN: supplier currency update failed; blocking mismatched currency link | "
+                    f"booking_id={booking.get('id')} reservation_id={reservation_id} "
+                    f"requested_currency={effective_currency} booking_currency={booking_currency}"
+                )
+                save_payment_context(phone, {"method": "link", "booking_id": booking.get("id")})
+                if lang == "en":
+                    return {
+                        "reply": (
+                            f"I could not prepare a {effective_currency} payment link for this reservation right now.\n"
+                            f"Please choose {booking_currency} or TRY, or contact us at +905332503277."
+                        ),
+                        "status": "payment_currency_unavailable",
+                        "log": None,
+                    }
+                return {
+                    "reply": (
+                        f"Bu rezervasyon için şu anda {effective_currency} para biriminde ödeme linki hazırlayamadım.\n"
+                        f"Lütfen {booking_currency} veya TRY seçin, ya da +905332503277 numarasından bizimle iletişime geçin."
+                    ),
+                    "status": "payment_currency_unavailable",
+                    "log": None,
+                }
 
         payment_link = _build_payment_link(
             voucher_no=voucher_no,
@@ -1468,13 +2630,14 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
         )
         clear_payment_context(phone)
 
+        currency_label = _currency_display_label(effective_currency)
         if lang == "en":
             reply = (
                 f"Dear {guest_name},\n\n"
                 f"Your secure payment link is ready.\n"
                 f"Reference: {booking_ctx}\n"
                 f"{conversion_note_en}"
-                f"Deposit amount: {payment_amount} {effective_currency}\n\n"
+                f"Deposit amount: {payment_amount} {currency_label}\n\n"
                 f"{payment_link}\n\n"
                 f"You can complete your payment securely via this link.\n"
                 f"If you need support, please contact us at +905332503277.\n\n"
@@ -1486,7 +2649,7 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
                 f"Güvenli ödeme bağlantınız hazır.\n"
                 f"Referans: {booking_ctx}\n"
                 f"{conversion_note_tr}"
-                f"Ön ödeme tutarı: {payment_amount} {effective_currency}\n\n"
+                f"Ön ödeme tutarı: {payment_amount} {currency_label}\n\n"
                 f"{payment_link}\n\n"
                 f"Ödemenizi bu bağlantı üzerinden güvenli şekilde tamamlayabilirsiniz.\n"
                 f"Destek için bize +905332503277 numarasından ulaşabilirsiniz.\n\n"
@@ -1564,6 +2727,14 @@ def _has_room_selection(message: str) -> bool:
     return any(rn in low for rn in ["deluxe", "superior", "exclusive", "penthouse land", "penthouse", "premium"])
 
 
+def _looks_like_room_stock_question(message: str) -> bool:
+    """Stok/adet sorgusunu booking flow yerine fiyat flow'a birak."""
+    low = _turkish_lower(message or "")
+    room_markers = ["deluxe", "superior", "exclusive", "penthouse", "premium"]
+    stock_markers = ["kac adet", "kaç adet", "kac oda", "kaç oda", "musait", "müsait", "available", "left", "remaining"]
+    return any(r in low for r in room_markers) and any(s in low for s in stock_markers)
+
+
 def _detect_full_booking_message(message: str) -> bool:
     """Musteri tek mesajda tum rez bilgilerini gonderdi mi?
     Yeterli kosul: (tarih + kisi) + (isim VEYA oda adi)
@@ -1600,6 +2771,10 @@ async def handle_booking_flow(
 
     low = _turkish_lower(message)
 
+    # Oda adedi/musaitlik sorgulari booking'e degil, price flow'a gitmeli.
+    if _looks_like_room_stock_question(message):
+        return None
+
     # 1) Aktif booking flow var mi?
     flow = get_booking_flow(phone)
     if flow and flow.get("state") and flow["state"] != BookingFlowState.IDLE:
@@ -1625,6 +2800,21 @@ async def handle_booking_flow(
     # 3) Cache'de offer var mi?
     cached = get_price_offers(phone)
     has_cache = bool(cached and cached.get("offers"))
+
+    # Rezervasyon detay listesi soruluyorsa:
+    # - Uygun fiyat/oda cache'i varsa booking flow'u gercekten baslat.
+    # - Yoksa bilgi mesaji ver (fiyat adimina donulecek).
+    if has_intent and _is_booking_requirements_question(message):
+        if has_cache:
+            started = await _start_booking_flow(phone, message, cached, lang)
+            if started is not None:
+                started["status"] = "booking_requirements_info"
+                return started
+        return {
+            "reply": _build_booking_requirements_reply(lang),
+            "status": "booking_requirements_info",
+            "log": None,
+        }
 
     # 3.5) Çoklu oda/grup taleplerinde önce slot-filling ile temel bilgileri topla.
     if _is_group_quote_request(message) and (
@@ -1719,14 +2909,11 @@ async def _start_booking_flow(
             return {"reply": "Sorry, no rooms available for your dates. Please try different dates.", "status": "booking_no_rooms", "log": None}
         return {"reply": "Maalesef seçtiğiniz tarihler için müsait oda bulunamadı. Farklı tarihler deneyebilirsiniz.", "status": "booking_no_rooms", "log": None}
 
-    # Mesajdan isim bilgisi cikar (varsa saklariz)
-    extracted_name = _extract_name_from_structured_message(message)
-    if not extracted_name:
-        extracted_name = _extract_name_from_contact_message(message)
-
     # Mesajdan direkt oda secimi deneyebilir mi?
     selected = _parse_room_selection(message, rooms)
     if selected:
+        if query.get("quiet_mode") and selected.get("room_key") in _quiet_handoff_room_keys():
+            return await _handle_quiet_room_handoff(phone, lang)
         # --- Fiyat tipi secimi gerekiyor mu? (refundable vs non-refundable) ---
         low = _turkish_lower(message or "")
         explicit_refundable = any(kw in low for kw in ["ucretsiz iptal", "free cancel", "refundable"])
@@ -1746,10 +2933,6 @@ async def _start_booking_flow(
                 "hotel_id": query.get("hotel_id", "21966"),
                 "lang": lang,
             }
-            if extracted_name and extracted_name.get("first_name"):
-                pt_data["guest_first_name"] = extracted_name["first_name"]
-                pt_data["guest_last_name"] = extracted_name.get("last_name", "")
-
             if selected["is_refundable"]:
                 ref_opt, nonref_opt = selected, alt
             else:
@@ -1786,58 +2969,23 @@ async def _start_booking_flow(
         # --- Fiyat tipi acikca belirtildi veya tek secenek var ---
         flow_data = _build_flow_data_from_selection(selected, query, phone)
 
-        # Isim + iletisim varsa → direkt ASK_SPECIAL'a gec
-        guest_phone_from_msg = _extract_phone_from_message(message)
-        guest_email_from_msg = _extract_email_from_message(message)
+        # Misafir bilgilerini zorunlu olarak adim adim topla: Isim -> Telefon -> E-posta
+        # Bu nedenle ilk secim mesajindan telefon/e-posta otomatik doldurulmaz.
 
-        if extracted_name and extracted_name.get("first_name"):
-            flow_data["guest_first_name"] = extracted_name["first_name"]
-            flow_data["guest_last_name"] = extracted_name.get("last_name", "")
-            if guest_phone_from_msg:
-                flow_data["guest_phone"] = guest_phone_from_msg
-            if guest_email_from_msg:
-                flow_data["guest_email"] = guest_email_from_msg
-
-            if _has_required_guest_contact(flow_data):
-                save_booking_flow(phone, BookingFlowState.ASK_SPECIAL, flow_data)
-
-                refund = "Free Cancellation" if selected["is_refundable"] else "Non-refundable"
-                refund_tr = "Ücretsiz İptal" if selected["is_refundable"] else "İade yapılmaz"
-                guest = f"{extracted_name['first_name']} {extracted_name.get('last_name', '')}".strip()
-                if lang == "en":
-                    reply = (
-                        f"Great! {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n"
-                        f"Guest: {guest}\n\n"
-                        f"Do you have any special requests? (If not, type 'no')"
-                    )
-                else:
-                    reply = (
-                        f"Harika! {selected['room_display']} - {refund_tr}: {selected['price']} {selected['currency']}\n"
-                        f"Misafir: {guest}\n\n"
-                        f"Özel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)"
-                    )
-                return {"reply": reply, "status": "booking_flow", "log": None}
-
-        # Isim yok → ASK_NAME'e gec
-        save_booking_flow(phone, BookingFlowState.ASK_NAME, flow_data)
+        next_state = _next_guest_info_state(flow_data)
+        save_booking_flow(phone, next_state, flow_data)
 
         if lang == "en":
             refund = "Free Cancellation" if selected["is_refundable"] else "Non-refundable"
             reply = (
                 f"Great choice! {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\n"
-                f"Please provide the following information:\n"
-                f"- Full Name (First and Last name)\n"
-                f"- Phone Number\n"
-                f"- Email Address"
+                f"{_guest_info_step_prompt(next_state, lang)}"
             )
         else:
             refund = "Ücretsiz İptal" if selected["is_refundable"] else "İade yapılmaz"
             reply = (
                 f"Harika seçim! {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\n"
-                f"Lütfen aşağıdaki bilgileri yazın:\n"
-                f"- Ad Soyad\n"
-                f"- Telefon Numarası\n"
-                f"- E-posta Adresi"
+                f"{_guest_info_step_prompt(next_state, lang)}"
             )
 
         return {"reply": reply, "status": "booking_flow", "log": None}
@@ -1857,11 +3005,6 @@ async def _start_booking_flow(
             for r in rooms
         ],
     }
-
-    # Isim bilgisini flow'a kaydet (sonra kullanilacak)
-    if extracted_name and extracted_name.get("first_name"):
-        flow_data["guest_first_name"] = extracted_name["first_name"]
-        flow_data["guest_last_name"] = extracted_name.get("last_name", "")
 
     save_booking_flow(phone, BookingFlowState.SELECT_ROOM, flow_data)
 
@@ -1914,6 +3057,50 @@ def _build_flow_data_from_selection(selected: Dict, query: Dict, phone: str = ""
     }
 
 
+async def _handle_quiet_room_handoff(phone: str, lang: str) -> Dict[str, Any]:
+    try:
+        activate_human_takeover(phone, reason="quiet_room_live_required")
+    except Exception:
+        pass
+
+    try:
+        await notify_admin_handoff(
+            category="quiet_room_live_required",
+            priority="medium",
+            customer_phone=phone or "Bilinmiyor",
+            customer_message="Sessiz oda talebinde bu oda tipi canlı temsilci üzerinden yönetilir.",
+            source="booking_flow_handler.quiet_room",
+            detected_intent="HOTEL_BOOKING_CREATE",
+            confidence=0.9,
+            conversation_summary="quiet room policy requires live representative",
+            attempted_actions=["quiet_room_policy_check"],
+            suggested_reply=(
+                "Bu sessiz oda tipi için rezervasyonlar canlı müşteri temsilcisi üzerinden yapılmaktadır."
+            ),
+            tags=["hotel_booking", "quiet_room_handoff"],
+        )
+    except Exception:
+        pass
+
+    clear_booking_flow(phone)
+    if lang == "en":
+        return {
+            "reply": "This quiet room type is handled by our live representative for booking. I am connecting you now.",
+            "status": "handoff",
+            "log": None,
+        }
+    return {
+        "reply": "Bu sessiz oda tipi için rezervasyonlar canlı müşteri temsilcisi üzerinden yapılmaktadır. Sizi şimdi temsilcimize bağlıyorum.",
+        "status": "handoff",
+        "log": None,
+    }
+
+
+def _quiet_handoff_room_keys() -> set[str]:
+    policy = get_quiet_room_policy()
+    return set(policy.get("quiet_handoff_room_keys", []))
+
+
 # ============================
 # Active Flow Processing
 # ============================
@@ -1921,7 +3108,7 @@ def _build_flow_data_from_selection(selected: Dict, query: Dict, phone: str = ""
 async def _process_active_flow(
     phone: str, message: str,
     flow: Dict[str, Any], lang: str,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """Aktif flow'daki state'e gore islem yap."""
     state = flow.get("state", "")
     data = flow.get("data", {})
@@ -1935,6 +3122,12 @@ async def _process_active_flow(
 
     elif state == BookingFlowState.ASK_NAME:
         return await _handle_ask_name(phone, message, data, lang)
+
+    elif state == BookingFlowState.ASK_PHONE:
+        return await _handle_ask_phone(phone, message, data, lang)
+
+    elif state == BookingFlowState.ASK_EMAIL:
+        return await _handle_ask_email(phone, message, data, lang)
 
     elif state == BookingFlowState.ASK_SPECIAL:
         return await _handle_ask_special(phone, message, data, lang)
@@ -2093,14 +3286,14 @@ def _find_price_type_alternatives(selected: Dict, rooms: List[Dict]) -> Optional
 async def _handle_select_room(
     phone: str, message: str,
     data: Dict, lang: str,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """Oda secimi isle."""
     cached = get_price_offers(phone)
     if not cached or not cached.get("offers"):
         clear_booking_flow(phone)
-        if lang == "en":
-            return {"reply": "Price data expired. Please query prices again.", "status": "booking_expired", "log": None}
-        return {"reply": "Fiyat bilgileri süresi doldu. Lütfen tekrar fiyat sorgulayınız.", "status": "booking_expired", "log": None}
+        # Stale SELECT_ROOM state can remain from prior runs/sessions.
+        # Do not hard-stop with booking_expired; release flow so router can continue.
+        return None
 
     rooms = get_available_rooms_from_offers(cached["offers"], lang)
     selected = _parse_room_selection(message, rooms)
@@ -2115,6 +3308,8 @@ async def _handle_select_room(
 
     # Secim basarili — fiyat tipi secimi gerekiyor mu kontrol et
     query = cached.get("query_params", {})
+    if query.get("quiet_mode") and selected.get("room_key") in _quiet_handoff_room_keys():
+        return await _handle_quiet_room_handoff(phone, lang)
 
     # Musteri mesajinda acikca fiyat tipi belirtmis mi? (orn: "superior ucretsiz iptal")
     low = _turkish_lower(message or "")
@@ -2126,7 +3321,10 @@ async def _handle_select_room(
     alt = _find_price_type_alternatives(selected, rooms)
 
     # Eger musteri acikca fiyat tipi belirtmediyse VE iki secenek varsa → ASK_PRICE_TYPE
-    if alt and not explicit_choice:
+    # Not: Kullanici numarali listeden belirli satiri (orn: "8") sectiyse, o satir zaten
+    # belirli bir fiyat tipini temsil eder; tekrar fiyat tipi sorma.
+    numeric_row_choice = bool(re.match(r"^\s*\d+\s*$", message or ""))
+    if alt and not explicit_choice and not numeric_row_choice:
         # Iki secenegi goster, fiyat tipi sorsun
         # Daha once kaydedilmis isim bilgisini koru
         flow_data = {
@@ -2181,40 +3379,27 @@ async def _handle_select_room(
     # Fiyat tipi acikca belirtildi veya tek secenek var → dogrudan devam
     flow_data = _build_flow_data_from_selection(selected, query, phone)
 
-    # Daha once kaydedilmis isim/iletisim bilgisi var mi?
+    # Daha once kaydedilmis misafir bilgilerini koru (adim adim toplanir)
     if data.get("guest_first_name"):
         flow_data["guest_first_name"] = data["guest_first_name"]
         flow_data["guest_last_name"] = data.get("guest_last_name", "")
         flow_data["guest_phone"] = data.get("guest_phone", "")
         flow_data["guest_email"] = data.get("guest_email", "")
-        if _has_required_guest_contact(flow_data):
-            save_booking_flow(phone, BookingFlowState.ASK_SPECIAL, flow_data)
-            refund_tr = "Ücretsiz İptal" if selected["is_refundable"] else "İade yapılmaz"
-            refund_en = "Free Cancellation" if selected["is_refundable"] else "Non-refundable"
-            guest = f"{flow_data['guest_first_name']} {flow_data['guest_last_name']}".strip()
-            if lang == "en":
-                reply = (
-                    f"Selected: {selected['room_display']} - {refund_en}: {selected['price']} {selected['currency']}\n"
-                    f"Guest: {guest}\n\n"
-                    f"Do you have any special requests? (If not, type 'no')"
-                )
-            else:
-                reply = (
-                    f"Seçildi: {selected['room_display']} - {refund_tr}: {selected['price']} {selected['currency']}\n"
-                    f"Misafir: {guest}\n\n"
-                    f"Özel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)"
-                )
-            return {"reply": reply, "status": "booking_flow", "log": None}
-
-    # Isim yok → ASK_NAME'e gec
-    save_booking_flow(phone, BookingFlowState.ASK_NAME, flow_data)
+    next_state = _next_guest_info_state(flow_data)
+    save_booking_flow(phone, next_state, flow_data)
 
     if lang == "en":
         refund = "Free Cancellation" if selected["is_refundable"] else "Non-refundable"
-        reply = f"Selected: {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\nPlease provide the following information:\n- Full Name (First and Last name)\n- Phone Number\n- Email Address"
+        reply = (
+            f"Selected: {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\n"
+            f"{_guest_info_step_prompt(next_state, lang)}"
+        )
     else:
         refund = "Ücretsiz İptal" if selected["is_refundable"] else "İade yapılmaz"
-        reply = f"Seçildi: {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\nLütfen aşağıdaki bilgileri yazın:\n- Ad Soyad\n- Telefon Numarası\n- E-posta Adresi"
+        reply = (
+            f"Seçildi: {selected['room_display']} - {refund}: {selected['price']} {selected['currency']}\n\n"
+            f"{_guest_info_step_prompt(next_state, lang)}"
+        )
 
     return {"reply": reply, "status": "booking_flow", "log": None}
 
@@ -2295,42 +3480,18 @@ async def _handle_ask_price_type(
     currency = selected.get("currency", "EUR")
     room_display = selected.get("room_display", data.get("room_display", ""))
 
-    # Isim + iletisim zaten var mi?
-    if _has_required_guest_contact(flow_data):
-        save_booking_flow(phone, BookingFlowState.ASK_SPECIAL, flow_data)
-        guest = f"{flow_data['guest_first_name']} {flow_data['guest_last_name']}".strip()
-        if lang == "en":
-            reply = (
-                f"Selected: {room_display} - {refund_en}: {price} {currency}\n"
-                f"Guest: {guest}\n\n"
-                f"Do you have any special requests? (If not, type 'no')"
-            )
-        else:
-            reply = (
-                f"Seçildi: {room_display} - {refund_tr}: {price} {currency}\n"
-                f"Misafir: {guest}\n\n"
-                f"Özel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)"
-            )
-        return {"reply": reply, "status": "booking_flow", "log": None}
-
-    # Isim yok → ASK_NAME'e gec
-    save_booking_flow(phone, BookingFlowState.ASK_NAME, flow_data)
+    next_state = _next_guest_info_state(flow_data)
+    save_booking_flow(phone, next_state, flow_data)
 
     if lang == "en":
         reply = (
             f"Selected: {room_display} - {refund_en}: {price} {currency}\n\n"
-            f"Please provide the following information:\n"
-            f"- Full Name (First and Last name)\n"
-            f"- Phone Number\n"
-            f"- Email Address"
+            f"{_guest_info_step_prompt(next_state, lang)}"
         )
     else:
         reply = (
             f"Seçildi: {room_display} - {refund_tr}: {price} {currency}\n\n"
-            f"Lütfen aşağıdaki bilgileri yazın:\n"
-            f"- Ad Soyad\n"
-            f"- Telefon Numarası\n"
-            f"- E-posta Adresi"
+            f"{_guest_info_step_prompt(next_state, lang)}"
         )
     return {"reply": reply, "status": "booking_flow", "log": None}
 
@@ -2354,6 +3515,21 @@ def _extract_email_from_message(text: str) -> str:
 
 def _extract_name_from_contact_message(text: str) -> Optional[Dict[str, str]]:
     """Mesajdan ad-soyad cikar. Telefon/email kisimlarini temizle."""
+    def _normalize_name_candidate(candidate: str) -> str:
+        c = (candidate or "").strip()
+        if not c:
+            return ""
+        # "Ömer Alperen Gönen, ...", "Ömer ... ve bu telefon ..." gibi dogal metinlerde
+        # isim disi kuyrugu temizle.
+        c = re.split(r",|;|\s+ve\s+|\sand\s+", c, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        c = re.sub(
+            r"\b(?:bu|this|telefon|phone|numara|numarası|numarasını|number|kayıt|kayit|sistem|sisteme|edebilirsiniz|kullan(?:abilirsiniz)?)\b.*$",
+            "",
+            c,
+            flags=re.IGNORECASE,
+        ).strip(" ,-/")
+        return c
+
     lines = text.strip().split("\n")
     name_candidates = []
     for line in lines:
@@ -2393,12 +3569,13 @@ def _extract_name_from_contact_message(text: str) -> Optional[Dict[str, str]]:
         for lbl in ["telefon:", "tel:", "phone:", "email:", "e-posta:", "eposta:", "gsm:"]:
             cleaned = re.sub(re.escape(lbl), '', cleaned, flags=re.IGNORECASE)
         cleaned = cleaned.strip(" ,-/")
+        cleaned = _normalize_name_candidate(cleaned)
         if cleaned and len(cleaned) >= 2:
             name_candidates.append(cleaned)
 
     # Ilk uygun satiri isim olarak dene
     for candidate in name_candidates:
-        parsed = _parse_guest_name(candidate)
+        parsed = _parse_guest_name(_normalize_name_candidate(candidate))
         if parsed:
             return parsed
 
@@ -2409,65 +3586,106 @@ def _extract_name_from_contact_message(text: str) -> Optional[Dict[str, str]]:
     for lbl in ["telefon:", "tel:", "phone:", "email:", "e-posta:", "eposta:", "gsm:",
                  "ad soyad:", "isim:", "name:", "ad:", "soyad:"]:
         fallback = re.sub(re.escape(lbl), '', fallback, flags=re.IGNORECASE)
-    fallback = fallback.strip()
+    fallback = _normalize_name_candidate(fallback.strip())
     if fallback and not _message_looks_like_booking_intent(fallback):
         return _parse_guest_name(fallback)
     return None
+
+
+def _wants_use_current_phone(text: str) -> bool:
+    low = _turkish_lower(text or "")
+    hints = [
+        "bu telefon numaras",
+        "bu numaray",
+        "mevcut numara",
+        "sistemdeki numara",
+        "this phone number",
+        "use my number",
+        "use this number",
+        "current phone number",
+    ]
+    return any(h in low for h in hints)
 
 
 async def _handle_ask_name(
     phone: str, message: str,
     data: Dict, lang: str,
 ) -> Dict[str, Any]:
-    """Ad-soyad + telefon + e-posta topla."""
-    # Telefon ve email cikar
-    guest_phone = _extract_phone_from_message(message)
-    guest_email = _extract_email_from_message(message)
-
-    # Isim cikar (telefon/email satirlarini atlayarak)
+    """Ad-soyad bilgisi topla (ilk adim)."""
     parsed = _extract_name_from_contact_message(message)
 
     if not parsed:
+        low = _turkish_lower(message or "")
+        force_tr = bool(re.search(r"[çğıöşü]", low)) or any(
+            k in low for k in ("yazdim", "yazdım", "zaten", "adim", "adım", "soyad")
+        )
         if lang == "en":
+            if force_tr:
+                return {
+                    "reply": "Ad soyad bilgisini anlayamadım. Lütfen ad ve soyadınızı net şekilde yazın (örn: Ahmet Yılmaz).",
+                    "status": "booking_flow", "log": None,
+                }
             return {
-                "reply": "I couldn't understand the information. Please provide:\n- Full Name (e.g., John Smith)\n- Phone Number\n- Email Address",
+                "reply": "I couldn't understand the full name. Please share first and last name (e.g., John Smith).",
                 "status": "booking_flow", "log": None,
             }
         return {
-            "reply": "Bilgileri anlayamadım. Lütfen şu formatta yazın:\n- Ad Soyad (örn: Ahmet Yılmaz)\n- Telefon (örn: +90 530 123 45 67)\n- E-posta (örn: ornek@mail.com)",
+            "reply": "Ad soyad bilgisini anlayamadım. Lütfen ad ve soyadınızı yazın (örn: Ahmet Yılmaz).",
             "status": "booking_flow", "log": None,
         }
 
     data["guest_first_name"] = parsed["first_name"]
     data["guest_last_name"] = parsed["last_name"]
-    data["guest_phone"] = guest_phone
-    data["guest_email"] = guest_email
 
-    if not _has_contact_info(guest_phone, guest_email):
-        save_booking_flow(phone, BookingFlowState.ASK_NAME, data)
+    next_state = _next_guest_info_state(data)
+    save_booking_flow(phone, next_state, data)
+
+    if next_state == BookingFlowState.ASK_SPECIAL:
         if lang == "en":
-            return {
-                "reply": "Thank you. Please also provide at least one contact detail:\n- Phone Number and/or\n- Email Address",
-                "status": "booking_flow", "log": None,
-            }
-        return {
-            "reply": "Teşekkürler. Lütfen en az bir iletişim bilgisi de yazın:\n- Telefon numarası ve/veya\n- E-posta adresi",
-            "status": "booking_flow", "log": None,
-        }
-
-    save_booking_flow(phone, BookingFlowState.ASK_SPECIAL, data)
-
-    guest_name = f"{parsed['first_name']} {parsed['last_name']}".strip()
-    info_parts = [guest_name]
-    if guest_phone:
-        info_parts.append(f"Tel: {guest_phone}")
-    if guest_email:
-        info_parts.append(f"Email: {guest_email}")
-    info_summary = " | ".join(info_parts)
+            return {"reply": f"Thank you, {parsed['first_name']}! Do you have any special requests? (Type 'no' to skip)", "status": "booking_flow", "log": None}
+        return {"reply": f"Teşekkürler! {parsed['first_name']}, özel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)", "status": "booking_flow", "log": None}
 
     if lang == "en":
-        return {"reply": f"Thank you! ({info_summary})\n\nDo you have any special requests? (Type 'no' to skip)", "status": "booking_flow", "log": None}
-    return {"reply": f"Teşekkürler! ({info_summary})\n\nÖzel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)", "status": "booking_flow", "log": None}
+        return {"reply": f"Thank you! {parsed['first_name']}, {_guest_info_step_prompt(next_state, lang)}", "status": "booking_flow", "log": None}
+    return {"reply": f"Teşekkürler! {parsed['first_name']}, {_guest_info_step_prompt(next_state, lang)}", "status": "booking_flow", "log": None}
+
+
+async def _handle_ask_phone(
+    phone: str, message: str,
+    data: Dict, lang: str,
+) -> Dict[str, Any]:
+    guest_phone = _extract_phone_from_message(message)
+    if not guest_phone and _wants_use_current_phone(message):
+        guest_phone = (phone or "").strip()
+
+    if not guest_phone:
+        return {"reply": _guest_info_step_prompt(BookingFlowState.ASK_PHONE, lang), "status": "booking_flow", "log": None}
+
+    data["guest_phone"] = guest_phone
+    next_state = _next_guest_info_state(data)
+    save_booking_flow(phone, next_state, data)
+    return {"reply": _guest_info_step_prompt(next_state, lang), "status": "booking_flow", "log": None}
+
+
+async def _handle_ask_email(
+    phone: str, message: str,
+    data: Dict, lang: str,
+) -> Dict[str, Any]:
+    low = _turkish_lower((message or "").strip())
+    skip_keywords = {"gec", "geç", "atla", "skip", "no", "yok", "none", "-"}
+    if low in skip_keywords:
+        data["guest_email"] = data.get("guest_email", "")
+    else:
+        guest_email = _extract_email_from_message(message)
+        if guest_email:
+            data["guest_email"] = guest_email
+        else:
+            return {"reply": _guest_info_step_prompt(BookingFlowState.ASK_EMAIL, lang), "status": "booking_flow", "log": None}
+
+    save_booking_flow(phone, BookingFlowState.ASK_SPECIAL, data)
+    if lang == "en":
+        return {"reply": "Thank you. Do you have any special requests? (Type 'no' to skip)", "status": "booking_flow", "log": None}
+    return {"reply": "Teşekkürler. Özel bir isteğiniz var mı? (Yoksa 'yok' yazabilirsiniz)", "status": "booking_flow", "log": None}
 
 
 async def _handle_ask_special(
@@ -2561,26 +3779,16 @@ async def _handle_confirm(
     guest_name = f"{data.get('guest_first_name', '')} {data.get('guest_last_name', '')}".strip()
     price = data.get("discounted_price") or data.get("total_price", 0)
 
-    if lang == "en":
-        reply = (
-            f"✅ Your reservation request has been received.\n\n"
-            f"📋 Request No: #{booking_id}\n"
-            f"🔖 Reference: {booking_ctx}\n"
-            f"🛏️ Room: {data.get('room_type_display', '')}\n"
-            f"📅 Dates: {data.get('check_in', '')} - {data.get('check_out', '')}\n"
-            f"💶 Price: {_format_money(price)} {data.get('currency', 'EUR')}\n\n"
-            f"Our team will review your request as soon as possible and send you a confirmation message."
-        )
-    else:
-        reply = (
-            f"✅ Rezervasyon talebiniz alındı.\n\n"
-            f"📋 Talep No: #{booking_id}\n"
-            f"🔖 Referans: {booking_ctx}\n"
-            f"🛏️ Oda: {data.get('room_type_display', '')}\n"
-            f"📅 Tarih: {data.get('check_in', '')} - {data.get('check_out', '')}\n"
-            f"💶 Fiyat: {_format_money(price)} {data.get('currency', 'EUR')}\n\n"
-            f"Ekibimiz talebinizi en kısa sürede inceleyip sizi bilgilendirecektir."
-        )
+    reply = _build_booking_pending_reply(
+        lang=lang,
+        booking_id=booking_id,
+        booking_ctx=booking_ctx,
+        room_display=data.get("room_type_display", ""),
+        check_in=data.get("check_in", ""),
+        check_out=data.get("check_out", ""),
+        price=price,
+        currency=data.get("currency", "EUR"),
+    )
 
     return {
         "reply": reply,

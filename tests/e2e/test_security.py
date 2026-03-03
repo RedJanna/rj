@@ -14,6 +14,7 @@ Kapsam:
 import pytest
 import sys
 import os
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -58,6 +59,10 @@ def send_msg(client, phone: str, message: str) -> dict:
         "coalesce_mode": "immediate"
     })
     return r.json() if r.status_code == 200 else {"error": r.status_code}
+
+
+def _auth_login(client, username: str, password: str):
+    return client.post("/auth/login", json={"username": username, "password": password})
 
 
 # ======================================================
@@ -265,3 +270,61 @@ class TestInputValidation:
             # Crash olmamalı
             assert result is not None
             assert "reply" in result or "status" in result
+
+
+# ======================================================
+# KRITIK ADMIN/AUTH SECURITY TESTLERI
+# ======================================================
+
+class TestAdminAuthCritical:
+    """Admin/Auth kritik güvenlik senaryoları"""
+
+    @pytest.mark.e2e
+    def test_auth_users_requires_authenticated_session(self, security_client):
+        from app.core.admin_auth import clear_auth_rate_limits
+
+        clear_auth_rate_limits()
+        response = security_client.get("/auth/users")
+        assert response.status_code == 401
+
+    @pytest.mark.e2e
+    def test_operator_cannot_manage_users(self, security_client):
+        from app.core.auth_service import create_user, delete_user
+        from app.core.admin_auth import clear_auth_rate_limits
+
+        clear_auth_rate_limits()
+        username = f"op_sec_{uuid.uuid4().hex[:8]}"
+        password = "OpSecure123!"
+        created, _, _ = create_user(username=username, password=password, role="operator")
+        assert created is True
+
+        try:
+            login_resp = _auth_login(security_client, username, password)
+            assert login_resp.status_code == 200
+            assert login_resp.json().get("success") is True
+
+            users_resp = security_client.get("/auth/users")
+            assert users_resp.status_code == 403
+        finally:
+            delete_user(username)
+
+    @pytest.mark.e2e
+    def test_login_bruteforce_is_rate_limited(self, security_client, monkeypatch):
+        from app.core.admin_auth import clear_auth_rate_limits
+
+        clear_auth_rate_limits()
+        monkeypatch.setenv("AUTH_MAX_FAILED_ATTEMPTS", "3")
+        monkeypatch.setenv("AUTH_ATTEMPT_WINDOW_SEC", "120")
+        monkeypatch.setenv("AUTH_LOCKOUT_SEC", "60")
+
+        username = f"nouser_{uuid.uuid4().hex[:8]}"
+        for _ in range(2):
+            r = _auth_login(security_client, username, "wrong-pass")
+            assert r.status_code == 401
+
+        blocked = _auth_login(security_client, username, "wrong-pass")
+        assert blocked.status_code == 429
+        body = blocked.json()
+        assert body.get("success") is False
+        assert int(body.get("retry_after_sec") or 0) > 0
+        assert blocked.headers.get("Retry-After")

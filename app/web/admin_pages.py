@@ -73,6 +73,7 @@ ADMIN_HTML = """
             <a href="/admin/dashboard" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">📊 Dashboard</a>
             <a href="/admin/reservations-page" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">🍽️ Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">🏨 Otel Rez.</a>
+            <a href="/admin/transfer-reservations-page" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">🚐 Transfer Rez.</a>
             <a href="/admin/restaurant-plan" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">🗺️ Restoran Planı</a>
             <a href="/admin/reminders-page" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">📅 Hatırlatmalar</a>
             <a href="/admin/qa/stats" style="color: #00d4ff; text-decoration: none; margin: 0 10px; padding: 10px 20px; border: 1px solid #00d4ff; border-radius: 5px; display: inline-block; margin-bottom: 5px;">🔍 QA Stats</a>
@@ -192,8 +193,82 @@ ADMIN_HTML = """
                     </div>
                 </div>
                 <div class="setting-item">
+                    <label>Operasyon Kural Motoru</label>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span id="operationalRulesStatus">Açık</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="operationalRulesToggle" onchange="toggleOperationalRules()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="operationalRulesHint" style="margin-top:8px; color:#9aa3b2; font-size:0.85rem;">
+                        Açıksa: Standart operasyon sorularına hızlı/prosedürel yanıt verir. Kapalıysa: Normal AI akışı kullanılır.
+                    </div>
+                </div>
+                <div class="setting-item">
                     <label>Follow-up Süresi (dakika)</label>
                     <input type="number" id="followupMinutes" value="10" min="1" max="60" onchange="updateFollowupMinutes()">
+                </div>
+                <div class="setting-item">
+                    <label>Oturum Süresi (saat)</label>
+                    <input type="number" id="sessionDurationHours" value="24" min="1" max="720" onchange="updateSessionDurationHours()">
+                </div>
+                <div class="setting-item">
+                    <label>Son Follow-up Döngüsü</label>
+                    <div style="font-size: 0.95rem; color: #ddd; line-height: 1.8;">
+                        <div>Uyarı gönderildi: <strong id="followupLastSent">0</strong></div>
+                        <div>Otomatik kapatıldı: <strong id="followupLastClosed">0</strong></div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>Sessiz Oda (Bot Otomatik)</label>
+                    <select id="quietAutoRoomKeys" multiple size="7" style="width:100%; padding:8px; border-radius:8px; border:1px solid #444; background:#2a2a4a; color:#fff;">
+                        <option value="deluxe">deluxe</option>
+                        <option value="superior">superior</option>
+                        <option value="exclusiveLand">exclusiveLand</option>
+                        <option value="exclusivePool">exclusivePool</option>
+                        <option value="penthouseLand">penthouseLand</option>
+                        <option value="penthouse">penthouse</option>
+                        <option value="premium">premium</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Sessiz Oda (Canlı Temsilci)</label>
+                    <select id="quietHandoffRoomKeys" multiple size="7" style="width:100%; padding:8px; border-radius:8px; border:1px solid #444; background:#2a2a4a; color:#fff;">
+                        <option value="deluxe">deluxe</option>
+                        <option value="superior">superior</option>
+                        <option value="exclusiveLand">exclusiveLand</option>
+                        <option value="exclusivePool">exclusivePool</option>
+                        <option value="penthouseLand">penthouseLand</option>
+                        <option value="penthouse">penthouse</option>
+                        <option value="premium">premium</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Standart Oda (Fiyat Filtre)</label>
+                    <select id="standardRoomKeys" multiple size="7" style="width:100%; padding:8px; border-radius:8px; border:1px solid #444; background:#2a2a4a; color:#fff;">
+                        <option value="deluxe">deluxe</option>
+                        <option value="superior">superior</option>
+                        <option value="exclusiveLand">exclusiveLand</option>
+                        <option value="exclusivePool">exclusivePool</option>
+                        <option value="penthouseLand">penthouseLand</option>
+                        <option value="penthouse">penthouse</option>
+                        <option value="premium">premium</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Oda Kuralı Güncelle</label>
+                    <button class="btn" onclick="updateQuietRoomPolicy()" style="padding: 10px 18px; background: #5352ed;">Kaydet</button>
+                </div>
+                <div class="setting-item">
+                    <label>Fiyat Para Birimleri (Aktif/Pasif)</label>
+                    <div style="display:grid; grid-template-columns: repeat(2,minmax(90px,1fr)); gap:8px; margin-bottom:10px;">
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="currencyToggleEUR" checked> EUR</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="currencyToggleUSD" checked> USD</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="currencyToggleTRY" checked> TRY</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="currencyToggleGBP" checked> GBP</label>
+                    </div>
+                    <button class="btn" onclick="updateCurrencyPolicy()" style="padding: 10px 18px; background: #00a8ff;">Para Birimlerini Kaydet</button>
                 </div>
             </div>
         </div>
@@ -262,6 +337,22 @@ ADMIN_HTML = """
             <div class="blacklist-list" id="blacklistList"></div>
         </div>
 
+        <!-- Aktif Konuşmalar -->
+        <div class="status-card">
+            <h2 style="margin-bottom: 20px;">💬 Aktif Konuşmalar (Son 30 dk)</h2>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 15px;">
+                <button class="btn btn-start" onclick="loadActiveConversations()" style="padding: 10px 16px;">🔄 Yenile</button>
+                <button class="btn btn-warning" onclick="purgeAllActiveConversationsHome()" style="padding: 10px 16px;">🧹 Tüm Konuşmaları Sıfırla</button>
+                <button class="btn btn-warning" onclick="purgeSelectedActiveConversationsHome()" style="padding: 10px 16px;">🧹 Seçili Konuşmalara Sıfırla</button>
+                <button class="btn btn-stop" onclick="blacklistAllActiveConversationsHome()" style="padding: 10px 16px;">🚫 Tüm Konuşmaları KARA LİSTEYE EKLE</button>
+                <button class="btn btn-stop" onclick="blacklistSelectedActiveConversationsHome()" style="padding: 10px 16px;">🚫 Seçili Konuşmaları Kara Listeye</button>
+                <button class="btn" onclick="selectAllActiveConversationsHome()" style="padding: 10px 16px;">☑️ Tümünü Seç</button>
+                <button class="btn" onclick="clearActiveSelectionHome()" style="padding: 10px 16px;">⬜ Seçimi Temizle</button>
+            </div>
+            <div id="activeSelectionInfoHome" style="color:#aab; font-size:0.9rem; margin-bottom:10px;">Seçili: 0</div>
+            <div id="activeConversationsHome">Yükleniyor...</div>
+        </div>
+
         <!-- Konuşma Sıfırlama -->
         <div class="status-card">
             <h2 style="margin-bottom: 20px;">🧹 Konuşma Sıfırlama</h2>
@@ -313,7 +404,21 @@ ADMIN_HTML = """
                 const data = await res.json();
                 document.getElementById('followupMinutes').value = data.followup_minutes || 10;
                 document.getElementById('followupMin').textContent = data.followup_minutes || 10;
+                document.getElementById('sessionDurationHours').value = data.session_duration_hours || 24;
                 document.getElementById('followupToggle').checked = data.followup_enabled;
+                document.getElementById('operationalRulesToggle').checked = data.operational_rules_enabled !== false;
+                document.getElementById('operationalRulesStatus').textContent = (data.operational_rules_enabled !== false) ? 'Açık' : 'Kapalı';
+                updateOperationalRulesHint(data.operational_rules_enabled !== false);
+                setMultiSelectValues('quietAutoRoomKeys', data.quiet_auto_room_keys || ['deluxe','premium']);
+                setMultiSelectValues('quietHandoffRoomKeys', data.quiet_handoff_room_keys || ['superior']);
+                setMultiSelectValues('standardRoomKeys', data.standard_room_keys || ['deluxe','superior']);
+                setCurrencyToggleValues(data.currency_enabled || { EUR: true, USD: true, TRY: true, GBP: true });
+
+                const fr = await fetch(API + '/admin/followups/pending');
+                const fd = await fr.json();
+                const cycle = fd.last_cycle || {};
+                document.getElementById('followupLastSent').textContent = cycle.sent || 0;
+                document.getElementById('followupLastClosed').textContent = cycle.closed || 0;
             } catch(e) {}
         }
         
@@ -371,11 +476,92 @@ ADMIN_HTML = """
             await fetch(API + '/settings?followup_enabled=' + enabled, { method: 'POST' });
             document.getElementById('followupStatus').textContent = enabled ? 'Açık' : 'Kapalı';
         }
+
+        async function toggleOperationalRules() {
+            const enabled = document.getElementById('operationalRulesToggle').checked;
+            await fetch(API + '/settings?operational_rules_enabled=' + enabled, { method: 'POST' });
+            document.getElementById('operationalRulesStatus').textContent = enabled ? 'Açık' : 'Kapalı';
+            updateOperationalRulesHint(enabled);
+        }
+
+        function updateOperationalRulesHint(enabled) {
+            const el = document.getElementById('operationalRulesHint');
+            if (!el) return;
+            if (enabled) {
+                el.textContent = 'Açık: Bazı rezervasyon/iptal/değişiklik sorularını bekletmeden, standart prosedürle otomatik yönetir.';
+            } else {
+                el.textContent = 'Kapalı: Bu özel operasyon kuralları devre dışıdır; mesajlar normal AI akışıyla yanıtlanır.';
+            }
+        }
         
         async function updateFollowupMinutes() {
             const mins = document.getElementById('followupMinutes').value;
             await fetch(API + '/settings?followup_minutes=' + mins, { method: 'POST' });
             document.getElementById('followupMin').textContent = mins;
+        }
+
+        async function updateSessionDurationHours() {
+            const hours = document.getElementById('sessionDurationHours').value;
+            const res = await fetch(API + '/settings?session_duration_hours=' + hours, { method: 'POST' });
+            const data = await res.json();
+            if (data && data.success === false) {
+                alert('Oturum süresi güncellenemedi: ' + (data.error || 'Bilinmeyen hata'));
+                await loadSettings();
+            }
+        }
+
+        async function updateQuietRoomPolicy() {
+            const autoKeys = encodeURIComponent(getMultiSelectValues('quietAutoRoomKeys').join(','));
+            const handoffKeys = encodeURIComponent(getMultiSelectValues('quietHandoffRoomKeys').join(','));
+            const standardKeys = encodeURIComponent(getMultiSelectValues('standardRoomKeys').join(','));
+            const res = await fetch(
+                API + '/settings?quiet_auto_room_keys=' + autoKeys + '&quiet_handoff_room_keys=' + handoffKeys + '&standard_room_keys=' + standardKeys,
+                { method: 'POST' }
+            );
+            const data = await res.json();
+            if (data && data.success === false) {
+                alert('Kural kaydedilemedi: ' + (data.error || 'Bilinmeyen hata'));
+                return;
+            }
+            alert('Oda politikaları güncellendi');
+        }
+
+        function setCurrencyToggleValues(policy) {
+            const p = policy || {};
+            document.getElementById('currencyToggleEUR').checked = (p.EUR !== false);
+            document.getElementById('currencyToggleUSD').checked = (p.USD !== false);
+            document.getElementById('currencyToggleTRY').checked = (p.TRY !== false);
+            document.getElementById('currencyToggleGBP').checked = (p.GBP !== false);
+        }
+
+        async function updateCurrencyPolicy() {
+            const policy = {
+                EUR: !!document.getElementById('currencyToggleEUR').checked,
+                USD: !!document.getElementById('currencyToggleUSD').checked,
+                TRY: !!document.getElementById('currencyToggleTRY').checked,
+                GBP: !!document.getElementById('currencyToggleGBP').checked,
+            };
+            const payload = encodeURIComponent(JSON.stringify(policy));
+            const res = await fetch(API + '/settings?currency_enabled_json=' + payload, { method: 'POST' });
+            const data = await res.json();
+            if (data && data.success === false) {
+                alert('Para birimi politikası kaydedilemedi: ' + (data.error || 'Bilinmeyen hata'));
+                return;
+            }
+            alert('Para birimi politikası güncellendi');
+        }
+
+        function getMultiSelectValues(id) {
+            const el = document.getElementById(id);
+            return Array.from(el.selectedOptions || []).map(o => o.value);
+        }
+
+        function setMultiSelectValues(id, values) {
+            const valSet = new Set(values || []);
+            const el = document.getElementById(id);
+            Array.from(el.options || []).forEach(opt => {
+                opt.selected = valSet.has(opt.value);
+            });
         }
         
         async function addBlacklist() {
@@ -390,6 +576,14 @@ ADMIN_HTML = """
             await fetch(API + '/blacklist/remove/' + phone, { method: 'POST' });
             loadStats();
         }
+
+        async function addConversationToBlacklist(phone) {
+            if (!phone) return;
+            if (!confirm(phone + ' numarası kara listeye eklensin mi?')) return;
+            await fetch(API + '/blacklist/add/' + phone, { method: 'POST' });
+            await loadStats();
+            await loadActiveConversations();
+        }
         
         function renderBlacklist(list) {
             const container = document.getElementById('blacklistList');
@@ -399,6 +593,168 @@ ADMIN_HTML = """
                     <button onclick="removeBlacklist('${phone}')">Kaldır</button>
                 </div>
             `).join('');
+        }
+
+        let activeConversationPhonesHome = [];
+        const selectedActivePhonesHome = new Set();
+
+        function updateActiveSelectionInfoHome() {
+            const el = document.getElementById('activeSelectionInfoHome');
+            if (el) el.textContent = 'Seçili: ' + selectedActivePhonesHome.size;
+        }
+
+        function toggleActiveConversationSelectionHome(phone, checked) {
+            const key = String(phone || '').trim();
+            if (!key) return;
+            if (checked) selectedActivePhonesHome.add(key);
+            else selectedActivePhonesHome.delete(key);
+            updateActiveSelectionInfoHome();
+        }
+
+        function selectAllActiveConversationsHome() {
+            activeConversationPhonesHome.forEach(phone => selectedActivePhonesHome.add(phone));
+            updateActiveSelectionInfoHome();
+            loadActiveConversations();
+        }
+
+        function clearActiveSelectionHome() {
+            selectedActivePhonesHome.clear();
+            updateActiveSelectionInfoHome();
+            loadActiveConversations();
+        }
+
+        async function runBulkActionOnConversationsHome(phones, action) {
+            const actionLabel = action === 'purge' ? 'konuşma sıfırlama' : 'kara listeye ekleme';
+            const endpointBase = action === 'purge' ? '/purge/' : '/blacklist/add/';
+            const uniquePhones = Array.from(new Set((phones || []).map(p => String(p || '').trim()).filter(Boolean)));
+            if (!uniquePhones.length) {
+                alert('İşlem yapılacak konuşma yok.');
+                return;
+            }
+            if (!confirm(uniquePhones.length + ' konuşma için ' + actionLabel + ' işlemi yapılsın mı?')) return;
+
+            const failed = [];
+            await Promise.all(uniquePhones.map(async (phone) => {
+                try {
+                    const res = await fetch(API + endpointBase + phone, { method: 'POST' });
+                    if (action === 'purge') {
+                        const data = await res.json();
+                        if (!(res.ok && data && data.success)) {
+                            failed.push(phone);
+                        }
+                        return;
+                    }
+                    if (!res.ok) failed.push(phone);
+                } catch (e) {
+                    failed.push(phone);
+                }
+            }));
+
+            const okCount = uniquePhones.length - failed.length;
+            if (failed.length) {
+                alert('İşlem tamamlandı. Başarılı: ' + okCount + ', Başarısız: ' + failed.length + '\\nBaşarısız numaralar: ' + failed.join(', '));
+            } else {
+                alert('İşlem tamamlandı. Toplam: ' + okCount);
+            }
+
+            failed.forEach(phone => selectedActivePhonesHome.delete(phone));
+            await loadStats();
+            await loadActiveConversations();
+        }
+
+        async function purgeAllActiveConversationsHome() {
+            await runBulkActionOnConversationsHome(activeConversationPhonesHome, 'purge');
+        }
+
+        async function purgeSelectedActiveConversationsHome() {
+            await runBulkActionOnConversationsHome(Array.from(selectedActivePhonesHome), 'purge');
+        }
+
+        async function blacklistAllActiveConversationsHome() {
+            await runBulkActionOnConversationsHome(activeConversationPhonesHome, 'blacklist');
+        }
+
+        async function blacklistSelectedActiveConversationsHome() {
+            await runBulkActionOnConversationsHome(Array.from(selectedActivePhonesHome), 'blacklist');
+        }
+
+        async function loadActiveConversations() {
+            const container = document.getElementById('activeConversationsHome');
+            if (!container) return;
+            container.innerHTML = 'Yükleniyor...';
+            try {
+                const res = await fetch(API + '/admin/active-conversations');
+                const data = await res.json();
+                const items = Array.isArray(data.conversations) ? data.conversations : [];
+                activeConversationPhonesHome = items
+                    .map(c => String((c && c.phone) || '').trim())
+                    .filter(Boolean);
+                const currentPhones = new Set(activeConversationPhonesHome);
+                Array.from(selectedActivePhonesHome).forEach((phone) => {
+                    if (!currentPhones.has(phone)) selectedActivePhonesHome.delete(phone);
+                });
+                updateActiveSelectionInfoHome();
+                if (!items.length) {
+                    container.innerHTML = '<p style="color:#888;">Son 30 dakikada aktif konuşma yok.</p>';
+                    return;
+                }
+                container.innerHTML = items.map(c => {
+                    const phone = String((c && c.phone) || '').trim();
+                    const selected = selectedActivePhonesHome.has(phone);
+                    const pauseReason = String((c && c.paused_reason) || '').trim();
+                    const pausedMinutes = Number.isFinite(Number(c && c.paused_minutes)) ? Number(c.paused_minutes) : null;
+                    const pauseMeta = c.is_paused
+                        ? `<div style="margin-top:6px;color:#ffb4b4;font-size:0.82rem;">Pause nedeni: ${pauseReason || 'belirtilmedi'}${pausedMinutes !== null ? ` • ${pausedMinutes} dk` : ''}</div>`
+                        : '';
+                    const pauseAlert = c.is_paused
+                        ? `<div style="margin-top:10px;padding:8px 10px;border:1px solid #ff6b6b;background:rgba(255,107,107,0.12);border-radius:8px;color:#ffdede;font-size:0.84rem;">
+                                Bu sohbet duraklatılmış. Bot cevap vermez.
+                                <button class="btn btn-success" onclick="togglePause('${phone}', true)" style="margin-left:8px;padding:4px 8px;">▶️ Resume</button>
+                           </div>`
+                        : '';
+                    return `
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.05);border-radius:10px;margin-bottom:8px;">
+                            <div style="min-width:0;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <label style="display:flex;align-items:center;gap:6px;color:#aab;font-size:0.85rem;cursor:pointer;">
+                                        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleActiveConversationSelectionHome('${phone}', this.checked)">
+                                        Seç
+                                    </label>
+                                    <div style="font-weight:700;color:#00d4ff;">${phone || '-'}</div>
+                                </div>
+                                <div style="color:#aab; font-size:0.9rem; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.last_message || 'Mesaj yok'}</div>
+                                <div style="color:#778; font-size:0.8rem; margin-top:4px;">${c.minutes_ago || 0} dk önce • ${c.message_count || 0} mesaj • Dil: ${(c.language_lock || 'en').toUpperCase()}</div>
+                                ${pauseMeta}
+                                ${pauseAlert}
+                            </div>
+                            <div style="display:flex;gap:8px;flex-shrink:0;">
+                                <span class="status-badge ${c.is_paused ? 'paused' : 'active'}">${c.is_paused ? 'Durduruldu' : 'Aktif'}</span>
+                                <button class="btn btn-warning" onclick="purgeConversationByPhone('${phone}')" style="padding:8px 12px;">🧹 Konuşmayı Sıfırla</button>
+                                <button class="btn btn-stop" onclick="addConversationToBlacklist('${phone}')" style="padding:8px 12px;">🚫 Kara Listeye Ekle</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = 'Hata: ' + e.message;
+            }
+        }
+
+        async function purgeConversationByPhone(phone) {
+            if (!phone) return;
+            if (!confirm(phone + ' numarasının konuşması sıfırlansın mı?')) return;
+            try {
+                const res = await fetch(API + '/purge/' + phone, { method: 'POST' });
+                const data = await res.json();
+                if (data && data.success) {
+                    alert('Konuşma sıfırlandı: ' + phone);
+                } else {
+                    alert('Sıfırlama başarısız: ' + ((data && (data.error || data.detail)) || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Sıfırlama hatası: ' + e.message);
+            }
+            await loadActiveConversations();
         }
 
         // 🤖 OpenAI Model Değiştirme fonksiyonları
@@ -702,6 +1058,7 @@ ADMIN_HTML = """
         loadStatus();
         loadSettings();
         loadStats();
+        loadActiveConversations();
         loadMetrics();
         loadCurrentModel();
         loadPytestStatus();
@@ -709,6 +1066,7 @@ ADMIN_HTML = """
         
         // Periyodik güncelleme
         setInterval(loadStatus, 5000);
+        setInterval(loadActiveConversations, 15000);
         setInterval(loadMetrics, 10000);
         setInterval(loadPytestStatus, 30000);  // Her 30 saniyede test durumu
     </script>
@@ -792,6 +1150,7 @@ RESERVATIONS_HTML = """
             <a href="/admin/dashboard">📊 Dashboard</a>
             <a href="/admin/reservations-page" class="active">🍽️ Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page">🏨 Otel Rez.</a>
+            <a href="/admin/transfer-reservations-page">🚐 Transfer Rez.</a>
             <a href="/admin/reminders-page">📅 Hatırlatmalar</a>
             <a href="/admin/qa/stats">🔍 QA Stats</a>
             <a href="/admin/tools">⚙️ Araçlar</a>
@@ -1177,6 +1536,22 @@ DASHBOARD_HTML = """
             cursor: pointer;
             margin-bottom: 20px;
         }
+        .scorecard-card {
+            background: rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 18px;
+            margin-bottom: 20px;
+        }
+        .scorecard-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .scorecard-head input { width: 90px; padding: 6px 8px; border-radius: 6px; border: 1px solid #444; background: #2a2a4a; color: #fff; }
+        .score-pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: bold; }
+        .score-pill.good { background: rgba(0, 255, 136, 0.18); color: #79ffbf; border: 1px solid rgba(0, 255, 136, 0.3); }
+        .score-pill.bad { background: rgba(255, 82, 82, 0.18); color: #ff8d8d; border: 1px solid rgba(255, 82, 82, 0.3); }
+        .score-meta { color: #9aa3b2; font-size: 0.82rem; margin-top: 4px; }
+        .score-grid { display:grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap:10px; margin-top: 10px; }
+        .score-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px; }
+        .score-item .name { font-weight: 700; font-size: 0.86rem; margin-bottom: 6px; }
+        .score-item .note { color: #9aa3b2; font-size: 0.78rem; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -1188,6 +1563,7 @@ DASHBOARD_HTML = """
             <a href="/admin/dashboard" class="active">📊 Dashboard</a>
             <a href="/admin/reservations-page">🍽️ Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page">🏨 Otel Rez.</a>
+            <a href="/admin/transfer-reservations-page">🚐 Transfer Rez.</a>
             <a href="/admin/reminders-page">📅 Hatırlatmalar</a>
             <a href="/admin/qa/stats">🔍 QA Stats</a>
             <a href="/admin/tools">⚙️ Araçlar</a>
@@ -1219,6 +1595,20 @@ DASHBOARD_HTML = """
             <div class="stat-card">
                 <div class="value" id="qaScore">-</div>
                 <div class="label">QA Skoru</div>
+            </div>
+        </div>
+
+        <div class="scorecard-card">
+            <h3>🎯 Başarı Metrikleri ve Hedef Eşikler</h3>
+            <div class="scorecard-head">
+                <label for="dashboardScoreDays">Gün:</label>
+                <input id="dashboardScoreDays" type="number" value="7" min="1" max="90">
+                <button class="refresh-btn" style="margin-bottom:0;" onclick="loadSuccessScorecardDashboard()">Yükle</button>
+                <span id="dashboardScoreBadge" class="score-pill">-</span>
+            </div>
+            <div id="dashboardScoreMeta" class="score-meta"></div>
+            <div id="dashboardScoreGrid" class="score-grid">
+                <div class="score-item">Henüz yüklenmedi.</div>
             </div>
         </div>
         
@@ -1342,9 +1732,69 @@ DASHBOARD_HTML = """
                 console.error('Dashboard yükleme hatası:', e);
             }
         }
+
+        function _fmtScoreValue(v) {
+            if (v === null || v === undefined) return 'n/a';
+            const n = Number(v);
+            if (Number.isNaN(n)) return String(v);
+            if (n <= 1) return (n * 100).toFixed(1) + '%';
+            return n.toFixed(2);
+        }
+
+        async function loadSuccessScorecardDashboard() {
+            const days = Number(document.getElementById('dashboardScoreDays').value || 7);
+            const badge = document.getElementById('dashboardScoreBadge');
+            const meta = document.getElementById('dashboardScoreMeta');
+            const grid = document.getElementById('dashboardScoreGrid');
+
+            badge.textContent = '...';
+            badge.className = 'score-pill';
+            meta.textContent = '';
+            grid.innerHTML = '<div class="score-item">Yükleniyor...</div>';
+
+            try {
+                const res = await fetch(`/admin/metrics/success-scorecard?days=${encodeURIComponent(days)}`);
+                const data = await res.json();
+                const metrics = data.metrics || {};
+                const keys = Object.keys(metrics);
+                if (!keys.length) {
+                    badge.textContent = 'NO_DATA';
+                    grid.innerHTML = '<div class="score-item">Metrik verisi bulunamadı.</div>';
+                    return;
+                }
+
+                let pass = 0, fail = 0, nodata = 0;
+                grid.innerHTML = keys.map((key) => {
+                    const m = metrics[key] || {};
+                    const status = String(m.status || 'no_data');
+                    if (status === 'pass') pass += 1;
+                    else if (status === 'fail') fail += 1;
+                    else nodata += 1;
+                    const cls = status === 'pass' ? 'good' : (status === 'fail' ? 'bad' : '');
+                    const lbl = status === 'pass' ? 'PASS' : (status === 'fail' ? 'FAIL' : 'NO_DATA');
+                    return `
+                        <div class="score-item">
+                            <div class="name">${m.label || key}</div>
+                            <span class="score-pill ${cls}">${lbl}</span>
+                            <div class="note">Hedef: <b>${_fmtScoreValue(m.target)}</b> | Gerçek: <b>${_fmtScoreValue(m.actual)}</b></div>
+                            <div class="note">${m.description || ''}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                badge.textContent = `PASS:${pass} FAIL:${fail} NODATA:${nodata}`;
+                badge.className = fail > 0 ? 'score-pill bad' : 'score-pill good';
+                meta.textContent = `Toplam event: ${data.event_total || 0} • Auto: ${(data.counts || {}).auto || 0} • Handoff: ${(data.counts || {}).handoff || 0}`;
+            } catch (e) {
+                badge.textContent = 'HATA';
+                badge.className = 'score-pill bad';
+                grid.innerHTML = `<div class="score-item" style="color:#ff8d8d;">${String(e.message || e)}</div>`;
+            }
+        }
         
         // Sayfa yüklendiğinde
         loadDashboard();
+        loadSuccessScorecardDashboard();
         
         // Her 30 saniyede güncelle
         setInterval(loadDashboard, 30000);
@@ -1435,6 +1885,18 @@ ADMIN_TOOLS_HTML = """
         .tab.active { background: #5352ed; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+        .mini-note { color: #9aa3b2; font-size: 0.85rem; margin-top: 8px; }
+        .packet-table-wrap { margin-top: 12px; max-height: 280px; overflow: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+        .packet-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .packet-table th, .packet-table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left; vertical-align: top; }
+        .packet-table th { position: sticky; top: 0; background: #181e2d; z-index: 1; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: bold; }
+        .pill.bad { background: rgba(255, 82, 82, 0.18); color: #ff8d8d; border: 1px solid rgba(255, 82, 82, 0.3); }
+        .pill.good { background: rgba(0, 255, 136, 0.18); color: #79ffbf; border: 1px solid rgba(0, 255, 136, 0.3); }
+        .metric-grid { display:grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap:10px; margin-top: 12px; }
+        .metric-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px; }
+        .metric-name { font-weight: 700; font-size: 0.86rem; margin-bottom: 6px; }
+        .metric-note { color: #9aa3b2; font-size: 0.78rem; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -1471,7 +1933,16 @@ ADMIN_TOOLS_HTML = """
                 <!-- Aktif Konuşmalar -->
                 <div class="card">
                     <h2>💬 Aktif Konuşmalar (Son 30 dk)</h2>
-                    <button class="btn btn-success" onclick="loadActiveConversations()" style="margin-bottom: 15px;">🔄 Yenile</button>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 15px;">
+                        <button class="btn btn-success" onclick="loadActiveConversations()">🔄 Yenile</button>
+                        <button class="btn btn-warning" onclick="purgeAllActiveConversationsTools()">🧹 Tüm Konuşmaları Sıfırla</button>
+                        <button class="btn btn-warning" onclick="purgeSelectedActiveConversationsTools()">🧹 Seçili Konuşmalara Sıfırla</button>
+                        <button class="btn btn-danger" onclick="blacklistAllActiveConversationsTools()">🚫 Tüm Konuşmaları KARA LİSTEYE EKLE</button>
+                        <button class="btn btn-danger" onclick="blacklistSelectedActiveConversationsTools()">🚫 Seçili Konuşmaları Kara Listeye</button>
+                        <button class="btn btn-primary" onclick="selectAllActiveConversationsTools()">☑️ Tümünü Seç</button>
+                        <button class="btn btn-primary" onclick="clearActiveSelectionTools()">⬜ Seçimi Temizle</button>
+                    </div>
+                    <div id="activeSelectionInfoTools" class="mini-note" style="margin-bottom:10px;">Seçili: 0</div>
                     <div id="activeConversations">Yükleniyor...</div>
                 </div>
                 
@@ -1484,6 +1955,18 @@ ADMIN_TOOLS_HTML = """
             
             <!-- Sağ Kolon -->
             <div>
+                <div class="card">
+                    <h2>🖥️ Backend Kontrol</h2>
+                    <p class="mini-note">`start_backend.bat` dosyasını admin panelden başlatıp durdurur.</p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                        <button class="btn btn-success" onclick="startBackendBat()">▶️ Backend Başlat</button>
+                        <button class="btn btn-danger" onclick="stopBackendBat()">⏹️ Backend Durdur</button>
+                        <button class="btn btn-warning" onclick="loadBackendStatus()">🔄 Durum Yenile</button>
+                    </div>
+                    <div id="backendStatusText" class="mini-note" style="margin-top:10px;">Durum: Yükleniyor...</div>
+                    <div id="backendControlResult" class="result-box" style="display:none; margin-top:12px;"></div>
+                </div>
+
                 <!-- Endpoint Tester -->
                 <div class="card">
                     <h2>🔌 API Endpoint Tester</h2>
@@ -1522,10 +2005,61 @@ ADMIN_TOOLS_HTML = """
                         <button class="btn btn-success" onclick="quickAction('/admin/errors', 'GET')">❌ Hatalar</button>
                         <button class="btn btn-warning" onclick="quickAction('/admin/daily-report/send', 'POST')">📤 Rapor Gönder</button>
                         <button class="btn btn-warning" onclick="quickAction('/test/check-config', 'GET')">⚙️ Yapılandırma</button>
+                        <button class="btn btn-warning" onclick="loadInvalidHandoffPackets()">🚨 Sorunlu Packetler</button>
+                        <button class="btn btn-warning" onclick="loadSuccessScorecard()">🎯 Başarı Skorları</button>
                         <button class="btn btn-danger" onclick="quickAction('/admin/metrics/reset', 'POST')">🗑️ Metrik Sıfırla</button>
                         <button class="btn btn-danger" onclick="quickAction('/admin/followups/clear-all', 'POST')">🗑️ Follow-up Temizle</button>
                     </div>
                     <div id="quickResult" class="result-box" style="display:none; margin-top:15px;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>🎯 Başarı Metrikleri ve Hedef Eşikler</h2>
+                    <p class="mini-note">Containment, loop rate, false handoff/auto ve P95 response time metriklerini hedeflerle karşılaştırır.</p>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                        <label for="scorecardDays">Gün:</label>
+                        <input id="scorecardDays" type="number" value="7" min="1" max="90" style="width:90px;">
+                        <button class="btn btn-warning" onclick="loadSuccessScorecard()">Yükle</button>
+                        <span id="scorecardPassFail" class="pill">-</span>
+                    </div>
+                    <div id="scorecardMeta" class="mini-note"></div>
+                    <div id="scorecardGrid" class="metric-grid">
+                        <div class="metric-item">Henüz yüklenmedi.</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🚨 Sorunlu Handoff Packetler</h2>
+                    <p class="mini-note">Sadece invalid packet kayıtlarını getirir ve eksik alanları gösterir.</p>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                        <label for="handoffPacketDays">Gün:</label>
+                        <input id="handoffPacketDays" type="number" value="7" min="1" max="30" style="width:90px;">
+                        <label for="handoffAfterDeploy" style="display:flex; align-items:center; gap:6px;">
+                            <input id="handoffAfterDeploy" type="checkbox" checked>
+                            Sadece deploy sonrası
+                        </label>
+                        <button class="btn btn-warning" onclick="loadInvalidHandoffPackets()">Yükle</button>
+                        <span id="handoffInvalidCount" class="pill bad">-</span>
+                    </div>
+                    <div id="handoffAfterTsInfo" class="mini-note"></div>
+                    <div class="packet-table-wrap">
+                        <table class="packet-table">
+                            <thead>
+                                <tr>
+                                    <th>Zaman</th>
+                                    <th>Kategori</th>
+                                    <th>Eksik</th>
+                                    <th>Kaynak</th>
+                                    <th>Intent</th>
+                                    <th>Dil</th>
+                                    <th>CorrId</th>
+                                </tr>
+                            </thead>
+                            <tbody id="handoffInvalidRows">
+                                <tr><td colspan="7" style="color:#888;">Henüz yüklenmedi.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 
                 <!-- 🏨 ElektraWeb Raw Price Test -->
@@ -1588,6 +2122,85 @@ ADMIN_TOOLS_HTML = """
     
     <script>
         const API = '';
+        let activeConversationPhonesTools = [];
+        const selectedActivePhonesTools = new Set();
+
+        function updateActiveSelectionInfoTools() {
+            const el = document.getElementById('activeSelectionInfoTools');
+            if (el) el.textContent = 'Seçili: ' + selectedActivePhonesTools.size;
+        }
+
+        function toggleActiveConversationSelectionTools(phone, checked) {
+            const key = String(phone || '').trim();
+            if (!key) return;
+            if (checked) selectedActivePhonesTools.add(key);
+            else selectedActivePhonesTools.delete(key);
+            updateActiveSelectionInfoTools();
+        }
+
+        function selectAllActiveConversationsTools() {
+            activeConversationPhonesTools.forEach(phone => selectedActivePhonesTools.add(phone));
+            updateActiveSelectionInfoTools();
+            loadActiveConversations();
+        }
+
+        function clearActiveSelectionTools() {
+            selectedActivePhonesTools.clear();
+            updateActiveSelectionInfoTools();
+            loadActiveConversations();
+        }
+
+        async function runBulkActionOnConversationsTools(phones, action) {
+            const actionLabel = action === 'purge' ? 'konuşma sıfırlama' : 'kara listeye ekleme';
+            const endpointBase = action === 'purge' ? '/purge/' : '/blacklist/add/';
+            const uniquePhones = Array.from(new Set((phones || []).map(p => String(p || '').trim()).filter(Boolean)));
+            if (!uniquePhones.length) {
+                alert('İşlem yapılacak konuşma yok.');
+                return;
+            }
+            if (!confirm(uniquePhones.length + ' konuşma için ' + actionLabel + ' işlemi yapılsın mı?')) return;
+
+            const failed = [];
+            await Promise.all(uniquePhones.map(async (phone) => {
+                try {
+                    const res = await fetch(API + endpointBase + phone, { method: 'POST' });
+                    if (action === 'purge') {
+                        const data = await res.json();
+                        if (!(res.ok && data && data.success)) failed.push(phone);
+                        return;
+                    }
+                    if (!res.ok) failed.push(phone);
+                } catch (e) {
+                    failed.push(phone);
+                }
+            }));
+
+            const okCount = uniquePhones.length - failed.length;
+            if (failed.length) {
+                alert('İşlem tamamlandı. Başarılı: ' + okCount + ', Başarısız: ' + failed.length + '\\nBaşarısız numaralar: ' + failed.join(', '));
+            } else {
+                alert('İşlem tamamlandı. Toplam: ' + okCount);
+            }
+
+            failed.forEach(phone => selectedActivePhonesTools.delete(phone));
+            await loadActiveConversations();
+        }
+
+        async function purgeAllActiveConversationsTools() {
+            await runBulkActionOnConversationsTools(activeConversationPhonesTools, 'purge');
+        }
+
+        async function purgeSelectedActiveConversationsTools() {
+            await runBulkActionOnConversationsTools(Array.from(selectedActivePhonesTools), 'purge');
+        }
+
+        async function blacklistAllActiveConversationsTools() {
+            await runBulkActionOnConversationsTools(activeConversationPhonesTools, 'blacklist');
+        }
+
+        async function blacklistSelectedActiveConversationsTools() {
+            await runBulkActionOnConversationsTools(Array.from(selectedActivePhonesTools), 'blacklist');
+        }
         
         // Manuel mesaj gönder
         async function sendMessage() {
@@ -1627,27 +2240,61 @@ ADMIN_TOOLS_HTML = """
             try {
                 const res = await fetch(API + '/admin/active-conversations');
                 const data = await res.json();
+                const items = Array.isArray(data.conversations) ? data.conversations : [];
+                activeConversationPhonesTools = items
+                    .map(c => String((c && c.phone) || '').trim())
+                    .filter(Boolean);
+                const currentPhones = new Set(activeConversationPhonesTools);
+                Array.from(selectedActivePhonesTools).forEach((phone) => {
+                    if (!currentPhones.has(phone)) selectedActivePhonesTools.delete(phone);
+                });
+                updateActiveSelectionInfoTools();
                 
-                if (data.conversations.length === 0) {
+                if (items.length === 0) {
                     container.innerHTML = '<p style="color:#888;">Son 30 dakikada aktif konuşma yok.</p>';
                     return;
                 }
                 
-                container.innerHTML = data.conversations.map(c => `
-                    <div class="conversation-item">
-                        <div class="info">
-                            <div class="phone">${c.phone}</div>
-                            <div class="msg">${c.last_message || 'Mesaj yok'}</div>
-                            <div class="time">${c.minutes_ago} dk önce • ${c.message_count} mesaj</div>
+                container.innerHTML = items.map(c => {
+                    const phone = String((c && c.phone) || '').trim();
+                    const selected = selectedActivePhonesTools.has(phone);
+                    const pauseReason = String((c && c.paused_reason) || '').trim();
+                    const pausedMinutes = Number.isFinite(Number(c && c.paused_minutes)) ? Number(c.paused_minutes) : null;
+                    const pauseMeta = c.is_paused
+                        ? `<div style="margin-top:6px;color:#ffb4b4;font-size:0.82rem;">Pause nedeni: ${pauseReason || 'belirtilmedi'}${pausedMinutes !== null ? ` • ${pausedMinutes} dk` : ''}</div>`
+                        : '';
+                    const pauseAlert = c.is_paused
+                        ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid #ff6b6b;background:rgba(255,107,107,0.12);border-radius:8px;color:#ffdede;font-size:0.83rem;">
+                                Bu sohbet duraklatılmış. Bot cevap vermez.
+                                <button class="btn btn-success" onclick="togglePause('${phone}', true)" style="margin-left:8px;padding:4px 8px;">▶️ Resume</button>
+                           </div>`
+                        : '';
+                    return `
+                        <div class="conversation-item">
+                            <div class="info">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <label style="display:flex;align-items:center;gap:6px;color:#aaa;font-size:0.85rem;cursor:pointer;">
+                                        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleActiveConversationSelectionTools('${phone}', this.checked)">
+                                        Seç
+                                    </label>
+                                    <div class="phone">${phone}</div>
+                                </div>
+                                <div class="msg">${c.last_message || 'Mesaj yok'}</div>
+                                <div class="time">${c.minutes_ago} dk önce • ${c.message_count} mesaj • Dil kilidi: ${(c.language_lock || 'en').toUpperCase()}</div>
+                                ${pauseMeta}
+                                ${pauseAlert}
+                            </div>
+                            <div class="actions">
+                                <span class="status-badge ${c.is_paused ? 'paused' : 'active'}">${c.is_paused ? 'Durduruldu' : 'Aktif'}</span>
+                                <button class="btn btn-warning" onclick="purgeConversationByPhone('${phone}')" style="padding:8px 12px;">🧹</button>
+                                <button class="btn btn-stop" onclick="addConversationToBlacklist('${phone}')" style="padding:8px 12px;">🚫</button>
+                                <button class="btn ${c.is_paused ? 'btn-success' : 'btn-warning'}" onclick="togglePause('${phone}', ${c.is_paused})" style="padding:8px 15px;">
+                                    ${c.is_paused ? '▶️' : '⏸️'}
+                                </button>
+                            </div>
                         </div>
-                        <div class="actions">
-                            <span class="status-badge ${c.is_paused ? 'paused' : 'active'}">${c.is_paused ? 'Durduruldu' : 'Aktif'}</span>
-                            <button class="btn ${c.is_paused ? 'btn-success' : 'btn-warning'}" onclick="togglePause('${c.phone}', ${c.is_paused})" style="padding:8px 15px;">
-                                ${c.is_paused ? '▶️' : '⏸️'}
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
             } catch(e) {
                 container.innerHTML = 'Hata: ' + e.message;
             }
@@ -1657,6 +2304,28 @@ ADMIN_TOOLS_HTML = """
         async function togglePause(phone, isPaused) {
             const endpoint = isPaused ? `/resume/${phone}` : `/pause/${phone}`;
             await fetch(API + endpoint, { method: 'POST' });
+            loadActiveConversations();
+        }
+
+        async function addConversationToBlacklist(phone) {
+            if (!phone) return;
+            if (!confirm(phone + ' numarası kara listeye eklensin mi?')) return;
+            await fetch(API + '/blacklist/add/' + phone, { method: 'POST' });
+            loadActiveConversations();
+        }
+
+        async function purgeConversationByPhone(phone) {
+            if (!phone) return;
+            if (!confirm(phone + ' numarasının konuşması sıfırlansın mı?')) return;
+            try {
+                const res = await fetch(API + '/purge/' + phone, { method: 'POST' });
+                const data = await res.json();
+                if (!(data && data.success)) {
+                    alert('Sıfırlama başarısız: ' + ((data && (data.error || data.detail)) || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Sıfırlama hatası: ' + e.message);
+            }
             loadActiveConversations();
         }
         
@@ -1747,6 +2416,168 @@ ADMIN_TOOLS_HTML = """
                 resultBox.textContent = 'Hata: ' + e.message;
             }
         }
+
+        async function loadBackendStatus() {
+            const statusEl = document.getElementById('backendStatusText');
+            try {
+                const res = await fetch(API + '/admin/backend/status');
+                const data = await res.json();
+                const running = !!data.running;
+                const pid = data.pid ? ` PID=${data.pid}` : '';
+                const started = data.started_at ? ` | baslangic=${data.started_at}` : '';
+                statusEl.textContent = running ? `Durum: Calisiyor.${pid}${started}` : 'Durum: Kapali';
+            } catch (e) {
+                statusEl.textContent = 'Durum sorgulama hatasi: ' + e.message;
+            }
+        }
+
+        async function startBackendBat() {
+            const resultBox = document.getElementById('backendControlResult');
+            resultBox.style.display = 'block';
+            resultBox.textContent = 'Baslatiliyor...';
+            try {
+                const res = await fetch(API + '/admin/backend/start', { method: 'POST' });
+                const data = await res.json();
+                resultBox.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                resultBox.textContent = 'Hata: ' + e.message;
+            }
+            loadBackendStatus();
+        }
+
+        async function stopBackendBat() {
+            const resultBox = document.getElementById('backendControlResult');
+            resultBox.style.display = 'block';
+            resultBox.textContent = 'Durduruluyor...';
+            try {
+                const res = await fetch(API + '/admin/backend/stop', { method: 'POST' });
+                const data = await res.json();
+                resultBox.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                resultBox.textContent = 'Hata: ' + e.message;
+            }
+            loadBackendStatus();
+        }
+
+        function shortText(v, len = 48) {
+            const s = String(v || '').trim();
+            if (!s) return '-';
+            return s.length > len ? s.slice(0, len) + '…' : s;
+        }
+
+        async function loadInvalidHandoffPackets() {
+            const countEl = document.getElementById('handoffInvalidCount');
+            const rowsEl = document.getElementById('handoffInvalidRows');
+            const afterTsInfoEl = document.getElementById('handoffAfterTsInfo');
+            const days = Number(document.getElementById('handoffPacketDays').value || 7);
+            const afterDeploy = !!document.getElementById('handoffAfterDeploy').checked;
+
+            rowsEl.innerHTML = '<tr><td colspan="7" style="color:#888;">Yükleniyor...</td></tr>';
+            countEl.textContent = '...';
+            afterTsInfoEl.textContent = '';
+
+            try {
+                const res = await fetch(
+                    `${API}/admin/handoff/packets?only_invalid=true&days=${encodeURIComponent(days)}&limit=100&after_deploy=${afterDeploy}`
+                );
+                const data = await res.json();
+                const items = Array.isArray(data.items) ? data.items : [];
+                countEl.textContent = `Invalid: ${items.length}`;
+                if (data.effective_after_ts) {
+                    afterTsInfoEl.textContent = `Filtre başlangıcı: ${data.effective_after_ts}`;
+                } else if (afterDeploy) {
+                    afterTsInfoEl.textContent = 'Deploy zamanı env tanımlı değil (APP_DEPLOYED_AT / DEPLOYED_AT / RELEASE_TS).';
+                }
+
+                if (!items.length) {
+                    rowsEl.innerHTML = '<tr><td colspan="7" style="color:#00ff88;">Sorunlu packet yok.</td></tr>';
+                    return;
+                }
+
+                rowsEl.innerHTML = items.map(it => {
+                    const dbg = it.debug || {};
+                    const missing = Array.isArray(it.missing) ? it.missing.join(', ') : '-';
+                    return `
+                        <tr>
+                            <td>${shortText(it.ts, 22)}</td>
+                            <td>${shortText(it.category, 24)}</td>
+                            <td style="color:#ff8d8d;">${shortText(missing, 60)}</td>
+                            <td>${shortText(dbg.source, 28)}</td>
+                            <td>${shortText(dbg.detected_intent, 24)}</td>
+                            <td>${shortText((it.packet && it.packet.language_lock) || dbg.language_lock || '-', 8).toUpperCase()}</td>
+                            <td title="${String(dbg.correlation_id || '')}">${shortText(dbg.correlation_id, 18)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                countEl.textContent = 'Hata';
+                rowsEl.innerHTML = `<tr><td colspan="7" style="color:#ff8d8d;">${shortText(e.message, 120)}</td></tr>`;
+            }
+        }
+
+        function formatMetricValue(v) {
+            if (v === null || v === undefined) return 'n/a';
+            const n = Number(v);
+            if (Number.isNaN(n)) return String(v);
+            if (n <= 1) return (n * 100).toFixed(1) + '%';
+            return n.toFixed(2);
+        }
+
+        async function loadSuccessScorecard() {
+            const days = Number(document.getElementById('scorecardDays').value || 7);
+            const passFail = document.getElementById('scorecardPassFail');
+            const meta = document.getElementById('scorecardMeta');
+            const grid = document.getElementById('scorecardGrid');
+
+            passFail.textContent = '...';
+            passFail.className = 'pill';
+            meta.textContent = '';
+            grid.innerHTML = '<div class="metric-item">Yükleniyor...</div>';
+
+            try {
+                const res = await fetch(`${API}/admin/metrics/success-scorecard?days=${encodeURIComponent(days)}`);
+                const data = await res.json();
+                const metrics = data.metrics || {};
+                const keys = Object.keys(metrics);
+                if (!keys.length) {
+                    passFail.textContent = 'No data';
+                    grid.innerHTML = '<div class="metric-item">Metrik verisi bulunamadı.</div>';
+                    return;
+                }
+
+                let passCount = 0;
+                let failCount = 0;
+                let noDataCount = 0;
+                grid.innerHTML = keys.map((key) => {
+                    const m = metrics[key] || {};
+                    const status = String(m.status || 'no_data');
+                    if (status === 'pass') passCount += 1;
+                    else if (status === 'fail') failCount += 1;
+                    else noDataCount += 1;
+
+                    const badgeClass = status === 'pass' ? 'good' : (status === 'fail' ? 'bad' : '');
+                    const statusLabel = status === 'pass' ? 'PASS' : (status === 'fail' ? 'FAIL' : 'NO_DATA');
+                    const target = formatMetricValue(m.target);
+                    const actual = formatMetricValue(m.actual);
+                    return `
+                        <div class="metric-item">
+                            <div class="metric-name">${shortText(m.label || key, 64)}</div>
+                            <div><span class="pill ${badgeClass}">${statusLabel}</span></div>
+                            <div class="metric-note">Hedef: <b>${target}</b> | Gerçek: <b>${actual}</b></div>
+                            <div class="metric-note">${shortText(m.description || '', 120)}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                passFail.textContent = `PASS:${passCount} FAIL:${failCount} NODATA:${noDataCount}`;
+                passFail.className = failCount > 0 ? 'pill bad' : 'pill good';
+                meta.textContent = `Toplam event: ${data.event_total || 0} • Auto: ${(data.counts || {}).auto || 0} • Handoff: ${(data.counts || {}).handoff || 0}`;
+            } catch (e) {
+                passFail.textContent = 'Hata';
+                passFail.className = 'pill bad';
+                grid.innerHTML = `<div class="metric-item" style="color:#ff8d8d;">${shortText(e.message, 140)}</div>`;
+            }
+        }
         
         // 🏨 ElektraWeb Raw Price Test
         async function testElektraRawPrice() {
@@ -1811,6 +2642,9 @@ ADMIN_TOOLS_HTML = """
         loadAuthorizedPersons();
         loadEndpoints();
         loadSystemInfo();
+        loadBackendStatus();
+        loadInvalidHandoffPackets();
+        loadSuccessScorecard();
         
         // Otomatik yenile
         setInterval(loadActiveConversations, 30000);
@@ -1927,6 +2761,7 @@ HOTEL_BOOKINGS_HTML = """
             <a href="/admin/dashboard">&#128202; Dashboard</a>
             <a href="/admin/reservations-page">&#127861; Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page" class="active">&#127976; Otel Rez.</a>
+            <a href="/admin/transfer-reservations-page">&#128652; Transfer Rez.</a>
             <a href="/admin/reminders-page">&#128197; Hat&#305;rlatmalar</a>
             <a href="/admin/qa/stats">&#128270; QA Stats</a>
             <a href="/admin/tools">&#9881; Ara&#231;lar</a>
@@ -2099,7 +2934,7 @@ HOTEL_BOOKINGS_HTML = """
                         return arr.map(x => parseInt(x, 10)).filter(x => Number.isInteger(x) && x > 0 && x <= 17);
                     }
                 } catch (e) {
-                    const nums = t.match(/\d+/g) || [];
+                    const nums = t.match(/\\d+/g) || [];
                     return nums.map(x => parseInt(x, 10)).filter(x => Number.isInteger(x) && x > 0 && x <= 17);
                 }
             }

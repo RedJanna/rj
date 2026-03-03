@@ -1,0 +1,42 @@
+📋 Senaryo: S002 - Hotel Rezervasyon Tamamlama V2
+Senaryo Kodu ve Adı: S002 - Hotel Rezervasyon Tamamlama V2
+Kanal: Telefon / WhatsApp (Mesajlaşma)
+
+🎯 Hedef: Misafirin seçtiği oda ve tarihler için rezervasyon sürecini tamamlamak; kişisel iletişim bilgilerini güvenli bir şekilde toplamak, ödeme/fiyat tipini netleştirmek ve rezervasyonu eksiksiz olarak "Onay Bekliyor (pending_approval)" statüsüne taşımak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+* "Tarihleri ve oda tipini seçtim, rezervasyonu tamamlayalım."
+* "Tamam, bu odayı ayırtmak istiyorum. Ne yapmam lazım?"
+* "Ödemeyi nasıl yapacağım, bilgileri vereyim."
+* "Seçtiğim oda için işlemleri bitirmek istiyorum."
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1. Ad Soyad: (Rezervasyon sahibinin kimlikteki tam adı)
+2. Telefon: (Ülke kodlu geçerli iletişim numarası)
+3. E-posta: (Zorunlu değil ancak onay belgesi/voucher gönderimi için teşvik edilir)
+4. Fiyat Tipi: (Ücretsiz İptal / İptal Edilemez - Non-refundable tercihi)
+5. Ön Ödeme Tercihi: (Havale/EFT, Kredi Kartı veya Ödeme Linki)
+
+⚙️ Karar Kuralı (Business Logic):
+* Sistem, misafirin odayı tutma kararını algıladığında tetiklenir.
+* Telefon numarası ve E-posta formatı (örn: @ işareti içermesi) sistem tarafından doğrulanır (Validation). Yanlış formatta girilirse tekrar istenir.
+* Kimlik (Ad Soyad) ve geçerli iletişim (Telefon) sağlandığında, fiyat tipi teyit edilir ve talep CRM'de "pending_approval" olarak açılır.
+* Misafir ödeme yöntemi olarak "Ödeme Linki" veya "Kredi Kartı" derse, güvenlik nedeniyle KVKK metni iletilir ve canlı satış temsilcisine devir kuralı çalışır.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+* Kesin Onay: Canlı satış birimi tarafından verilir. Normal taleplerde kesin onay hedef süresi maksimum 60 dakikadır.
+* Hata Fallback: Telefon veya e-posta formatı 2 kez üst üste yanlış girilirse, bot zorlamayı bırakır ve işlemi canlı desteğe aktarır.
+* Eskalasyon: Ödeme linki talep edildiğinde sistem doğrudan canlı satış temsilcisine bağlanır.
+
+💬 Standart Yanıt Mesajları
+1. İlk Karşılama ve Bilgi Talebi:
+"Harika bir seçim! ✨ Rezervasyon talebinizi hemen oluşturuyorum. İşlemi adınıza kaydedebilmemiz için Ad Soyad, telefon numaranız ve onay belgenizi iletebileceğimiz bir e-posta adresinizi paylaşır mısınız?"
+
+2. Hatalı Bilgi (Validation) Durumu:
+"Sanırım telefon numaranızda veya e-posta adresinizde ufak bir yazım hatası oldu. İletişimde sorun yaşamamamız için kontrol edip tekrar yazabilir misiniz?"
+
+3. Teyit ve Ödeme Yöntemi Sorusu:
+"Teşekkürler [Ad Soyad]. İşleminizi tamamlamadan önce son bir adım kaldı: Bu rezervasyonu 'Ücretsiz İptal Edilebilir' mi yoksa daha avantajlı olan 'İptal Edilemez' fiyat üzerinden mi ilerletelim? Ve ödemenizi Havale ile mi yoksa Kredi Kartı (Ödeme Linki) ile mi yapmak istersiniz?"
+
+4. Kapanış / İşlem Onayı (Onay Bekliyor Statüsü):
+"Bilgilerinizi aldım ve rezervasyon talebinizi (No: #10293) başarıyla oluşturdum! ✅ İlgili satış temsilcimiz ödeme adımları ve kesin onay için 60 dakika içerisinde sizinle iletişime geçecektir."

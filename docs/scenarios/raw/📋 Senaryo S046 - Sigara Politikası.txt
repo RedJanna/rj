@@ -1,0 +1,54 @@
+📋 Senaryo: S046 - Sigara Politikası V1
+Senaryo Kodu ve Adı: S046 - Sigara Politikası V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Misafirin odalarda sigara içilip içilemeyeceğine dair sorusuna WhatsApp üzerinden net ve standart bilgi vermek; sigara içilebilen alanları doğru şekilde belirtmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"Odalarda sigara içiliyor mu?"
+
+"Oda içinde sigara içebilir miyim?"
+
+"Sigara yasağı var mı?"
+
+"Sigara içilen alanınız var mı?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Soru Konusu: (Sigara politikası)
+
+Dil: (TR/EN vb. - misafirin mesajının anlamından algılanır)
+
+Konaklama Bağlamı: (Misafirin rezervasyonu/konaklama planı varsa not edilir)
+
+Takip Sorusu: (Ek destek ihtiyacı için kısa soru)
+
+Kayıt: (Sohbet kaydı/etiketi - ilgili konu işaretlenir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin sigara politikası sorusu, mesajın anlamından algılandığında senaryo tetiklenir.
+
+Odalarda sigara içilmediği net şekilde belirtilir.
+
+Sigaranın yalnızca belirlenmiş açık alanlarda içilebileceği bilgisi verilir.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Eskalasyon: Yok.
+
+Fallback: Misafir “hangi alanlar?” diye sorarsa, belirlenmiş açık alanlarda içilebileceği bilgisi korunur ve gerekirse resepsiyondan yönlendirme alabileceği belirtilir.
+
+💬 Standart Yanıt Mesajları (TR)
+1. Bilgi Yanıtı:
+
+"Odalarımız sigara içilmezdir; sigara sadece belirlenmiş açık alanlarda içilebilir."
+
+2. Takip Sorusu:
+
+"Başka yardımcı olabileceğim bir konu var mı?"
+
+3. English (If Needed):
+
+"Our rooms are non-smoking; smoking is allowed only in designated outdoor areas."

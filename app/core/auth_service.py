@@ -34,6 +34,20 @@ PBKDF2_ALGORITHM = "sha256"
 PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_PBKDF2_ITERATIONS", "210000"))
 
 
+def _get_session_duration_hours() -> int:
+    """Oturum süresini admin ayarlarından oku; yoksa varsayılanı kullan."""
+    try:
+        from app.core.settings_service import load_settings
+
+        raw_value = load_settings().get("session_duration_hours", SESSION_DURATION_HOURS)
+        hours = int(raw_value)
+        if 1 <= hours <= 720:
+            return hours
+    except Exception:
+        pass
+    return SESSION_DURATION_HOURS
+
+
 # ======================================================
 # TOTP (Google Authenticator) - Pure Python
 # ======================================================
@@ -427,7 +441,7 @@ def create_session(
     
     token = secrets.token_urlsafe(32)
     now = datetime.now()
-    expires = now + timedelta(hours=SESSION_DURATION_HOURS)
+    expires = now + timedelta(hours=_get_session_duration_hours())
     
     session = Session(
         token=token,

@@ -1,0 +1,50 @@
+📋 Senaryo: S004 - Fiyat Sorgusu Çocuk Yaş V1
+Senaryo Kodu ve Adı: S004 - Fiyat Sorgusu Çocuk Yaş V1
+Kanal: Mesajlaşma (WhatsApp)
+
+🎯 Hedef: Rezervasyon işlemi için WhatsApp üzerinden fiyat sorgulayan ve çocuklu konaklama belirten misafirlerden, doğru fiyat teklifi sunabilmek adına eksik olan tarih ve çocuk yaş bilgilerini sohbet akışı içinde eksiksiz ve yormadan toplamak.
+
+🗣️ Tetikleyici Niyetler (Intents):
+
+"2 yetişkin 2 çocuk için fiyat istiyorum."
+
+"Aile odası ücretlerinizi öğrenebilir miyim?"
+
+"Çocuklu aileler için tatil fiyatlarınız nedir?"
+
+"Biz eşim ve çocuklarla geleceğiz, fiyat alabilir miyim?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+
+Giriş Tarihi: (GG/AA/YYYY formatında konaklama başlangıç tarihi)
+
+Çıkış Tarihi: (GG/AA/YYYY formatında konaklama bitiş tarihi)
+
+Yetişkin Sayısı: (Fiyatlandırma ve oda kapasitesi için)
+
+Çocuk Sayısı: (Araç/oda tipi seçimi ve kapasite için)
+
+Çocuk Yaşları: (Çocuk indirimleri ve uygun yatak planlaması için kesinlikle gereklidir)
+
+⚙️ Karar Kuralı (Business Logic):
+
+Misafirin çocuklu konaklama için fiyat alma talebi (intent), metnin genel anlamından (semantik) algılandığında sistem tetiklenir. Kelime veya kalıp eşleştirme kesinlikle yapılmaz; misafir talebini hangi kelimelerle ifade ederse etsin asıl niyet kavranır.
+
+Yukarıdaki 5 temel bilgi (slot) kontrol edilir.
+
+Eğer konaklamada çocuk olduğu anlaşılmış ancak "Çocuk Yaşları" iletilememişse, sistem fiyat hesaplamasını kesinlikle durdurur ve fiyat vermez.
+
+İlk mesajda eksik olan bilgiler (giriş-çıkış tarihleri ve çocuk yaşları), misafiri sıkmayacak şekilde tek bir mesajda sorulur.
+
+Tüm bilgiler (özellikle tarih ve yaşlar) toplandığında, sistem fiyat hesaplama aşamasına geçer.
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+
+Otomasyon İşleyişi: Sistem fiyat teklifi öncesi gerekli verileri (tarih ve yaş) WhatsApp üzerinden otonom olarak toplar ve sürece devam eder.
+
+Eskalasyon Yok: Bu spesifik veri toplama aşamasında canlı desteğe veya insan müdahalesine (eskalasyon) gerek duyulmaz; bot akışı kendi başına tamamlar.
+
+💬 Standart Yanıt Mesajları (TR)
+1. İlk Karşılama ve Eksik Bilgi Talebi:
+
+"İlginiz için teşekkürler. Size net bir fiyat verebilmem için planladığınız giriş-çıkış tarihlerini ve çocukların yaşlarını da paylaşabilir misiniz?"

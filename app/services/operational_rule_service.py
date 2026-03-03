@@ -5,9 +5,42 @@ from typing import Any, Dict, List, Optional
 
 from app.content.automation_info import AUTOMATION_RUNTIME_RULES, get_runtime_text
 
+_OPERATIONAL_LANG_TEXTS: Dict[str, Dict[str, str]] = {
+    "rez_id_info": {
+        "tr": "Rezervasyon numarası, konfirmasyon formunda yer alan kimlik bilgisidir. Elektra ekranında bu bilgi Voucher No olarak da görünebilir.",
+        "en": "Your reservation number is shown on the confirmation form. In Elektra, the same reference may also appear as Voucher No.",
+        "ru": "Номер бронирования указан в форме подтверждения. В системе Elektra этот же номер может отображаться как Voucher No.",
+        "de": "Ihre Reservierungsnummer steht auf dem Bestätigungsformular. In Elektra kann diese Referenz auch als Voucher-Nummer erscheinen.",
+        "es": "Su número de reserva aparece en el formulario de confirmación. En Elektra, esta referencia también puede verse como Voucher No.",
+        "fr": "Votre numéro de réservation figure sur le formulaire de confirmation. Dans Elektra, cette référence peut aussi apparaître comme Voucher No.",
+        "pt": "O número da sua reserva aparece no formulário de confirmação. No Elektra, essa referência também pode aparecer como Voucher No.",
+        "ar": "رقم الحجز يظهر في نموذج التأكيد. وفي نظام Elektra قد يظهر المرجع نفسه باسم Voucher No.",
+        "zh": "您的预订编号会显示在确认单中。在 Elektra 系统里，同一编号也可能显示为 Voucher No。",
+        "hi": "आपका reservation number कन्फर्मेशन फॉर्म पर लिखा होता है। Elektra में यही संदर्भ Voucher No के रूप में भी दिख सकता है।",
+    },
+    "booking_confirmation_info": {
+        "tr": "Rezervasyon kesinleştikten sonra sizlere rezervasyon kodu ve teyit mesajı paylaşılacaktır.",
+        "en": "After your reservation is finalized, we will share your booking code and confirmation message.",
+        "ru": "После подтверждения бронирования мы отправим вам код бронирования и сообщение-подтверждение.",
+        "de": "Nach der finalen Bestätigung Ihrer Reservierung senden wir Ihnen den Buchungscode und die Bestätigungsnachricht.",
+        "es": "Una vez confirmada su reserva, le compartiremos el código de reserva y el mensaje de confirmación.",
+        "fr": "Une fois votre réservation confirmée, nous vous enverrons le code de réservation et le message de confirmation.",
+        "pt": "Após a confirmação final da reserva, compartilharemos com você o código da reserva e a mensagem de confirmação.",
+        "ar": "بعد تأكيد الحجز بشكل نهائي، سنشارك معكم رمز الحجز ورسالة التأكيد.",
+        "zh": "预订确认后，我们会向您发送预订编号和确认信息。",
+        "hi": "आपकी बुकिंग कन्फर्म होने के बाद हम आपके साथ बुकिंग कोड और कन्फर्मेशन संदेश साझा करेंगे।",
+    },
+}
+
 
 def _tr_lower(text: str) -> str:
     return (text or "").replace("İ", "i").replace("I", "ı").lower()
+
+
+def _lang_text(key: str, lang: str) -> str:
+    lang_norm = (lang or "en").strip().lower()
+    bucket = _OPERATIONAL_LANG_TEXTS.get(key, {})
+    return bucket.get(lang_norm) or bucket.get("en") or ""
 
 
 def _iter_messages(history: List[Dict[str, Any]]) -> List[tuple[str, str]]:
@@ -249,16 +282,46 @@ def _is_booking_confirmation_code_question(msg_ascii: str) -> bool:
     if not text:
         return False
     confirmation_markers = [
-        "kesinles", "kesinleş", "teyit", "onay", "confirm", "confirmation",
+        "kesinles", "kesinleş", "teyit", "onay", "confirm", "confirmation", "подтвержд",
     ]
     code_markers = [
         "rezervasyon kod", "rez kod", "rez id", "voucher", "kodu paylaş",
-        "teyit mesaj", "whatsapp",
+        "teyit mesaj", "whatsapp", "booking code", "booking number", "confirmation number",
+        "код", "номер бронир",
     ]
-    has_booking = any(k in text for k in ["rezervasyon", "booking", "reservation"])
+    has_booking = any(k in text for k in ["rezervasyon", "booking", "reservation", "брони", "бронь"])
     has_confirmation = any(k in text for k in confirmation_markers)
     has_code = any(k in text for k in code_markers)
     return has_booking and has_confirmation and has_code
+
+
+def _is_rez_id_info_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    token = _extract_rez_id_token(text)
+    if token and token.lower() not in {"nedir", "ne", "what", "whats", "info", "это", "такое"}:
+        return False
+
+    id_markers = [
+        "rez id",
+        "reservation id",
+        "voucher no",
+        "voucher number",
+    ]
+    info_markers = [
+        "nedir",
+        "ne",
+        "what is",
+        "what's",
+        "info",
+        "что такое",
+        "что это",
+        "?",
+    ]
+    has_id_ref = any(marker in text for marker in id_markers)
+    has_info = any(marker in text for marker in info_markers)
+    return has_id_ref and has_info
 
 
 def _is_date_change_request(msg_ascii: str) -> bool:
@@ -302,9 +365,9 @@ def evaluate_operational_reservation_rule(
     effective_rate_type = rate_type or previous_rate_type
 
     # Rez ID açıklaması
-    if any(k in msg_ascii for k in ["rez id nedir", "rezervasyon id nedir", "rezervasyon no nedir", "rez id ne"]):
+    if _is_rez_id_info_question(msg_ascii):
         return {
-            "reply": "Rez ID, Elektra ekranındaki Rez Id veya Voucher No bilgisidir. Konfirmasyon formunda rezervasyon numarası olarak da görebilirsiniz.",
+            "reply": _lang_text("rez_id_info", lang),
             "status": "operational_rez_id_info",
             "notify_admin_handoff": False,
             "activate_human_takeover": False,
@@ -313,7 +376,7 @@ def evaluate_operational_reservation_rule(
     # Rezervasyon onayından sonra teyit mesajı + rezervasyon kodu paylaşımı
     if _is_booking_confirmation_code_question(msg_ascii):
         return {
-            "reply": "Rezervasyon kesinleştikten sonra sizlere rezervasyon kodu ve teyit mesajı paylaşılacaktır.",
+            "reply": _lang_text("booking_confirmation_info", lang),
             "status": "operational_booking_confirmation_info",
             "notify_admin_handoff": False,
             "activate_human_takeover": False,
@@ -333,8 +396,8 @@ def evaluate_operational_reservation_rule(
             return {
                 "reply": (
                     "Rezervasyonunuzla ilgili sorgulama, değişiklik veya iptal işlemi başlatabilmemiz için "
-                    "lütfen önce Rez ID / Voucher No bilginizi paylaşın.\n"
-                    "Rez ID veya Voucher No paylaşılmadan rezervasyon üzerinde değişiklik yapılamaz."
+                    "lütfen önce rezervasyon numarası / Voucher No bilginizi paylaşın.\n"
+                    "Rezervasyon numarası veya Voucher No paylaşılmadan rezervasyon üzerinde değişiklik yapılamaz."
                 ),
                 "status": "operational_rezid_required",
                 "notify_admin_handoff": False,
@@ -443,8 +506,8 @@ def evaluate_operational_reservation_rule(
         return {
             "reply": (
                 "Rezervasyonunuzla ilgili sorgulama, değişiklik veya iptal işlemi başlatabilmemiz için "
-                "lütfen önce Rez ID / Voucher No bilginizi paylaşın.\n"
-                "Rez ID veya Voucher No paylaşılmadan rezervasyon üzerinde değişiklik yapılamaz."
+                "lütfen önce rezervasyon numarası / Voucher No bilginizi paylaşın.\n"
+                "Rezervasyon numarası veya Voucher No paylaşılmadan rezervasyon üzerinde değişiklik yapılamaz."
             ),
             "status": "operational_rezid_required",
             "notify_admin_handoff": False,
@@ -461,7 +524,7 @@ def evaluate_operational_reservation_rule(
         return {
             "reply": (
                 "Elbette, çoklu oda rezervasyonlarında farklı tarih taleplerini birlikte yönetebiliriz.\n"
-                "Hangi odanın değişeceğini netleştirebilmemiz için Rez ID bilginizi ve ilgili oda bilgisini paylaşır mısınız?\n"
+                "Hangi odanın değişeceğini netleştirebilmemiz için rezervasyon numaranızı ve ilgili oda bilgisini paylaşır mısınız?\n"
                 "Teyit sonrası işlemi canlı müşteri temsilcimizle ilerleteceğiz."
             ),
             "status": "operational_multiroom_date_change_rezid",
@@ -477,7 +540,7 @@ def evaluate_operational_reservation_rule(
                 "Öncelikle yeni tarihte aynı oda tipinin müsaitliğini kontrol edeceğim.\n"
                 "- Aynı oda tipi müsaitse yeni toplam fiyatı sizinle paylaşacağım.\n"
                 "- Müsait değilse, aynı giriş/çıkış tarihleri için müsait tüm oda tiplerini ve fiyatlarını ileteceğim.\n"
-                "İşlemi başlatmam için Rez ID bilginizi paylaşır mısınız?"
+                "İşlemi başlatmam için rezervasyon numaranızı paylaşır mısınız?"
             ),
             "status": "operational_date_change_flow",
             "notify_admin_handoff": False,

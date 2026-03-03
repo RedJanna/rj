@@ -10,6 +10,73 @@ from typing import Any, Awaitable, Callable, Dict, List
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from app.services.access_control_service import load_paused
+from app.utils.message_utils import detect_language
+from app.services.conversation_store import is_recovered_active_phone
+
+
+SUPPORTED_LANGS = {"en", "tr", "ru", "de", "ar", "es", "fr", "zh", "hi", "pt"}
+LANGUAGE_NAME_ALIASES = {
+    "en": ["english", "ingilizce"],
+    "tr": ["turkish", "türkçe", "turkce"],
+    "ru": ["russian", "rusça", "rusca", "русский", "по-русски"],
+    "de": ["german", "almanca", "deutsch"],
+    "ar": ["arabic", "arapça", "arapca", "العربية", "عربي"],
+    "es": ["spanish", "ispanyolca", "español", "espanol"],
+    "fr": ["french", "fransızca", "fransizca", "français", "francais"],
+    "zh": ["chinese", "çince", "cince", "中文", "汉语", "漢語"],
+    "hi": ["hindi", "hintçe", "hintce", "हिंदी"],
+    "pt": ["portuguese", "portekizce", "português", "portugues"],
+}
+LANGUAGE_SWITCH_MARKERS = [
+    "speak", "talk", "continue in", "write in",
+    "konuş", "konusalim", "konuşalım", "devam edelim", "yaz",
+]
+UNSUPPORTED_LANGUAGE_HINTS = [
+    "japanese", "japonca", "日本語",
+    "italian", "italyanca", "italiano",
+    "korean", "korece", "한국어",
+]
+
+
+def _normalize_lang(code: str) -> str:
+    c = (code or "").strip().lower()
+    return c if c in SUPPORTED_LANGS else "en"
+
+
+def _extract_language_switch_request(text: str) -> tuple[str, bool]:
+    low = (text or "").strip().lower()
+    if not low:
+        return "", False
+    has_marker = any(marker in low for marker in LANGUAGE_SWITCH_MARKERS) or "?" in low
+    target = ""
+    for lang, aliases in LANGUAGE_NAME_ALIASES.items():
+        if any(alias in low for alias in aliases):
+            target = lang
+            break
+    if target and has_marker:
+        return target, True
+    if has_marker and any(x in low for x in UNSUPPORTED_LANGUAGE_HINTS):
+        return "en", False
+    return "", False
+
+
+def _infer_language_lock(messages: list[dict]) -> str:
+    msgs = messages or []
+    # latest explicit switch wins
+    for item in reversed(msgs):
+        txt = (item.get("user_message") or "").strip()
+        if not txt:
+            continue
+        target, _supported = _extract_language_switch_request(txt)
+        if target:
+            return target
+    # else first user message decides
+    for item in msgs:
+        txt = (item.get("user_message") or "").strip()
+        if txt:
+            return _normalize_lang(detect_language(txt))
+    return "en"
 
 
 def build_admin_misc_router(
@@ -30,6 +97,7 @@ def build_admin_misc_router(
     admin_html: str,
     reminder_page_html: str,
     reservations_html: str,
+    transfer_reservations_html: str,
     restaurant_plan_html: str,
     dashboard_html: str,
     admin_tools_html: str,
@@ -51,8 +119,8 @@ def build_admin_misc_router(
             return RedirectResponse(url="/admin/setup-2fa", status_code=302)
         return admin_html
 
-    @router.get("/", response_class=HTMLResponse)
-    async def root():
+    @router.get("/admin/root-redirect", response_class=HTMLResponse)
+    async def root_redirect():
         return """<html><head><meta http-equiv="refresh" content="0; url=/admin"></head></html>"""
 
     @router.get("/admin/reminders-page", response_class=HTMLResponse)
@@ -68,6 +136,10 @@ def build_admin_misc_router(
     @router.get("/admin/reservations-page", response_class=HTMLResponse)
     async def reservations_page():
         return reservations_html
+
+    @router.get("/admin/transfer-reservations-page", response_class=HTMLResponse)
+    async def transfer_reservations_page():
+        return transfer_reservations_html
 
     @router.get("/admin/restaurant-plan", response_class=HTMLResponse)
     async def restaurant_plan_page(request: Request):
@@ -98,22 +170,50 @@ def build_admin_misc_router(
         files = list(conversations_dir.glob("*.json"))
         active = []
         now = datetime.now()
+        paused_payload = load_paused()
+        paused_map = paused_payload.get("paused", {}) if isinstance(paused_payload, dict) else {}
+        if not isinstance(paused_map, dict):
+            paused_map = {}
         for f in files:
             try:
                 with open(f, "r", encoding="utf-8") as file:
                     data = json.load(file)
                     updated = datetime.fromisoformat(data.get("updated_at", "2000-01-01"))
-                    if (now - updated).total_seconds() < 1800:
+                    phone = str(data.get("phone") or "")
+                    clean_phone = re.sub(r"[^\d]", "", phone)
+                    paused_entry = paused_map.get(clean_phone) or {}
+                    paused_at_raw = ""
+                    paused_reason = ""
+                    paused_minutes = None
+                    if isinstance(paused_entry, dict):
+                        paused_at_raw = str(paused_entry.get("paused_at") or "")
+                        paused_reason = str(paused_entry.get("reason") or "")
+                        try:
+                            if paused_at_raw:
+                                paused_at_dt = datetime.fromisoformat(paused_at_raw)
+                                paused_minutes = max(0, int((now - paused_at_dt).total_seconds() / 60))
+                        except Exception:
+                            paused_minutes = None
+                    is_paused = bool(paused_entry) or is_paused_fn(phone)
+                    has_messages = bool(data.get("messages", []))
+                    recently_active = (now - updated).total_seconds() < 1800
+                    recovered_active = bool(has_messages and is_recovered_active_phone(phone))
+                    if recently_active or recovered_active:
                         messages = data.get("messages", [])
                         last_msg = messages[-1] if messages else {}
                         active.append(
                             {
-                                "phone": data.get("phone"),
+                                "phone": phone,
                                 "last_message": last_msg.get("user_message", "")[:50],
                                 "last_time": data.get("updated_at"),
                                 "message_count": len(messages),
-                                "is_paused": is_paused_fn(data.get("phone")),
+                                "is_paused": is_paused,
+                                "paused_reason": paused_reason,
+                                "paused_at": paused_at_raw,
+                                "paused_minutes": paused_minutes,
                                 "minutes_ago": int((now - updated).total_seconds() / 60),
+                                "language_lock": _infer_language_lock(messages),
+                                "recovered_from_startup": recovered_active and not recently_active,
                             }
                         )
             except Exception:
