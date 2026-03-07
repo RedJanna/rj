@@ -21,6 +21,7 @@ from typing import Any, Tuple, Optional, List, Dict
 from enum import Enum
 
 from app.flows.flow_contract import FlowContext, FlowResult
+from app.services.reservation_change_interpreter import extract_slot_updates, is_change_request
 from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 # ======================================================
@@ -121,6 +122,8 @@ def extract_guest_count(message: str) -> Optional[int]:
         r'(\d+)\s*kisilik',        # 3 kisilik (ı olmadan)
         r'(\d+)\s*misafir',        # 3 misafir
         r'(\d+)\s*yetişkin',       # 3 yetişkin
+        r'kişi\s*say(?:ı|i)s(?:ı|i)?\s*(?:[:=]|olarak|olacak)?\s*(\d+)',  # kişi sayısı 4 olacak
+        r'kisi\s*sayisi\s*(?:[:=]|olarak|olacak)?\s*(\d+)',                # kisi sayisi 4 olacak
     ]
     
     # İngilizce kalıplar
@@ -130,6 +133,7 @@ def extract_guest_count(message: str) -> Optional[int]:
         r'(\d+)\s*guests?',        # 3 guests, 1 guest
         r'for\s*(\d+)',            # for 4
         r'(\d+)\s*adults?',        # 3 adults
+        r'guest\s*count\s*(?:[:=]|is)?\s*(\d+)',  # guest count is 4
     ]
     
     all_patterns = patterns_tr + patterns_en
@@ -143,8 +147,8 @@ def extract_guest_count(message: str) -> Optional[int]:
     
     # Yazıyla yazılmış sayılar
     word_to_num = {
-        "bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5,
-        "altı": 6, "yedi": 7, "sekiz": 8, "dokuz": 9, "on": 10,
+        "bir": 1, "iki": 2, "üç": 3, "uc": 3, "dört": 4, "dort": 4, "beş": 5, "bes": 5,
+        "altı": 6, "alti": 6, "yedi": 7, "sekiz": 8, "dokuz": 9, "on": 10,
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
     }
@@ -411,8 +415,19 @@ def should_break_reservation_flow(message: str, current_state: str) -> bool:
     # Onay state'inde sadece evet/hayır bekliyoruz
     if current_state == ReservationState.CONFIRM.value:
         confirm_words = ["evet", "hayır", "yes", "no", "onay", "tamam", "iptal", "ok", "hayir"]
-        if not any(w in msg_lower for w in confirm_words):
-            return True
+        if any(w in msg_lower for w in confirm_words):
+            return False
+        if is_change_request(message):
+            return False
+        confirm_updates = extract_slot_updates(
+            message,
+            date_parser=parse_date_input,
+            time_parser=extract_time,
+            guest_count_parser=extract_guest_count,
+        )
+        if confirm_updates:
+            return False
+        return True
     
     # Diğer state'lerde fiyat veya oda sorusu akışı kırar
     if current_state not in [ReservationState.IDLE.value, ReservationState.CONFIRM.value]:
@@ -429,18 +444,19 @@ def detect_correction_in_message(message: str, current_state: str) -> dict:
     """
     Müşteri bir düzeltme mi yapıyor?
     """
-    msg_lower = message.lower()
-    
-    correction_indicators = ["pardon", "değil", "yanlış", "düzelt", "aslında", "sorry", "actually"]
-    
-    if any(ind in msg_lower for ind in correction_indicators):
-        numbers = re.findall(r'\d+', message)
-        if numbers and current_state in [ReservationState.ASK_DATE.value, ReservationState.ASK_TIME.value]:
-            return {
-                "is_correction": True,
-                "field": "guest_count",
-                "new_value": int(numbers[-1])
-            }
+    if is_change_request(message):
+        updates = extract_slot_updates(
+            message,
+            date_parser=parse_date_input,
+            time_parser=extract_time,
+            guest_count_parser=extract_guest_count,
+        )
+        if updates.get("time"):
+            return {"is_correction": True, "field": "time", "new_value": updates["time"]}
+        if updates.get("date"):
+            return {"is_correction": True, "field": "date", "new_value": updates["date"]}
+        if updates.get("guest_count"):
+            return {"is_correction": True, "field": "guest_count", "new_value": updates["guest_count"]}
     
     return {"is_correction": False}
 

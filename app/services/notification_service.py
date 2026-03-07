@@ -38,6 +38,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 WHATSAPP_API_URL = "https://graph.facebook.com/v22.0"
 WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")  # DÜZELTME: WHATSAPP_ACCESS_TOKEN -> WHATSAPP_TOKEN
+_CHEF_PHONE_ENV = os.getenv("RESTAURANT_CHEF_PHONE", "").strip()
+RESTAURANT_CHEF_PHONE = _CHEF_PHONE_ENV or "905012969548"
 
 # Debug: Token kontrolü
 if WHATSAPP_TOKEN:
@@ -142,12 +144,17 @@ class NotificationService:
         whatsapp_token: str = None,
         telegram_token: str = None,
         telegram_chat_id: str = None,
+        restaurant_chef_phone: str | None = None,
     ):
         self.admin_phones = admin_phones or ADMIN_PHONES
         self.whatsapp_phone_id = whatsapp_phone_id or WHATSAPP_PHONE_ID
         self.whatsapp_token = whatsapp_token or WHATSAPP_TOKEN  # DÜZELTME
         self.telegram_token = telegram_token or TELEGRAM_BOT_TOKEN
         self.telegram_chat_id = telegram_chat_id or TELEGRAM_CHAT_ID
+        chef_phone_candidate = restaurant_chef_phone if restaurant_chef_phone is not None else RESTAURANT_CHEF_PHONE
+        if not str(chef_phone_candidate or "").strip():
+            chef_phone_candidate = RESTAURANT_CHEF_PHONE
+        self.restaurant_chef_phone = self._normalize_phone(chef_phone_candidate)
 
     @staticmethod
     def _normalize_phone(phone: str) -> str:
@@ -191,11 +198,50 @@ class NotificationService:
                     if response.status_code == 200:
                         success_count += 1
                     else:
-                        print(f"❌ WhatsApp gönderim hatası: {response.status_code}")
+                        detail = (response.text or "").strip()
+                        if len(detail) > 400:
+                            detail = detail[:400] + "..."
+                        print(f"❌ WhatsApp gönderim hatası: status={response.status_code} phone={admin_phone} detail={detail}")
                 except Exception as e:
                     print(f"❌ WhatsApp gönderim hatası: {e}")
         
         return success_count > 0
+
+    async def send_whatsapp_to_phone(self, phone: str, message: str) -> bool:
+        """WhatsApp üzerinden tek bir numaraya mesaj gönder."""
+        if not self.whatsapp_token:
+            print("⚠️ WhatsApp token ayarlanmamış")
+            return False
+
+        target_phone = self._normalize_phone(phone)
+        if not target_phone:
+            return False
+
+        url = f"{WHATSAPP_API_URL}/{self.whatsapp_phone_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.whatsapp_token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": target_phone,
+            "type": "text",
+            "text": {"body": message}
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, json=payload, timeout=10)
+            if response.status_code == 200:
+                return True
+            detail = (response.text or "").strip()
+            if len(detail) > 400:
+                detail = detail[:400] + "..."
+            print(f"❌ WhatsApp tekli gönderim hatası: status={response.status_code} phone={target_phone} detail={detail}")
+            return False
+        except Exception as e:
+            print(f"❌ WhatsApp tekli gönderim hatası: {e}")
+            return False
     
     async def send_telegram_admin(self, message: str) -> bool:
         """Telegram üzerinden admin'e mesaj gönder"""
@@ -385,9 +431,23 @@ class NotificationService:
         # Kritik kural: human takeover/pause tetiklendiyse admin bildirimi asla sessizce düşmemeli.
         # Eğer tek admin numarası müşteri numarası ile aynıysa, exclusion kaldırılır ve yine gönderilir.
         if self._has_alternate_admin_target(customer_phone):
-            return await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
-        print("⚠️ Handoff bildirimi fallback: admin ve müşteri aynı numara, exclusion kaldırıldı.")
-        return await self.send_whatsapp_admin(message, exclude_phones=[])
+            admin_sent = await self.send_whatsapp_admin(message, exclude_phones=[customer_phone])
+        else:
+            print("⚠️ Handoff bildirimi fallback: admin ve müşteri aynı numara, exclusion kaldırıldı.")
+            admin_sent = await self.send_whatsapp_admin(message, exclude_phones=[])
+
+        chef_sent = False
+        if normalized_category == "restoran_rezervasyon":
+            chef_phone = self._normalize_phone(self.restaurant_chef_phone)
+            customer_norm = self._normalize_phone(customer_phone)
+            if chef_phone and chef_phone != customer_norm:
+                chef_sent = await self.send_whatsapp_to_phone(chef_phone, message)
+                if chef_sent:
+                    print(f"✅ Chef bildirimi gönderildi: {chef_phone}")
+                else:
+                    print(f"⚠️ Chef bildirimi gönderilemedi: {chef_phone}")
+
+        return admin_sent or chef_sent
     
     # ======================================================
     # ŞÜPHELİ MESAJ BİLDİRİMİ (kassandra_openai_bot.py satır 2636-2661)

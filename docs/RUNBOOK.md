@@ -2,15 +2,13 @@
 
 ## 1) Günlük başlatma
 - Backend
-- n8n
 - Cloudflare tunnel
 
-> Not: Script'ler ayrı tutulmalı: start_backend.bat / start_n8n.bat / start_cloudflare.bat
+> Not: Script'ler ayrı tutulmalı: start_backend.bat / start_cloudflare.bat
 > Not: Backend acilisinda `ELEKTRA_WALKIN_AGENCY_ID` bos ise varsayilan `247664` atanir.
 
 ## 2) Sağlık kontrol
 - Backend: http://127.0.0.1:8000/health
-- n8n editor: https://webhook.nexlumeai.com (varsa)
 - Tunnel: cloudflared loglarında connected/registered
 
 ## 3) En sık sorunlar
@@ -20,8 +18,6 @@
 ### 3.2 requirements.txt encoding hatası
 - Çözüm: UTF-8 requirements_pip.txt kullan
 
-### 3.3 n8n kapanıyor
-- Çözüm: n8n PATH / Node kurulum kontrolü (where n8n, where node)
 
 ### 3.4 cloudflared bulunamadı
 - Çözüm: cloudflared.exe PATH veya tam yol

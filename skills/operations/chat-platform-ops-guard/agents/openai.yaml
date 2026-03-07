@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chat Platform Ops Guard"
+  short_description: "Health, env ve smoke kontrollerini operasyonel calistir"
+  default_prompt: "Run platform readiness checks (health, env, smoke) and produce a risk summary with escalation path."

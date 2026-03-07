@@ -23,6 +23,8 @@ def build_admin_reservations_router(
     get_customer_reservations_fn: Callable[[str], Any],
     send_whatsapp_message_fn: Callable[[str, str], Awaitable[Any]],
     admin_phone: str,
+    format_reservation_confirmation_fn: Callable[[Dict[str, Any], str], str] | None = None,
+    send_reservation_pdf_fn: Callable[[str, Dict[str, Any]], Awaitable[Any]] | None = None,
 ) -> APIRouter:
     router = APIRouter(tags=["admin-reservations"])
 
@@ -178,8 +180,79 @@ def build_admin_reservations_router(
 
     @router.post("/admin/reservations/{reservation_id}/confirm")
     async def confirm_reservation_api(reservation_id: int):
-        update_reservation_status_fn(reservation_id, reservation_status.CONFIRMED.value)
-        return {"status": "ok", "message": "Rezervasyon onaylandi"}
+        updated = update_reservation_status_fn(reservation_id, reservation_status.CONFIRMED.value)
+        reservation = get_reservation_fn(reservation_id)
+        if not reservation:
+            return {"status": "error", "message": "Rezervasyon bulunamadi"}
+
+        customer_phone = str(reservation.get("customer_phone") or "").strip()
+        notify_sent = False
+        pdf_sent = False
+        notify_error = ""
+        pdf_error = ""
+
+        if customer_phone:
+            try:
+                if callable(format_reservation_confirmation_fn):
+                    customer_msg = format_reservation_confirmation_fn(reservation, "tr")
+                else:
+                    customer_msg = (
+                        "Rezervasyonunuz onaylandı. ✅\n\n"
+                        f"Tarih: {reservation.get('date', '-')}\n"
+                        f"Saat: {reservation.get('time', '-')}\n"
+                        f"Kişi: {reservation.get('guest_count', '-')}\n"
+                    )
+                notify_sent = bool(await send_whatsapp_message_fn(customer_phone, customer_msg))
+            except Exception as e:
+                notify_error = str(e)
+
+            try:
+                if callable(send_reservation_pdf_fn):
+                    pdf_sent = bool(await send_reservation_pdf_fn(customer_phone, reservation))
+            except Exception as e:
+                pdf_error = str(e)
+
+        return {
+            "status": "ok",
+            "message": "Rezervasyon onaylandi",
+            "reservation_id": reservation_id,
+            "updated": bool(updated),
+            "customer_notified": notify_sent,
+            "pdf_sent": pdf_sent,
+            "notify_error": notify_error,
+            "pdf_error": pdf_error,
+        }
+
+    @router.post("/admin/reservations/{reservation_id}/send-pdf")
+    async def send_reservation_pdf_api(reservation_id: int):
+        reservation = get_reservation_fn(reservation_id)
+        if not reservation:
+            return {"status": "error", "message": "Rezervasyon bulunamadi"}
+
+        customer_phone = str(reservation.get("customer_phone") or "").strip()
+        if not customer_phone:
+            return {"status": "error", "message": "Müşteri telefonu bulunamadi", "pdf_sent": False}
+
+        if not callable(send_reservation_pdf_fn):
+            return {"status": "error", "message": "PDF gonderim servisi tanimli degil", "pdf_sent": False}
+
+        try:
+            pdf_sent = bool(await send_reservation_pdf_fn(customer_phone, reservation))
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": "PDF gonderimi sirasinda hata olustu",
+                "pdf_sent": False,
+                "error": str(e),
+            }
+
+        return {
+            "status": "ok" if pdf_sent else "error",
+            "message": "PDF gonderildi" if pdf_sent else "PDF gonderilemedi",
+            "reservation_id": reservation_id,
+            "customer_phone": customer_phone,
+            "pdf_sent": pdf_sent,
+        }
 
     @router.post("/admin/reservations/{reservation_id}/cancel")
     async def cancel_reservation_api(reservation_id: int, reason: str = ""):

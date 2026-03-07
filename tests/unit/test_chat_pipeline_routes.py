@@ -265,6 +265,41 @@ async def test_chat_strict_ai_first_bypasses_for_price_query_and_runs_price_chai
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_chat_language_switch_rejects_disabled_language(monkeypatch):
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "_get_runtime_language_policy",
+        lambda: {
+            "en": True,
+            "tr": True,
+            "ru": True,
+            "de": True,
+            "ar": True,
+            "es": True,
+            "fr": True,
+            "zh": True,
+            "hi": True,
+            "pt": False,
+        },
+    )
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {"response": None, "lang": "en", "history": [{"role": "assistant", "content": "prev"}]}
+
+    app, _events = _build_test_app(overrides={"run_chat_prechecks_fn": _run_chat_prechecks_non_first})
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "can you speak portuguese?", "message_id": "m3-lang-switch"},
+    )
+
+    assert status == 200
+    assert body["status"] == "language_switch"
+    assert body["reason_code"] == "language_switch_unsupported"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_chat_captures_active_learning_and_handoffs_for_unknown_topic(monkeypatch):
     monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
     monkeypatch.setenv("STRICT_AI_FIRST", "0")
@@ -618,6 +653,157 @@ async def test_chat_restaurant_start_is_blocked_when_intent_is_not_restaurant(mo
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_chat_restaurant_followup_date_guest_payload_is_not_misrouted_to_price(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "PRICE_QUERY",
+            "domain_hint": "hotel",
+            "semantic_intent": "PRICE_QUERY",
+            "semantic_confidence": 0.82,
+            "router": "intent_router_v1",
+        },
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: False,
+    )
+
+    calls = {"restaurant_start": 0}
+
+    async def _restaurant_start(**_kwargs):
+        calls["restaurant_start"] += 1
+        return chat_routes.ChatResponse(reply="restaurant-flow", status="reservation_flow_started")
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [
+                {"role": "assistant", "content": "Müsaitlik için lütfen restoran tarihini ve kişi sayısını paylaşır mısınız?"}
+            ],
+        }
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_non_first,
+            "try_start_restaurant_reservation_flow_fn": _restaurant_start,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "15 haziran 2 kişi", "message_id": "m5c-restaurant-followup"},
+    )
+
+    assert status == 200
+    assert body["status"] == "reservation_flow_started"
+    assert body["reply"] == "restaurant-flow"
+    assert calls["restaurant_start"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_transfer_intent_prefers_step_flow_over_slot_clarify(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "TRANSFER_BOOKING_REQUEST",
+            "domain_hint": "transfer",
+            "semantic_intent": "TRANSFER_BOOKING_REQUEST",
+            "semantic_confidence": 0.91,
+            "router": "intent_router_v1",
+        },
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: True,
+    )
+    async def _transfer_step(**_kwargs):
+        return chat_routes.ChatResponse(reply="transfer-step-1", status="transfer_flow")
+
+    monkeypatch.setattr(chat_routes, "try_start_transfer_booking_flow", _transfer_step)
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {"response": None, "lang": "tr", "history": [{"role": "assistant", "content": "prev"}]}
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_non_first,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "transfer ayarlayalım", "message_id": "m-transfer-1"},
+    )
+
+    assert status == 200
+    assert body["status"] == "transfer_flow"
+    assert body["reply"] == "transfer-step-1"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_restaurant_guest_followup_does_not_trigger_unknown_guard_handoff(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "OUT_OF_SCOPE_OTHER",
+            "domain_hint": "unknown",
+            "semantic_intent": "OUT_OF_SCOPE_OTHER",
+            "semantic_confidence": 0.12,
+            "router": "intent_router_v1",
+        },
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: False,
+    )
+
+    async def _restaurant_start(**_kwargs):
+        return chat_routes.ChatResponse(reply="restoran-adim-2", status="reservation_flow_started")
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [
+                {
+                    "role": "assistant",
+                    "content": "Restoran rezervasyonu için adım adım ilerleyeceğiz. İlk adım: Lütfen kişi sayısını paylaşın.",
+                }
+            ],
+        }
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_non_first,
+            "try_start_restaurant_reservation_flow_fn": _restaurant_start,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "3 kişi", "message_id": "m-restaurant-followup-3"},
+    )
+
+    assert status == 200
+    assert body["status"] == "reservation_flow_started"
+    assert body["reply"] == "restoran-adim-2"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_chat_strict_ai_first_bypasses_when_active_price_flow_exists(monkeypatch):
     monkeypatch.setattr(chat_routes, "infer_primary_intent", lambda _message, _hint: "PRICE_QUERY")
     monkeypatch.setattr(
@@ -723,7 +909,7 @@ async def test_chat_first_message_pure_greeting_returns_welcome():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_chat_first_message_booking_request_skips_welcome_rule():
+async def test_chat_first_message_booking_request_keeps_welcome_rule():
     app, _events = _build_test_app()
     status, body = await _post_chat(
         app,
@@ -731,7 +917,67 @@ async def test_chat_first_message_booking_request_skips_welcome_rule():
     )
 
     assert status == 200
-    assert body["status"] != "first_message"
+    assert body["status"] == "first_message"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_first_message_payment_followup_like_text_still_returns_welcome():
+    app, _events = _build_test_app()
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "Kapora ne kadar?", "message_id": "m7p"},
+    )
+
+    assert status == 200
+    assert body["status"] == "first_message"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_late_checkin_query_is_not_forced_into_urgent_clarify(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "URGENT_CASE",
+            "domain_hint": "hotel",
+            "semantic_intent": "URGENT_CASE",
+            "semantic_confidence": 0.88,
+            "router": "intent_router_v1",
+        },
+    )
+
+    monkeypatch.setattr(
+        chat_routes,
+        "evaluate_slot_coverage",
+        lambda intent_name, _message: {"missing_required_slots": ["urgent_reason"]} if intent_name == "URGENT_CASE" else {"missing_required_slots": []},
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, coverage, has_active_flow=False: bool(coverage.get("missing_required_slots")),
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "get_missing_slot_prompt",
+        lambda _intent: "Acil konuyu bir cümleyle ve varsa rezervasyon koduyla paylaşır mısınız?",
+    )
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {"response": None, "lang": "tr", "history": [{"role": "assistant", "content": "prev"}]}
+
+    app, _events = _build_test_app(overrides={"run_chat_prechecks_fn": _run_chat_prechecks_non_first})
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "Gece geç saatte (01:00 gibi) giriş yaparsak sorun olur mu?", "message_id": "m7late"},
+    )
+
+    assert status == 200
+    assert body["status"] != "clarify_required"
+    assert "Acil konuyu bir cümleyle" not in body["reply"]
 
 
 @pytest.mark.unit
@@ -1086,6 +1332,152 @@ async def test_chat_strict_ai_first_allows_price_slot_followup_with_history(monk
     assert status == 200
     assert body["status"] == "price_flow"
     assert "Çocuk yaşları" in body["reply"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_strict_ai_first_allows_complete_price_slot_payload_followup(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "1")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "OUT_OF_SCOPE_OTHER",
+            "domain_hint": "unknown",
+            "semantic_intent": "OUT_OF_SCOPE_OTHER",
+            "semantic_confidence": 0.11,
+            "router": "intent_router_v1",
+        },
+    )
+
+    def _coverage(_intent: str, message: str):
+        text = (message or "").lower()
+        has_dates = "4 ile 5 temmuz" in text or ("2026-07-04" in text and "2026-07-05" in text)
+        has_adult = "3 yetişkin" in text or "3 yetiskin" in text
+        missing = []
+        if not has_dates:
+            missing.extend(["check_in_date", "check_out_date"])
+        if not has_adult:
+            missing.append("adult_count")
+        return {
+            "required_slots": ["check_in_date", "check_out_date", "adult_count"],
+            "missing_required_slots": missing,
+            "has_minimum_required": not missing,
+        }
+
+    monkeypatch.setattr(chat_routes, "evaluate_slot_coverage", _coverage)
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: False,
+    )
+
+    async def _run_chat_prechecks_with_history(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [
+                {"role": "user", "content": "Temmuz ayı 2 gecelik fiyatlarınızı öğrenebilir miyim"},
+                {"role": "assistant", "content": "Net fiyat verebilmem için giriş-çıkış tarihi ve kişi sayısını paylaşır mısınız?"},
+            ],
+        }
+
+    async def _price_entry(**_kwargs):
+        return chat_routes.ChatResponse(reply="price-flow", status="price_flow")
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_with_history,
+            "try_handle_price_flow_entry_fn": _price_entry,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "4 ile 5 Temmuz arası 3 yetişkin", "message_id": "m9b"},
+    )
+
+    assert status == 200
+    assert body["status"] == "price_flow"
+    assert body["reply"] == "price-flow"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_strict_ai_first_complete_price_payload_without_elektra_returns_handoff(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "1")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "OUT_OF_SCOPE_OTHER",
+            "domain_hint": "unknown",
+            "semantic_intent": "OUT_OF_SCOPE_OTHER",
+            "semantic_confidence": 0.11,
+            "router": "intent_router_v1",
+        },
+    )
+
+    def _coverage(_intent: str, message: str):
+        text = (message or "").lower()
+        has_dates = "4 ile 5 temmuz" in text
+        has_adult = "3 yetişkin" in text or "3 yetiskin" in text
+        missing = []
+        if not has_dates:
+            missing.extend(["check_in_date", "check_out_date"])
+        if not has_adult:
+            missing.append("adult_count")
+        return {
+            "required_slots": ["check_in_date", "check_out_date", "adult_count"],
+            "missing_required_slots": missing,
+            "has_minimum_required": not missing,
+        }
+
+    monkeypatch.setattr(chat_routes, "evaluate_slot_coverage", _coverage)
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: False,
+    )
+
+    async def _run_chat_prechecks_with_history(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [
+                {"role": "user", "content": "Temmuz ayı 2 gecelik fiyatlarınızı öğrenebilir miyim"},
+                {"role": "assistant", "content": "Net fiyat verebilmem için giriş-çıkış tarihi ve kişi sayısını paylaşır mısınız?"},
+            ],
+        }
+
+    async def _none_async(**_kwargs):
+        return None
+
+    fallback_calls = {"count": 0}
+
+    async def _openai_fallback(**_kwargs):
+        fallback_calls["count"] += 1
+        return chat_routes.ChatResponse(reply="fallback", status="fallback")
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_with_history,
+            "try_handle_price_flow_entry_fn": _none_async,
+            "handle_price_flow_fn": _none_async,
+            "try_handle_elektra_price_entry_fn": _none_async,
+            "handle_openai_fallback_fn": _openai_fallback,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "4 ile 5 Temmuz arası 3 yetişkin", "message_id": "m9c"},
+    )
+
+    assert status == 200
+    assert body["status"] == "handoff"
+    assert body["reason_code"] == "elektra_price_unavailable"
+    assert fallback_calls["count"] == 0
 
 
 @pytest.mark.unit

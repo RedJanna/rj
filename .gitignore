@@ -24,6 +24,7 @@ env/
 # Env / secrets
 .env
 .env.*
+sensitive_environment_variables.txt
 *.pem
 *.key
 

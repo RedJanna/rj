@@ -15,6 +15,11 @@ def test_detect_booking_intent_does_not_trigger_for_price_information_question()
 
 
 @pytest.mark.unit
+def test_detect_booking_intent_does_not_trigger_for_restaurant_reservation_sentence():
+    assert not detect_booking_intent("Akşam yemeği için rezervasyon yapmak istiyorum.")
+
+
+@pytest.mark.unit
 def test_detect_booking_intent_with_start_booking_phrase():
     assert detect_booking_intent(
         "Tamam, rezervasyonu başlatalım: isim-soyisim ve telefonumu göndereyim mi?"
@@ -84,3 +89,23 @@ async def test_booking_requirements_share_question_without_cache_returns_require
     assert result["status"] == "booking_requirements_info"
     assert "tek tek" in result["reply"].lower()
     assert "ad soyad" in result["reply"].lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_booking_flow_ignores_restaurant_booking_sentence_without_cache(monkeypatch):
+    async def _no_payment(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(h, "_looks_like_room_stock_question", lambda _msg: False)
+    monkeypatch.setattr(h, "get_booking_flow", lambda _phone: {"state": h.BookingFlowState.IDLE, "data": {}})
+    monkeypatch.setattr(h, "_handle_payment_intent", _no_payment)
+    monkeypatch.setattr(h, "get_price_offers", lambda _phone: {})
+
+    result = await h.handle_booking_flow(
+        phone="905551112255",
+        message="Akşam yemeği için rezervasyon yapmak istiyorum.",
+        lang="tr",
+    )
+
+    assert result is None

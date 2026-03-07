@@ -270,6 +270,22 @@ ADMIN_HTML = """
                     </div>
                     <button class="btn" onclick="updateCurrencyPolicy()" style="padding: 10px 18px; background: #00a8ff;">Para Birimlerini Kaydet</button>
                 </div>
+                <div class="setting-item">
+                    <label>Dil Aktif/Pasif (Tüm Diller)</label>
+                    <div style="display:grid; grid-template-columns: repeat(2,minmax(110px,1fr)); gap:8px; margin-bottom:10px;">
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleEN" checked> EN</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleTR" checked> TR</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleRU" checked> RU</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleDE" checked> DE</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleAR" checked> AR</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleES" checked> ES</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleFR" checked> FR</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleZH" checked> ZH</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageToggleHI" checked> HI</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="languageTogglePT" checked> PT</label>
+                    </div>
+                    <button class="btn" onclick="updateLanguagePolicy()" style="padding: 10px 18px; background: #2ed573;">Dilleri Kaydet</button>
+                </div>
             </div>
         </div>
         
@@ -413,6 +429,7 @@ ADMIN_HTML = """
                 setMultiSelectValues('quietHandoffRoomKeys', data.quiet_handoff_room_keys || ['superior']);
                 setMultiSelectValues('standardRoomKeys', data.standard_room_keys || ['deluxe','superior']);
                 setCurrencyToggleValues(data.currency_enabled || { EUR: true, USD: true, TRY: true, GBP: true });
+                setLanguageToggleValues(data.language_enabled || { en: true, tr: true, ru: true, de: true, ar: true, es: true, fr: true, zh: true, hi: true, pt: true });
 
                 const fr = await fetch(API + '/admin/followups/pending');
                 const fd = await fr.json();
@@ -549,6 +566,43 @@ ADMIN_HTML = """
                 return;
             }
             alert('Para birimi politikası güncellendi');
+        }
+
+        function setLanguageToggleValues(policy) {
+            const p = policy || {};
+            document.getElementById('languageToggleEN').checked = (p.en !== false);
+            document.getElementById('languageToggleTR').checked = (p.tr !== false);
+            document.getElementById('languageToggleRU').checked = (p.ru !== false);
+            document.getElementById('languageToggleDE').checked = (p.de !== false);
+            document.getElementById('languageToggleAR').checked = (p.ar !== false);
+            document.getElementById('languageToggleES').checked = (p.es !== false);
+            document.getElementById('languageToggleFR').checked = (p.fr !== false);
+            document.getElementById('languageToggleZH').checked = (p.zh !== false);
+            document.getElementById('languageToggleHI').checked = (p.hi !== false);
+            document.getElementById('languageTogglePT').checked = (p.pt !== false);
+        }
+
+        async function updateLanguagePolicy() {
+            const policy = {
+                en: !!document.getElementById('languageToggleEN').checked,
+                tr: !!document.getElementById('languageToggleTR').checked,
+                ru: !!document.getElementById('languageToggleRU').checked,
+                de: !!document.getElementById('languageToggleDE').checked,
+                ar: !!document.getElementById('languageToggleAR').checked,
+                es: !!document.getElementById('languageToggleES').checked,
+                fr: !!document.getElementById('languageToggleFR').checked,
+                zh: !!document.getElementById('languageToggleZH').checked,
+                hi: !!document.getElementById('languageToggleHI').checked,
+                pt: !!document.getElementById('languageTogglePT').checked,
+            };
+            const payload = encodeURIComponent(JSON.stringify(policy));
+            const res = await fetch(API + '/settings?language_enabled_json=' + payload, { method: 'POST' });
+            const data = await res.json();
+            if (data && data.success === false) {
+                alert('Dil politikası kaydedilemedi: ' + (data.error || 'Bilinmeyen hata'));
+                return;
+            }
+            alert('Dil politikası güncellendi');
         }
 
         function getMultiSelectValues(id) {
@@ -1128,6 +1182,7 @@ RESERVATIONS_HTML = """
         .btn-noshow { background: #ffa502; color: #000; }
         .btn-cancel { background: #ff4757; color: #fff; }
         .btn-edit { background: #00d4ff; color: #000; }
+        .btn-pdf { background: #feca57; color: #1f1f1f; }
         
         .meal-icon { font-size: 1.5rem; }
         
@@ -1150,7 +1205,7 @@ RESERVATIONS_HTML = """
             <a href="/admin/dashboard">📊 Dashboard</a>
             <a href="/admin/reservations-page" class="active">🍽️ Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page">🏨 Otel Rez.</a>
-            <a href="/admin/transfer-reservations-page">🚐 Transfer Rez.</a>
+            <a href="/admin/transfer-reservations-page" target="_blank" rel="noopener noreferrer">🚐 Transfer Rez. ↗</a>
             <a href="/admin/reminders-page">📅 Hatırlatmalar</a>
             <a href="/admin/qa/stats">🔍 QA Stats</a>
             <a href="/admin/tools">⚙️ Araçlar</a>
@@ -1231,14 +1286,34 @@ RESERVATIONS_HTML = """
         }
         
         function formatDate(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string') return '-';
             const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
             const parts = dateStr.split('-');
+            if (parts.length < 3) return dateStr;
             return `${parseInt(parts[2])} ${months[parseInt(parts[1])-1]} ${parts[0]}`;
+        }
+
+        async function fetchJsonOrThrow(url) {
+            const response = await fetch(url, { credentials: 'same-origin' });
+            let payload = {};
+            try {
+                payload = await response.json();
+            } catch (_e) {
+                payload = {};
+            }
+
+            if (!response.ok) {
+                const err = new Error(payload?.detail || payload?.message || `HTTP ${response.status}`);
+                err.status = response.status;
+                throw err;
+            }
+            return payload;
         }
         
         function renderReservation(res) {
             const status = (res.status || '').toLowerCase();
             const showActions = (status === 'pending' || status === 'confirmed');
+            const canSendPdf = !!res.customer_phone && status !== 'cancelled';
             console.log('Rez:', res.id, 'Status:', status, 'Actions:', showActions);
             return `
                 <div class="reservation-card ${status}">
@@ -1278,6 +1353,12 @@ RESERVATIONS_HTML = """
                         ${status === 'confirmed' ? `<button class="btn-noshow" onclick="updateStatus(${res.id}, 'noshow')">✗ Gelmedi</button>` : ''}
                         <button class="btn-cancel" onclick="updateStatus(${res.id}, 'cancel')">İptal</button>
                         <button class="btn-edit" onclick="editReservation(${res.id}, '${res.time}', '${res.date}', ${res.guest_count})">✏️ Düzenle</button>
+                        ${canSendPdf ? `<button class="btn-pdf" onclick="sendReservationPdf(${res.id})">📄 PDF Gönder</button>` : ''}
+                    </div>
+                    ` : ''}
+                    ${(!showActions && canSendPdf) ? `
+                    <div class="res-actions">
+                        <button class="btn-pdf" onclick="sendReservationPdf(${res.id})">📄 PDF Gönder</button>
                     </div>
                     ` : ''}
                 </div>
@@ -1348,16 +1429,16 @@ RESERVATIONS_HTML = """
                 const filterStatus = document.getElementById('filterStatus')?.value || '';
                 
                 // Bugün
-                const todayRes = await fetch(API + '/admin/reservations/today');
-                const todayData = await todayRes.json();
+                const todayData = await fetchJsonOrThrow(API + '/admin/reservations/today');
+                const todayReservations = Array.isArray(todayData?.reservations) ? todayData.reservations : [];
                 
                 const todayContainer = document.getElementById('todayReservations');
-                if (todayData.reservations.length === 0) {
+                if (todayReservations.length === 0) {
                     todayContainer.innerHTML = '<div class="empty-state">Bugün için rezervasyon yok</div>';
                 } else {
-                    todayContainer.innerHTML = todayData.reservations.map(renderReservation).join('');
+                    todayContainer.innerHTML = todayReservations.map(renderReservation).join('');
                 }
-                document.getElementById('todayCount').textContent = todayData.count;
+                document.getElementById('todayCount').textContent = Number(todayData?.count || todayReservations.length || 0);
                 
                 // API URL oluştur (filtrelerle)
                 let apiUrl = API + '/admin/reservations?days=365';
@@ -1367,13 +1448,13 @@ RESERVATIONS_HTML = """
                 if (filterPhone) apiUrl += `&phone=${encodeURIComponent(filterPhone)}`;
                 
                 // Filtrelenmiş rezervasyonlar
-                const upcomingRes = await fetch(apiUrl);
-                const upcomingData = await upcomingRes.json();
+                const upcomingData = await fetchJsonOrThrow(apiUrl);
+                const upcomingReservations = Array.isArray(upcomingData?.reservations) ? upcomingData.reservations : [];
                 
                 const upcomingContainer = document.getElementById('upcomingReservations');
                 
                 // Filtre varsa tüm sonuçları göster, yoksa bugünü hariç tut
-                let displayReservations = upcomingData.reservations || [];
+                let displayReservations = upcomingReservations;
                 if (!filterDate && !filterName && !filterPhone && !filterStatus) {
                     displayReservations = displayReservations.filter(r => r.date !== todayData.date);
                 }
@@ -1387,15 +1468,33 @@ RESERVATIONS_HTML = """
                 } else {
                     upcomingContainer.innerHTML = displayReservations.map(renderReservation).join('');
                 }
-                document.getElementById('weekCount').textContent = upcomingData.count || 0;
+                document.getElementById('weekCount').textContent = Number(upcomingData?.count || upcomingReservations.length || 0);
                 
                 // İstatistikler
-                const allRes = upcomingData.reservations || [];
+                const allRes = upcomingReservations;
                 document.getElementById('pendingCount').textContent = allRes.filter(r => r.status === 'pending').length;
                 document.getElementById('confirmedCount').textContent = allRes.filter(r => r.status === 'confirmed').length;
                 
             } catch(e) {
                 console.error('Rezervasyon yükleme hatası:', e);
+                if (e?.status === 401 || e?.status === 403) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
+                const msg = (e && e.message) ? e.message : 'Bilinmeyen hata';
+                const todayContainer = document.getElementById('todayReservations');
+                const upcomingContainer = document.getElementById('upcomingReservations');
+                if (todayContainer) {
+                    todayContainer.innerHTML = `<div class="empty-state">Rezervasyonlar yüklenemedi: ${msg}</div>`;
+                }
+                if (upcomingContainer) {
+                    upcomingContainer.innerHTML = `<div class="empty-state">Rezervasyonlar yüklenemedi: ${msg}</div>`;
+                }
+                const safeZeroIds = ['todayCount', 'pendingCount', 'confirmedCount', 'weekCount'];
+                safeZeroIds.forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = '0';
+                });
             }
         }
         
@@ -1410,10 +1509,45 @@ RESERVATIONS_HTML = """
             if (!confirm(confirmMsg[action])) return;
             
             try {
-                await fetch(API + `/admin/reservations/${id}/${action}`, { method: 'POST' });
+                const response = await fetch(API + `/admin/reservations/${id}/${action}`, { method: 'POST' });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || result?.status === 'error') {
+                    const err = result?.message || `HTTP ${response.status}`;
+                    alert('Hata: ' + err);
+                    return;
+                }
+
+                if (action === 'confirm') {
+                    const warnings = [];
+                    if (result?.customer_notified === false) warnings.push('Müşteriye onay mesajı gönderilemedi.');
+                    if (result?.pdf_sent === false) warnings.push('PDF belgesi gönderilemedi.');
+                    if (result?.notify_error) warnings.push(`Mesaj hatası: ${result.notify_error}`);
+                    if (result?.pdf_error) warnings.push(`PDF hatası: ${result.pdf_error}`);
+                    if (warnings.length > 0) {
+                        alert('⚠️ Rezervasyon onaylandı ancak eksikler var:\\n' + warnings.join('\\n'));
+                    }
+                }
                 loadReservations();
             } catch(e) {
                 alert('Hata: ' + e.message);
+            }
+        }
+
+        async function sendReservationPdf(id) {
+            if (!confirm('Bu rezervasyon için müşteriye PDF göndermek istiyor musunuz?')) return;
+
+            try {
+                const response = await fetch(API + `/admin/reservations/${id}/send-pdf`, { method: 'POST' });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || result?.status === 'error' || result?.pdf_sent === false) {
+                    const err = result?.message || result?.error || `HTTP ${response.status}`;
+                    alert('PDF gönderilemedi: ' + err);
+                    return;
+                }
+                alert('✅ PDF müşteriye gönderildi.');
+                loadReservations();
+            } catch (e) {
+                alert('PDF gönderim hatası: ' + e.message);
             }
         }
         
@@ -1563,7 +1697,7 @@ DASHBOARD_HTML = """
             <a href="/admin/dashboard" class="active">📊 Dashboard</a>
             <a href="/admin/reservations-page">🍽️ Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page">🏨 Otel Rez.</a>
-            <a href="/admin/transfer-reservations-page">🚐 Transfer Rez.</a>
+            <a href="/admin/transfer-reservations-page" target="_blank" rel="noopener noreferrer">🚐 Transfer Rez. ↗</a>
             <a href="/admin/reminders-page">📅 Hatırlatmalar</a>
             <a href="/admin/qa/stats">🔍 QA Stats</a>
             <a href="/admin/tools">⚙️ Araçlar</a>
@@ -1891,6 +2025,7 @@ ADMIN_TOOLS_HTML = """
         .packet-table th, .packet-table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left; vertical-align: top; }
         .packet-table th { position: sticky; top: 0; background: #181e2d; z-index: 1; }
         .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: bold; }
+        .pill.pending { background: rgba(255, 165, 2, 0.18); color: #ffc46b; border: 1px solid rgba(255, 165, 2, 0.35); }
         .pill.bad { background: rgba(255, 82, 82, 0.18); color: #ff8d8d; border: 1px solid rgba(255, 82, 82, 0.3); }
         .pill.good { background: rgba(0, 255, 136, 0.18); color: #79ffbf; border: 1px solid rgba(0, 255, 136, 0.3); }
         .metric-grid { display:grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap:10px; margin-top: 12px; }
@@ -2006,11 +2141,33 @@ ADMIN_TOOLS_HTML = """
                         <button class="btn btn-warning" onclick="quickAction('/admin/daily-report/send', 'POST')">📤 Rapor Gönder</button>
                         <button class="btn btn-warning" onclick="quickAction('/test/check-config', 'GET')">⚙️ Yapılandırma</button>
                         <button class="btn btn-warning" onclick="loadInvalidHandoffPackets()">🚨 Sorunlu Packetler</button>
+                        <button class="btn btn-warning" onclick="runDailyLearningReportAndRefresh()">🧠 Öğrenme Raporu</button>
                         <button class="btn btn-warning" onclick="loadSuccessScorecard()">🎯 Başarı Skorları</button>
+                        <button class="btn btn-warning" onclick="loadDailyLearningCandidates()">📋 Öğrenme Adayları</button>
                         <button class="btn btn-danger" onclick="quickAction('/admin/metrics/reset', 'POST')">🗑️ Metrik Sıfırla</button>
                         <button class="btn btn-danger" onclick="quickAction('/admin/followups/clear-all', 'POST')">🗑️ Follow-up Temizle</button>
                     </div>
                     <div id="quickResult" class="result-box" style="display:none; margin-top:15px;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>🧩 Ops Skill Butonları</h2>
+                    <p class="mini-note">Vaka bazli skill kontrollerini tek tikla calistirir.</p>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin: 10px 0 12px 0;">
+                        <span id="opsReleaseGateBadge" class="pill">Release Gate: Unknown</span>
+                        <span id="opsReleaseGateMeta" class="mini-note">Henüz toplu koşu yapılmadı.</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                        <button class="btn btn-danger" onclick="runAllOpsSkills()">🚀 Tumunu Calistir (Release Readiness)</button>
+                        <button class="btn btn-primary" onclick="loadOpsReleaseGate()">🏷️ Release Gate Yenile</button>
+                        <button class="btn btn-primary" onclick="quickAction('/admin/ops/skills/readiness', 'GET')">🩺 Readiness Snapshot</button>
+                        <button class="btn btn-primary" onclick="quickAction('/admin/ops/skills/cases', 'GET')">📚 Skill Case Listesi</button>
+                        <button class="btn btn-warning" onclick="quickAction('/admin/ops/skills/run/price_handoff_guard', 'POST')">💶 Price Handoff Guard</button>
+                        <button class="btn btn-warning" onclick="quickAction('/admin/ops/skills/run/booking_vs_price_guard', 'POST')">🛎️ Booking vs Price Guard</button>
+                        <button class="btn btn-warning" onclick="quickAction('/admin/ops/skills/run/handoff_quality_guard', 'POST')">📞 Handoff Quality Guard</button>
+                        <button class="btn btn-warning" onclick="quickAction('/admin/ops/skills/run/intent_release_guard', 'POST')">🧠 Intent Release Guard</button>
+                    </div>
+                    <p class="mini-note" style="margin-top:10px;">Sonuclar alttaki "Hizli Aksiyonlar" sonuc kutusunda JSON olarak gorunur.</p>
                 </div>
 
                 <div class="card">
@@ -2057,6 +2214,46 @@ ADMIN_TOOLS_HTML = """
                             </thead>
                             <tbody id="handoffInvalidRows">
                                 <tr><td colspan="7" style="color:#888;">Henüz yüklenmedi.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🧠 Günlük Öğrenme Adayları</h2>
+                    <p class="mini-note">Akış: Onayla (taslak üret, model: GPT-5.2) → beğenirsen Kesin Onay (sisteme entegre). Yeniden Düzenle yine GPT-5.2 ile üretir.</p>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                        <label for="learningStatusFilter">Durum:</label>
+                        <select id="learningStatusFilter" style="width:150px; padding:8px; border-radius:8px; border:1px solid #444; background:#2a2a4a; color:#fff;" onchange="loadDailyLearningCandidates()">
+                            <option value="pending" selected>pending</option>
+                            <option value="draft_ready">draft_ready</option>
+                            <option value="approved">approved</option>
+                            <option value="rejected">rejected</option>
+                            <option value="all">all</option>
+                        </select>
+                        <button class="btn btn-warning" onclick="runDailyLearningReportAndRefresh()">📘 Raporu Çalıştır</button>
+                        <button class="btn btn-success" onclick="loadDailyLearningCandidates()">🔄 Yenile</button>
+                        <button class="btn btn-primary" onclick="ingestDraftFilesOnce()">📥 Klasörden Entegre Et</button>
+                        <span id="learningCandidateCount" class="pill pending">-</span>
+                    </div>
+                    <div id="learningReportPreview" class="mini-note"></div>
+                    <div class="packet-table-wrap">
+                        <table class="packet-table">
+                            <thead>
+                                <tr>
+                                    <th>Aday ID</th>
+                                    <th>Mesaj</th>
+                                    <th>Intent</th>
+                                    <th>Güven</th>
+                                    <th>Neden</th>
+                                    <th>Tekrar</th>
+                                    <th>Güncelleme</th>
+                                    <th>Durum</th>
+                                    <th>Aksiyon</th>
+                                </tr>
+                            </thead>
+                            <tbody id="learningCandidateRows">
+                                <tr><td colspan="9" style="color:#888;">Henüz yüklenmedi.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -2417,6 +2614,65 @@ ADMIN_TOOLS_HTML = """
             }
         }
 
+        function applyOpsReleaseGate(data) {
+            const badge = document.getElementById('opsReleaseGateBadge');
+            const meta = document.getElementById('opsReleaseGateMeta');
+            if (!badge || !meta) return;
+
+            const hasSummary = !!(data && data.summary);
+            if (!hasSummary) {
+                badge.textContent = 'Release Gate: Unknown';
+                badge.className = 'pill';
+                meta.textContent = 'Henüz toplu koşu yapılmadı.';
+                return;
+            }
+
+            const total = Number(data.summary.total || 0);
+            const passed = Number(data.summary.passed || 0);
+            const failed = Number(data.summary.failed || 0);
+            const ok = !!data.success && failed === 0 && total > 0;
+
+            badge.textContent = ok ? 'Release Gate: PASS' : 'Release Gate: FAIL';
+            badge.className = ok ? 'pill good' : 'pill bad';
+            meta.textContent = `${passed}/${total} geçti, ${failed} hata • Son: ${data.finished_at || '-'}`;
+        }
+
+        async function loadOpsReleaseGate() {
+            try {
+                const res = await fetch(API + '/admin/ops/skills/last-run');
+                const data = await res.json();
+                if (!res.ok || !data || data.success === false) throw new Error('last-run okunamadı');
+                if (!data.exists) {
+                    applyOpsReleaseGate(null);
+                    return;
+                }
+                applyOpsReleaseGate(data.last_run || null);
+            } catch (e) {
+                const badge = document.getElementById('opsReleaseGateBadge');
+                const meta = document.getElementById('opsReleaseGateMeta');
+                if (badge) {
+                    badge.textContent = 'Release Gate: Error';
+                    badge.className = 'pill bad';
+                }
+                if (meta) meta.textContent = `Okuma hatası: ${e.message}`;
+            }
+        }
+
+        async function runAllOpsSkills() {
+            const resultBox = document.getElementById('quickResult');
+            resultBox.style.display = 'block';
+            resultBox.textContent = 'Toplu skill-case koşusu başlatılıyor...';
+            try {
+                const res = await fetch(API + '/admin/ops/skills/run-all', { method: 'POST' });
+                const data = await res.json();
+                resultBox.textContent = JSON.stringify(data, null, 2);
+                applyOpsReleaseGate(data);
+            } catch (e) {
+                resultBox.textContent = 'Hata: ' + e.message;
+                applyOpsReleaseGate({ success: false, summary: { total: 0, passed: 0, failed: 1 }, finished_at: '-' });
+            }
+        }
+
         async function loadBackendStatus() {
             const statusEl = document.getElementById('backendStatusText');
             try {
@@ -2463,6 +2719,217 @@ ADMIN_TOOLS_HTML = """
             const s = String(v || '').trim();
             if (!s) return '-';
             return s.length > len ? s.slice(0, len) + '…' : s;
+        }
+
+        function escapeHtml(value) {
+            const s = String(value || '');
+            return s
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function learningStatusBadge(status) {
+            const raw = String(status || '').trim().toLowerCase();
+            if (raw === 'approved') return '<span class="pill good">approved</span>';
+            if (raw === 'rejected') return '<span class="pill bad">rejected</span>';
+            if (raw === 'draft_ready') return '<span class="pill pending">draft_ready</span>';
+            return '<span class="pill pending">pending</span>';
+        }
+
+        async function parseApiBodySafe(res) {
+            const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+            if (contentType.includes('application/json')) {
+                return await res.json();
+            }
+            const txt = await res.text();
+            try {
+                return JSON.parse(txt);
+            } catch (e) {
+                return { success: false, error: txt || `HTTP ${res.status}` };
+            }
+        }
+
+        async function runDailyLearningReportAndRefresh() {
+            const previewEl = document.getElementById('learningReportPreview');
+            previewEl.textContent = 'Günlük öğrenme raporu çalıştırılıyor...';
+            try {
+                const res = await fetch(`${API}/admin/reports/daily-learning/run`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || (data && data.success === false)) {
+                    const err = (data && (data.error || data.detail || data.message)) || `HTTP ${res.status}`;
+                    throw new Error(err);
+                }
+                previewEl.textContent = `Rapor gönderimi: ${data.success ? 'başarılı' : 'başarısız'} | Alıcı: ${data.sent_to || '-'}${data.truncated ? ' | Not: mesaj kısaltıldı.' : ''}`;
+            } catch (e) {
+                previewEl.textContent = `Rapor hatası: ${e.message}`;
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function generateDailyLearningDraft(candidateId) {
+            const id = String(candidateId || '').trim();
+            if (!id) return;
+            const note = prompt('Taslak notu (opsiyonel):', '') ?? '';
+            try {
+                const query = note ? `?note=${encodeURIComponent(note)}` : '';
+                const res = await fetch(`${API}/admin/reports/daily-learning/${encodeURIComponent(id)}/approve${query}`, { method: 'POST' });
+                const data = await parseApiBodySafe(res);
+                if (!res.ok || !data.success) {
+                    throw new Error((data && (data.message || data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                const draftPath = data.draft_file_path ? `\nTaslak: ${data.draft_file_path}` : '';
+                alert(`GPT-5.2 ile taslak üretildi.${draftPath}`);
+            } catch (e) {
+                alert(`Taslak üretim hatası: ${e.message}`);
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function redraftDailyLearningCandidate(candidateId) {
+            const id = String(candidateId || '').trim();
+            if (!id) return;
+            const note = prompt('Yeniden düzenleme notu (opsiyonel):', '') ?? '';
+            try {
+                const query = note ? `?note=${encodeURIComponent(note)}` : '';
+                const res = await fetch(`${API}/admin/reports/daily-learning/${encodeURIComponent(id)}/redraft${query}`, { method: 'POST' });
+                const data = await parseApiBodySafe(res);
+                if (!res.ok || !data.success) {
+                    throw new Error((data && (data.message || data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                const draftPath = data.draft_file_path ? `\nTaslak: ${data.draft_file_path}` : '';
+                alert(`Taslak GPT-5.2 ile yeniden düzenlendi.${draftPath}`);
+            } catch (e) {
+                alert(`Yeniden düzenleme hatası: ${e.message}`);
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function finalApproveDailyLearningCandidate(candidateId) {
+            const id = String(candidateId || '').trim();
+            if (!id) return;
+            const note = prompt('Kesin onay notu (opsiyonel):', '') ?? '';
+            try {
+                const query = note ? `?note=${encodeURIComponent(note)}` : '';
+                const res = await fetch(`${API}/admin/reports/daily-learning/${encodeURIComponent(id)}/final-approve${query}`, { method: 'POST' });
+                const data = await parseApiBodySafe(res);
+                if (!res.ok || !data.success) {
+                    throw new Error((data && (data.message || data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                const extra = data.external_scenario_id ? ` | scenario_id=${data.external_scenario_id}` : '';
+                alert(`Kesin onay tamamlandı.${extra}`);
+            } catch (e) {
+                alert(`Kesin onay hatası: ${e.message}`);
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function ingestDraftFilesOnce() {
+            const note = prompt('Klasörden entegrasyon notu (opsiyonel):', '') ?? '';
+            try {
+                const query = note ? `?note=${encodeURIComponent(note)}` : '';
+                const res = await fetch(`${API}/admin/reports/daily-learning/ingest-drafts${query}`, { method: 'POST' });
+                const data = await parseApiBodySafe(res);
+                if (!res.ok || !data.success) {
+                    throw new Error((data && (data.message || data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                const msg = `İşlem tamamlandı.\nToplam: ${data.total_files ?? '-'}\nEntegre: ${data.integrated_count ?? 0}\nAtlanan: ${data.skipped_count ?? 0}`;
+                alert(msg);
+            } catch (e) {
+                alert(`Klasör entegrasyon hatası: ${e.message}`);
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function rejectDailyLearningCandidate(candidateId) {
+            const id = String(candidateId || '').trim();
+            if (!id) return;
+            const reason = prompt('Red nedeni (opsiyonel):', '') ?? '';
+            try {
+                const query = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+                const res = await fetch(`${API}/admin/reports/daily-learning/${encodeURIComponent(id)}/reject${query}`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error((data && (data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                alert('Aday reddedildi.');
+            } catch (e) {
+                alert(`Red hatası: ${e.message}`);
+            }
+            await loadDailyLearningCandidates();
+        }
+
+        async function loadDailyLearningCandidates() {
+            const statusFilterEl = document.getElementById('learningStatusFilter');
+            const rowsEl = document.getElementById('learningCandidateRows');
+            const countEl = document.getElementById('learningCandidateCount');
+            const status = (statusFilterEl && statusFilterEl.value) ? statusFilterEl.value : 'pending';
+
+            rowsEl.innerHTML = '<tr><td colspan="9" style="color:#888;">Yükleniyor...</td></tr>';
+            countEl.textContent = '...';
+            countEl.className = 'pill pending';
+
+            try {
+                const url = `${API}/admin/reports/daily-learning/pending?status=${encodeURIComponent(status)}&limit=100`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok || (data && data.success === false)) {
+                    throw new Error((data && (data.error || data.detail)) || `HTTP ${res.status}`);
+                }
+                const items = Array.isArray(data.items) ? data.items : [];
+                countEl.textContent = `${status}: ${items.length}`;
+                countEl.className = items.length ? 'pill pending' : 'pill good';
+
+                if (!items.length) {
+                    rowsEl.innerHTML = '<tr><td colspan="9" style="color:#00ff88;">Kayıt bulunmadı.</td></tr>';
+                    return;
+                }
+
+                rowsEl.innerHTML = items.map((item) => {
+                    const candidateId = String(item.candidate_id || '').trim();
+                    const candidateIdSafe = candidateId.replaceAll("'", "\\'");
+                    const statusRaw = String(item.status || 'pending').trim().toLowerCase();
+                    const confidence = (item.confidence === null || item.confidence === undefined || Number.isNaN(Number(item.confidence)))
+                        ? '-'
+                        : Number(item.confidence).toFixed(2);
+                    let actions = '<span style="color:#9aa3b2;">-</span>';
+                    if (statusRaw === 'pending') {
+                        actions = `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-success" style="padding:6px 10px; font-size:0.78rem;" onclick="generateDailyLearningDraft('${candidateIdSafe}')">📝 Onayla (Taslak Üret)</button>
+                                <button class="btn btn-danger" style="padding:6px 10px; font-size:0.78rem;" onclick="rejectDailyLearningCandidate('${candidateIdSafe}')">❌ Reddet</button>
+                           </div>`;
+                    } else if (statusRaw === 'draft_ready') {
+                        actions = `<div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-success" style="padding:6px 10px; font-size:0.78rem;" onclick="finalApproveDailyLearningCandidate('${candidateIdSafe}')">✅ Kesin Onay</button>
+                                <button class="btn btn-warning" style="padding:6px 10px; font-size:0.78rem;" onclick="redraftDailyLearningCandidate('${candidateIdSafe}')">♻️ Yeniden Düzenle</button>
+                                <button class="btn btn-danger" style="padding:6px 10px; font-size:0.78rem;" onclick="rejectDailyLearningCandidate('${candidateIdSafe}')">❌ Reddet</button>
+                           </div>`;
+                    }
+                    const draftPath = shortText(item.draft_file_path || '-', 44);
+                    return `
+                        <tr>
+                            <td>${escapeHtml(shortText(candidateId, 24))}</td>
+                            <td title="${escapeHtml(String(item.sample_message || ''))}">
+                                ${escapeHtml(shortText(item.sample_message || '-', 72))}
+                                <div style="color:#9aa3b2; font-size:0.72rem; margin-top:4px;">Taslak: ${escapeHtml(draftPath)}</div>
+                            </td>
+                            <td>${escapeHtml(shortText(item.predicted_intent || '-', 30))}</td>
+                            <td>${escapeHtml(confidence)}</td>
+                            <td>${escapeHtml(shortText(item.reason || '-', 30))}</td>
+                            <td>${escapeHtml(String(item.sample_count ?? '-'))}</td>
+                            <td>${escapeHtml(shortText(item.updated_at || item.last_seen_at || '-', 22))}</td>
+                            <td>${learningStatusBadge(statusRaw)}</td>
+                            <td>${actions}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                countEl.textContent = 'Hata';
+                countEl.className = 'pill bad';
+                rowsEl.innerHTML = `<tr><td colspan="9" style="color:#ff8d8d;">${escapeHtml(shortText(e.message, 140))}</td></tr>`;
+            }
         }
 
         async function loadInvalidHandoffPackets() {
@@ -2643,7 +3110,9 @@ ADMIN_TOOLS_HTML = """
         loadEndpoints();
         loadSystemInfo();
         loadBackendStatus();
+        loadOpsReleaseGate();
         loadInvalidHandoffPackets();
+        loadDailyLearningCandidates();
         loadSuccessScorecard();
         
         // Otomatik yenile
@@ -2761,7 +3230,7 @@ HOTEL_BOOKINGS_HTML = """
             <a href="/admin/dashboard">&#128202; Dashboard</a>
             <a href="/admin/reservations-page">&#127861; Rezervasyonlar</a>
             <a href="/admin/hotel-bookings-page" class="active">&#127976; Otel Rez.</a>
-            <a href="/admin/transfer-reservations-page">&#128652; Transfer Rez.</a>
+            <a href="/admin/transfer-reservations-page" target="_blank" rel="noopener noreferrer">&#128652; Transfer Rez. &#8599;</a>
             <a href="/admin/reminders-page">&#128197; Hat&#305;rlatmalar</a>
             <a href="/admin/qa/stats">&#128270; QA Stats</a>
             <a href="/admin/tools">&#9881; Ara&#231;lar</a>
@@ -2978,6 +3447,7 @@ HOTEL_BOOKINGS_HTML = """
             }
             if (!isPending && (b.status === 'approved' || b.status === 'elektra_created')) {
                 actionsHtml += `
+                    <button class="btn btn-detail" onclick="sendConfirmationForm(${b.id})">&#128196; Konfirmasyon Formu Gonder</button>
                     <button class="btn btn-update" onclick="openUpdateModal(${b.id})">&#9998; Elektra Guncelle</button>
                     <button class="btn btn-cancel" onclick="cancelElektraBooking(${b.id})">&#9940; Elektra Iptal</button>
                 `;
@@ -3417,6 +3887,21 @@ HOTEL_BOOKINGS_HTML = """
                 }
             } catch (e) {
                 showToast('Depozito sifirlama baglanti hatasi', 'error');
+            }
+        }
+
+        async function sendConfirmationForm(id) {
+            if (!confirm('Bu rezervasyon icin konfirmasyon formu mesaji tekrar gonderilsin mi?')) return;
+            try {
+                const res = await fetch(`/admin/hotel-bookings/${id}/send-confirmation-form`, {method: 'POST'});
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Konfirmasyon formu gonderildi', 'success');
+                    return;
+                }
+                showToast('Konfirmasyon gonderim hatasi: ' + (data.error || 'Bilinmeyen hata'), 'error');
+            } catch (e) {
+                showToast('Konfirmasyon gonderim baglanti hatasi', 'error');
             }
         }
 

@@ -1,0 +1,101 @@
+📋 Senaryo: KS-WA-RES-001 - WhatsApp Oda Rezervasyonu Oluşturma (V1)
+
+Senaryo Kodu ve Adı: KS-WA-RES-001 - WhatsApp Oda Rezervasyonu Oluşturma V1
+Kanal: WhatsApp
+
+🎯 Hedef:
+Oda rezervasyonu talebi için sohbet içinde misafiri yormadan giriş-çıkış tarihleri ve kişi bilgilerini (yetişkin/çocuk) eksiksiz toplamak, bilgileri özetleyip teyit almak ve kaydı Rezervasyon Ekibi’ne booking_api üzerinden iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "Rezervasyon yapmak istiyorum"
+- "Şu tarihlerde oda var mı?"
+- "Fiyat alabilir miyim, 2 kişi geleceğiz"
+- (Opsiyonel) "Balayı için rezervasyon istiyorum"
+- (Opsiyonel) "Müsaitlik ve fiyat nedir?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Giriş Tarihi: (gg/aa/yyyy (sistem normalize eder))
+2) Çıkış Tarihi: (gg/aa/yyyy (sistem normalize eder))
+3) Yetişkin Sayısı: (Tam sayı, en az 1)
+4) Çocuk Sayısı: (Tam sayı (yoksa 0))
+5) Çocuk Yaşları: (Örn: 4, 7)
+
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının HOTEL_BOOKING_CREATE niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde gruplanarak sorulur.
+  - Önce temel bilgiler tek mesajda istenir: giriş tarihi + çıkış tarihi + yetişkin sayısı.
+  - Çocuk sayısı 0’dan büyükse çocuk yaşları ayrıca istenir; çocuk sayısı 0 ise çocuk yaşları "Yok" olarak işaretlenir.
+- Doğrulama/Validasyon:
+  - Giriş Tarihi >= bugün olmalı; değilse kullanıcıdan yeni tarih istenir.
+  - Çıkış Tarihi > Giriş Tarihi olmalı; değilse kullanıcıdan çıkış tarihi yeniden istenir.
+  - Yetişkin Sayısı >= 1 olmalı; değilse yeniden istenir.
+- Sezon kuralı:
+  - Tarihler 10 Nisan - 10 Kasım sezonu dışında kalıyorsa rezervasyon işlemi oluşturulmaz; kullanıcıya sezon bilgisini verip uygun sezon tarihleri istenir veya canlı desteğe aktarılır.
+- Gec giriş kuralı:
+  - Kullanıcı 14:00 sonrası giriş belirtirse “müsaitlik kontrolü” ifadesi kullanılmadan, girişin mümkün olduğu ve not olarak iletileceği belirtilir.
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - Rezervasyon kaydı booking_api ile oluşturulur.
+  - Webhook/API ile Rezervasyon Ekibi (Admin/CRM) paneline bildirim düşer, statü “Beklemede” olur.
+  - Ardından availability_api ve price_api ile uygunluk/fiyat kontrolü yapılabiliyorsa sonuç admin onay akışına eklenir.
+- Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📅 Giriş Tarihi: [Giriş Tarihi]
+📅 Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Beklemede" düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Rezervasyon talebiniz onaylandı. ✅ Uygunluk ve fiyat detaylarını sizinle paylaşıyoruz. Devam etmek için lütfen ad-soyad ve iletişim e-postanızı yazabilir misiniz?"
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - sürpriz/çiçek/not/romantik masa
+  - balayı organizasyonu
+  - özel süsleme/oda içi konsept
+- Bot, aynı kritik bilgiyi üst üste 2 kez yanlış formatta alırsa (örn: tarih):
+  - "Tarihi anlayamadım. Lütfen gg/aa/yyyy formatında yazar mısınız? Örn: 15/06/2026" → tekrar hatalıysa canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb.
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"Merhaba, Kassandra Oteli’ne hoş geldiniz 😊
+Rezervasyon için giriş-çıkış tarihi ve kişi sayısını paylaşır mısınız? (Giriş tarihi, çıkış tarihi, yetişkin sayısı; varsa çocuk sayısı ve yaşları)"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📅 Giriş Tarihi: [Giriş Tarihi]
+📅 Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Talebinizi oluşturdum ve Rezervasyon Ekibi ile paylaştım.
+Onaylandığında size buradan bilgi vereceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU]=KS-WA-RES-001, [SENARYO ADI]=WhatsApp Oda Rezervasyonu Oluşturma, [Kanal]=WhatsApp
+- [Admin/Birim]=Rezervasyon Ekibi, [Webhook/API adı]=booking_api (+ availability_api, price_api), [Statü]=Beklemede
+- [Slot-1..5]=Giriş Tarihi/Çıkış Tarihi/Yetişkin Sayısı/Çocuk Sayısı/Çocuk Yaşları
+- [Özel talepler]=sürpriz, çiçek, not, romantik masa, balayı

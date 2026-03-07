@@ -27,6 +27,7 @@ from app.services.restaurant_reservation_flow_service import (
     extract_all_reservation_info,
     get_meal_type_from_time,
     is_within_season,
+    should_break_reservation_flow,
     validate_reservation_time,
 )
 
@@ -46,6 +47,9 @@ class TestExtractGuestCount:
         ("2 guests", 2),
         ("1 person", 1),
         ("3 adults", 3),
+        ("kişi sayısı 4 olacak", 4),
+        ("kisi sayisi 5 olarak guncelle", 5),
+        ("guest count is 6", 6),
     ])
     def test_numeric_guest_counts(self, input_text: str, expected: int):
         """Sayısal kişi sayısı çıkarımı"""
@@ -226,6 +230,18 @@ class TestValidateReservationTime:
         """Çok geç akşam yemeği"""
         result, message = validate_reservation_time("23:00", "dinner")
         assert result == False, "23:00 akşam yemeği için çok geç"
+
+
+class TestReservationFlowBreakGuard:
+    """Onay aşamasındaki düzeltmeler fallback'e düşmeden akışta kalmalı."""
+
+    @pytest.mark.unit
+    def test_confirm_state_does_not_break_on_guest_count_change(self):
+        assert should_break_reservation_flow("Kişi sayısı 4 olacak", "confirm") is False
+
+    @pytest.mark.unit
+    def test_confirm_state_still_breaks_irrelevant_message(self):
+        assert should_break_reservation_flow("Bana wifi şifresini de söyler misin?", "confirm") is True
 
 
 class TestExtractAllReservationInfo:

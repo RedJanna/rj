@@ -1,0 +1,89 @@
+📋 Senaryo: KS-RES-001 - Premium Oda Rezervasyon Talebi (V1)
+
+Senaryo Kodu ve Adı: KS-RES-001 - Premium Oda Rezervasyon Talebi V1
+Kanal: WhatsApp
+
+🎯 Hedef:
+Premium oda rezervasyonu talebi için gerekli ön bilgileri sohbet içinde eksiksiz toplamak, özetleyip teyit almak ve kaydı Rezervasyon Ekibi’ne iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "Premium oda için rezervasyon oluşturabilir miyiz?"
+- "Premium oda müsait mi, fiyat nedir?"
+- "Şu tarihlerde premium oda ayırtmak istiyorum"
+- (Opsiyonel) "Balayı paketiyle premium oda istiyorum"
+- (Opsiyonel) "2 gece için toplam ne kadar tutar?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Giriş-Çıkış Tarihi: Tarih Normalizasyonu
+2) Kişi Sayısı: Kişi sayısı normalizasyonu
+4) İletişim Telefonu: telefon numarası normalizasyonu
+5) İsim Soyisim: İsim ve Soyisim normalizasyonu yapılır.
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının HOTEL_BOOKING_CREATE niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde gruplanarak sorulur.
+  - Önce “tarih + kişi sayısı”, sonra “oda tercihi + isim + telefon” istenir.
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - Rezervasyon talep kaydı oluşturulur.
+  - Webhook/API ile Kassandra Otel Rezervasyon Paneli (PMS/CRM) birimine bildirim düşer.
+- Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+- Güven düşükse (low_confidence_below_auto_threshold) bot, netleştirici kısa soru sorar: “Premium oda rezervasyonu mu oluşturmak istiyorsunuz?” Onay gelirse akışa devam eder.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+🗓️ Tarih: [Giriş-Çıkış Tarihi]
+👥 Kişi: [Kişi Sayısı]
+🛏️ Oda tercihi: [Oda Tercihi]
+📞 Telefon: [İletişim Telefonu]
+👤 İsim: [İsim Soyisim]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Beklemede" statüsünde düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Rezervasyon talebiniz onaylandı. ✅ Premium oda için ön rezervasyonunuz oluşturuldu. Giriş günü ve ödeme/garanti koşullarıyla ilgili detayları paylaşmamı ister misiniz?"
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - Evcil hayvan ile konaklama
+  - Engelli erişimi / tekerlekli sandalye uygun oda
+  - Balayı süslemesi / özel organizasyon (pasta, çiçek, oda süsleme)
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb. ifadelerde canlıya aktar
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"Merhaba, Kassandra Otel’e hoş geldiniz 😊
+Premium oda rezervasyonunuza yardımcı olabilmem için lütfen giriş-çıkış tarihinizi ve kaç kişi konaklayacağınızı yazar mısınız? (Örn: 12.04.2026 - 14.04.2026, 2 yetişkin)"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+🗓️ Tarih: [Giriş-Çıkış Tarihi]
+👥 Kişi: [Kişi Sayısı]
+🛏️ Oda tercihi: [Oda Tercihi]
+📞 Telefon: [İletişim Telefonu]
+👤 İsim: [İsim Soyisim]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Rezervasyon talebinizi oluşturdum ve Rezervasyon Ekibi ile paylaştım.
+Müsaitlik ve fiyat onayı geldiğinde size buradan bilgi vereceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU]=KS-RES-001, [SENARYO ADI]=Premium Oda Rezervasyon Talebi, [Kanal]=WhatsApp
+- [Slotlar]=Giriş-Çıkış Tarihi, Kişi Sayısı, Oda Tercihi, İletişim Telefonu, İsim Soyisim
+- [Admin/Birim]=Rezervasyon Ekibi, [Webhook/API adı]=Kassandra Otel Rezervasyon Paneli (PMS/CRM) Webhook, [Statü]=Beklemede
+- [Özel talepler]=Evcil hayvan, erişilebilir oda, balayı/organizasyon
+- [Onay metinleri]=Rezervasyon talebiniz onaylandı mesajı

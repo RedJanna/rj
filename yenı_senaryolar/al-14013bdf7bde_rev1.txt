@@ -1,0 +1,99 @@
+📋 Senaryo: KS-PRQ-001 - Konaklama Fiyat Sorgulama (V1)
+
+Senaryo Kodu ve Adı: KS-PRQ-001 - Konaklama Fiyat Sorgulama V1
+Kanal: WhatsApp
+
+🎯 Hedef:
+Konaklama fiyatı talebi için gerekli ön bilgileri sohbet içinde eksiksiz toplamak, özetleyip teyit almak ve fiyat/müsaitlik kontrolünü sistem araçlarıyla yaparak sonucu misafire iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "4 ile 5 Temmuz arası 3 yetişkin fiyat alabilir miyim?"
+- "Şu tarihlerde kaç para, müsait mi?"
+- "2 gece konaklama ücreti nedir?"
+- (Opsiyonel) "Balayı için fiyat ve paket var mı?"
+- (Opsiyonel) "Fiyat nedir, oda var mı?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Giriş Tarihi: (gg/aa/yyyy (sistem normalize eder))
+2) Çıkış Tarihi: (gg/aa/yyyy (sistem normalize eder))
+3) Yetişkin Sayısı: (Tam sayı, en az 1)
+4) Çocuk Sayısı: (Tam sayı (yoksa 0))
+5) Çocuk Yaşları: (Örn: 4, 7)
+
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının PRICE_QUERY niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde gruplanarak sorulur.
+  - Önce zorunlu alanlar birlikte istenir: giriş tarihi + çıkış tarihi + yetişkin sayısı.
+  - Çocuk bilgisi varsa: çocuk sayısı + yaşlar birlikte istenir; yoksa çocuk sayısı 0 olarak set edilir.
+- Doğrulama kuralları:
+  - Giriş Tarihi >= bugün
+  - Çıkış Tarihi > Giriş Tarihi
+  - Yetişkin Sayısı >= 1
+- Sezon kuralı:
+  - Tarihler 10 Nisan - 10 Kasım dışında ise: sezon dışı olduğu bilgisi verilir ve fiyat sorgusu kaydı oluşturulmaz.
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - availability_api ile müsaitlik kontrol edilir.
+  - Müsaitse price_api ile fiyat alınır (para birimi varsayılan EUR).
+  - Sonuç kullanıcıya iletilir ve talep kaydı oluşturulur.
+  - Webhook/API ile Rezervasyon & Satış ekibine bildirim düşer.
+- Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+🗓️ Giriş Tarihi: [Giriş Tarihi]
+🗓️ Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Beklemede" düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Talebiniz onaylandı. Müsaitlik ve fiyat bilgilerinizi hazırladım; detayları şimdi paylaşıyorum."
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - sürpriz/çiçek/not/romantik masa
+  - balayı/balayi
+  - özel kutlama organizasyonu
+- Bot, aynı kritik bilgiyi üst üste 2 kez yanlış formatta alırsa (tarih):
+  - "Tarihi anlayamadım. Örnek: 04/07/2026 şeklinde yazar mısınız?" → tekrar hatalıysa canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb.
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"Merhaba, Kassandra Otel’e hoş geldiniz 😊
+Net fiyat paylaşabilmem için lütfen giriş tarihi, çıkış tarihi ve yetişkin sayısını yazar mısınız?"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+🗓️ Giriş Tarihi: [Giriş Tarihi]
+🗓️ Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Talebinizi oluşturdum ve Rezervasyon & Satış ekibi ile paylaştım.
+Müsaitlik ve fiyat bilgisini kontrol edip sonucu buradan ileteceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU], [SENARYO ADI], [Kanal]
+- [Giriş Tarihi], [Çıkış Tarihi], [Yetişkin Sayısı], [Çocuk Sayısı], [Çocuk Yaşları]
+- [Rezervasyon & Satış], [availability_api], [price_api], [Beklemede]

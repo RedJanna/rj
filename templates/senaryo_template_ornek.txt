@@ -1,0 +1,83 @@
+📋 Senaryo: [SENARYO KODU] - [SENARYO ADI] (V[VERSİYON])
+
+Senaryo Kodu ve Adı: [SENARYO KODU] - [SENARYO ADI] V[VERSİYON]
+Kanal: [Kanal adı] (Örn: WhatsApp / Web Chat / Instagram DM)
+
+🎯 Hedef:
+[Senaryonun ana amacı: Misafirden hangi bilgileri, hangi akışla, nasıl yormadan toplayacağız?]
+Örn: "[Hizmet] talebi için gerekli ön bilgileri sohbet içinde eksiksiz toplamak, özetleyip teyit almak ve kaydı [yetkili birime] iletmek."
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "[Kullanıcının tipik cümlesi 1]"
+- "[Kullanıcının tipik cümlesi 2]"
+- "[Kullanıcının tipik cümlesi 3]"
+- (Opsiyonel) "[VIP / özel hizmet] talebi"
+- (Opsiyonel) "[fiyat sorusu / müsaitlik sorusu]"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) [Slot-1 Adı]: ([Format/Örnek])
+2) [Slot-2 Adı]: ([Format/Örnek])
+3) [Slot-3 Adı]: ([Format/Örnek])
+4) [Slot-4 Adı]: ([Format/Örnek])
+5) [Slot-5 Adı]: ([Format/Örnek])
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının [niyet/intent] algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde **gruplanarak** veya **sırayla** sorulur.
+  - Mümkünse tek mesajda 2-3 bilgi istenir (örn: tarih + kişi sayısı).
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - [Rezervasyon/Talep] kaydı oluşturulur.
+  - Webhook/API ile [Admin/CRM/Operasyon] birimine bildirim düşer.
+- (Opsiyonel) Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+[Emoji] [Slot-1 etiketi]: [Slot-1 değeri]
+[Emoji] [Slot-2 etiketi]: [Slot-2 değeri]
+[Emoji] [Slot-3 etiketi]: [Slot-3 değeri]
+[Emoji] [Slot-4 etiketi]: [Slot-4 değeri]
+[Emoji] [Slot-5 etiketi]: [Slot-5 değeri]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "[STATÜ]" (örn: Beklemede) düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "[Onay mesajı metni]"
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - [Özel talep 1] (örn: bebek koltuğu)
+  - [Özel talep 2] (örn: tekerlekli sandalye erişimi)
+  - [Özel talep 3] (örn: evcil hayvan / ara durak)
+- Bot, aynı kritik bilgiyi üst üste 2 kez yanlış formatta alırsa (örn: tarih/telefon/uçuş no):
+  - "Formatı anlayamadım + örnek göster" → tekrar hatalıysa canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb.
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"[Karşılama cümlesi] 😊
+Size yardımcı olabilmem için lütfen şu bilgileri paylaşır mısınız: [Slot-1], [Slot-2], [Slot-3]"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+(Özet Teyit Formatı’nı kullan)
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Talebinizi oluşturdum ve [ekip/birim] ile paylaştım.
+Onaylandığında size buradan bilgi vereceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU], [SENARYO ADI], [Kanal]
+- [Slot-1..5], [Admin/Birim], [Webhook/API adı], [Statü]
+- [Özel talepler], [Format örnekleri], [Onay metinleri]

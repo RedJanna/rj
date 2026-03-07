@@ -193,6 +193,8 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             get_customer_reservations_fn=ctx["get_customer_reservations"],
             send_whatsapp_message_fn=ctx["send_whatsapp_message"],
             admin_phone=ctx["ADMIN_PHONE"],
+            format_reservation_confirmation_fn=ctx.get("format_reservation_confirmation"),
+            send_reservation_pdf_fn=ctx.get("send_reservation_pdf"),
         ),
         dependencies=[Depends(ctx["require_admin"])],
     )
@@ -215,7 +217,6 @@ def wire_routes(app, *, ctx: dict, system_test_router):
         model_getter=ctx["_get_openai_model_runtime"],
         system_prompt_getter=ctx["_get_system_prompt_runtime"],
         detect_language_fn=ctx["detect_language"],
-        check_local_faq_fn=ctx["check_local_faq"],
     )
 
     app.include_router(
@@ -268,17 +269,8 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             whatsapp_phone_id=ctx["WHATSAPP_PHONE_ID"],
             whatsapp_token=ctx["WHATSAPP_TOKEN"],
             error_logs=ctx["ERROR_LOGS"],
-            check_local_faq_fn=ctx["check_local_faq"],
             detect_language_fn=ctx["detect_language"],
             get_openai_response_fn=ctx["get_openai_response"],
-        ),
-        dependencies=[Depends(ctx["require_admin"])],
-    )
-    app.include_router(
-        ctx["build_local_faq_router"](
-            local_faq=ctx["LOCAL_FAQ"],
-            local_max_words=ctx["LOCAL_MAX_WORDS"],
-            check_local_faq_fn=ctx["check_local_faq"],
         ),
         dependencies=[Depends(ctx["require_admin"])],
     )
@@ -360,7 +352,6 @@ def wire_routes(app, *, ctx: dict, system_test_router):
             price_natural_date_keywords=ctx["PRICE_NATURAL_DATE_KEYWORDS"],
             price_inquiry_keywords=ctx["PRICE_INQUIRY_KEYWORDS"],
             price_guest_keywords=ctx["PRICE_GUEST_KEYWORDS"],
-            check_local_faq_fn=ctx["check_local_faq"],
             handle_openai_fallback_fn=ctx["handle_openai_fallback"],
             openai_client=ctx["client"],
             openai_model=ctx["OPENAI_MODEL"],

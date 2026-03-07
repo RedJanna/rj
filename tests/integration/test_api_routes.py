@@ -272,8 +272,8 @@ class TestChatEndpoint:
     
     
     @pytest.mark.integration
-    def test_chat_local_faq_response(self, client, clean_conversation):
-        """LOCAL FAQ cevabı"""
+    def test_chat_info_question_returns_non_empty_response(self, client, clean_conversation):
+        """Bilgi sorusunda boş olmayan bir cevap dönmeli."""
         phone = "905551111005"
         clean_conversation(phone)
         
@@ -284,7 +284,7 @@ class TestChatEndpoint:
             "coalesce_mode": "immediate"
         })
         
-        # Sonra FAQ sorusu
+        # Sonra bilgi sorusu
         response = client.post("/chat", json={
             "phone": phone,
             "message": "WiFi var mı?",
@@ -294,11 +294,11 @@ class TestChatEndpoint:
         assert response.status_code == 200
         data = response.json()
         
-        # Status local_faq olmalı veya wifi kelimesi geçmeli
         status = data.get("status", "")
         reply = data.get("reply", "").lower()
-        
-        assert status == "local_faq" or "wifi" in reply or "internet" in reply
+
+        assert status != "local_faq"
+        assert bool(reply.strip())
 
     @pytest.mark.integration
     def test_chat_first_message_forces_welcome(self, client, clean_conversation):

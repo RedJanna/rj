@@ -11,9 +11,15 @@ from app.services.state_store_service import JsonStateRepository
 # 7. MESAJ KAYIT SİSTEMİ
 # ======================================================
 
-CONVERSATIONS_DIR = Path(
-    os.getenv("KASSANDRA_CONVERSATIONS_DIR", "conversations")
-).expanduser()
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_conversations_raw = (os.getenv("KASSANDRA_CONVERSATIONS_DIR", "") or "").strip()
+if _conversations_raw:
+    _conversations_path = Path(_conversations_raw).expanduser()
+    if not _conversations_path.is_absolute():
+        _conversations_path = (_PROJECT_ROOT / _conversations_path).resolve()
+else:
+    _conversations_path = (_PROJECT_ROOT / "conversations").resolve()
+CONVERSATIONS_DIR = _conversations_path
 CONVERSATIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 HISTORY_EXPIRY_MINUTES = 30
@@ -35,6 +41,20 @@ def load_conversation(phone: str) -> dict:
     data = repo.load_dict()
     if data:
         return data
+
+    # Legacy fallback: daha once proje köküne yazılmış konuşma dosyası varsa
+    # yeni conversations/ dizinine taşıyarak tek kaynağa sabitle.
+    legacy_phone = re.sub(r"[^\d]", "", phone or "")
+    legacy_file = _PROJECT_ROOT / f"{legacy_phone}.json"
+    if legacy_file.exists():
+        try:
+            with open(legacy_file, "r", encoding="utf-8") as f:
+                legacy_data = json.load(f)
+            if isinstance(legacy_data, dict):
+                _conversation_repo(phone).save_dict(legacy_data)
+                return legacy_data
+        except Exception:
+            pass
     
     return {
         "phone": phone,

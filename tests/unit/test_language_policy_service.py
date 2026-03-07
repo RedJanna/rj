@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from app.services.language_policy_service import (
     extract_language_switch_request,
     normalize_language_code,
@@ -29,3 +31,27 @@ def test_resolve_language_lock_keeps_seed_language_for_ambiguous_followup():
         detect_language_fn=lambda _t: "pt",
     )
     assert lang == "pt"
+
+
+def test_resolve_language_lock_ignores_stale_history_for_new_message_language():
+    stale_time = (datetime.now() - timedelta(minutes=45)).isoformat()
+
+    def _load(_phone: str):
+        return {
+            "updated_at": stale_time,
+            "messages": [{"user_message": "hello"}],
+        }
+
+    def _detect(text: str) -> str:
+        low = (text or "").lower()
+        if "merhaba" in low:
+            return "tr"
+        return "en"
+
+    lang = resolve_language_lock(
+        phone="+905551112233",
+        user_message="merhaba",
+        load_conversation_fn=_load,
+        detect_language_fn=_detect,
+    )
+    assert lang == "tr"

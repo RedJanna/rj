@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 
 
@@ -24,6 +25,22 @@ def build_reservation_flow_handler(
     send_reservation_pdf_fn,
     schedule_restaurant_reminder_fn,
 ):
+    def _is_likely_person_name(text: str) -> bool:
+        raw = (text or "").strip()
+        if not raw or len(raw) < 2 or len(raw) > 60:
+            return False
+        if any(ch.isdigit() for ch in raw):
+            return False
+        low = raw.lower()
+        blocked = (
+            "pardon", "değiş", "degis", "düzelt", "duzelt", "yanlış", "yanlis",
+            "saat", "tarih", "kişi", "kisi", "rezervasyon", "olarak", "miyiz", "?",
+        )
+        if any(b in low for b in blocked):
+            return False
+        words = re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü'\-]+", raw)
+        return 1 <= len(words) <= 4
+
     async def handle_reservation_flow(phone: str, message: str, flow: dict) -> str | tuple[str, str] | None:
         state = flow.get("state", "idle")
         data = flow.get("data", {})
@@ -46,6 +63,60 @@ def build_reservation_flow_handler(
 
         msg_lower = message.lower().strip()
 
+        def _build_confirmation_summary(payload: dict) -> str:
+            formatted_date = (
+                format_date_turkish_fn(payload["date"])
+                if lang == "tr"
+                else format_date_english_fn(payload["date"])
+            )
+            meal_names = {"breakfast": "Kahvaltı", "Lunch": "Öğle Yemeği", "Dinner": "Akşam Yemeği"}
+            meal_name = meal_names.get(payload.get("meal_type", "Dinner"), "Akşam Yemeği")
+            confirm_msg = f"""📋 REZERVASYON ÖZETİ:
+━━━━━━━━━━━━━━━━━━━━
+📅 Tarih: {formatted_date}
+🕐 Saat: {payload['time']}
+👥 Kişi: {payload['guest_count']}
+👤 İsim: {payload['customer_name']}
+🍽️ Öğün: {meal_name}"""
+            if payload.get("special_requests"):
+                confirm_msg += f"\n📝 Not: {payload['special_requests']}"
+            confirm_msg += "\n\n✅ Onaylamak için 'Evet', iptal için 'Hayır' yazın."
+            return confirm_msg
+
+        def _next_prompt_and_state(payload: dict) -> tuple[str, str]:
+            if not payload.get("guest_count"):
+                return (
+                    ("Kaç kişilik rezervasyon düşünüyorsunuz?" if lang == "tr" else "How many guests?"),
+                    reservation_state_cls.ASK_GUESTS.value,
+                )
+            if not payload.get("date"):
+                return (
+                    (
+                        "Hangi tarih için? (örn: yarın, 15 Temmuz)"
+                        if lang == "tr"
+                        else "Which date? (e.g., tomorrow, July 15)"
+                    ),
+                    reservation_state_cls.ASK_DATE.value,
+                )
+            if not payload.get("time"):
+                return (
+                    ("Saat kaçı tercih edersiniz? (örn: 19:00)" if lang == "tr" else "What time? (e.g., 7pm)"),
+                    reservation_state_cls.ASK_TIME.value,
+                )
+            if not payload.get("customer_name"):
+                return (
+                    ("Rezervasyon hangi isim adına olsun?" if lang == "tr" else "What name for the reservation?"),
+                    reservation_state_cls.ASK_NAME.value,
+                )
+            return (
+                (
+                    "Özel bir isteğiniz var mı? (Yoksa 'yok' yazın)"
+                    if lang == "tr"
+                    else "Any special requests? (Type 'none' if not)"
+                ),
+                reservation_state_cls.ASK_SPECIAL.value,
+            )
+
         if any(kw in msg_lower for kw in ["iptal", "vazgeç", "cancel", "istemiyorum"]):
             clear_reservation_flow_fn(phone)
             msg = (
@@ -61,15 +132,61 @@ def build_reservation_flow_handler(
 
         correction = detect_correction_in_message_fn(message, state)
         if correction["is_correction"]:
-            data[correction["field"]] = correction["new_value"]
+            field = str(correction.get("field") or "").strip()
+            new_value = correction.get("new_value")
+            if field == "time":
+                data["meal_type"] = get_meal_type_from_time_fn(str(new_value))
+            if field == "date":
+                is_valid, error_msg = is_within_season_fn(str(new_value), lang)
+                if not is_valid:
+                    return error_msg, "season_blocked"
+            data[field] = new_value
             update_reservation_flow_fn(phone, state, data)
-            return (
-                f"Kişi sayısını {correction['new_value']} olarak güncelledim."
-                if lang == "tr"
-                else f"Updated to {correction['new_value']}."
-            )
 
-        extracted = extract_all_reservation_info_fn(message)
+            if state == reservation_state_cls.CONFIRM.value and data.get("customer_name"):
+                if lang == "tr":
+                    field_labels = {
+                        "time": f"saati {new_value}",
+                        "date": "tarihi",
+                        "guest_count": f"kişi sayısını {new_value}",
+                    }
+                    prefix = f"Teşekkür ederim, {field_labels.get(field, 'bilgileri')} güncelledim.\n\n"
+                else:
+                    prefix = "Thanks, I updated your reservation details.\n\n"
+                return prefix + _build_confirmation_summary(data)
+
+            if state == reservation_state_cls.ASK_SPECIAL.value and data.get("customer_name"):
+                if lang == "tr":
+                    return "Güncellemeyi not aldım. Özel bir isteğiniz var mı? (Yoksa 'yok' yazın)"
+                return "Update noted. Any special requests? (Type 'none' if not)"
+
+            question, next_state = _next_prompt_and_state(data)
+            update_reservation_flow_fn(phone, next_state, data)
+
+            if lang == "tr":
+                field_labels = {
+                    "time": f"saati {new_value}",
+                    "date": "tarihi",
+                    "guest_count": f"kişi sayısını {new_value}",
+                }
+                prefix = f"Tamam, {field_labels.get(field, 'bilgileri')} güncelledim."
+                return f"{prefix} {question}"
+            return f"Updated your details. {question}"
+
+        before_extract = dict(data)
+        extracted_all = extract_all_reservation_info_fn(message)
+        extracted = {"guest_count": None, "date": None, "time": None}
+        if state in {reservation_state_cls.ASK_GUESTS.value, reservation_state_cls.IDLE.value}:
+            extracted["guest_count"] = extracted_all.get("guest_count")
+        elif state == reservation_state_cls.ASK_DATE.value:
+            extracted["date"] = extracted_all.get("date")
+        elif state == reservation_state_cls.ASK_TIME.value:
+            extracted["time"] = extracted_all.get("time")
+        else:
+            extracted["guest_count"] = extracted_all.get("guest_count")
+            extracted["date"] = extracted_all.get("date")
+            extracted["time"] = extracted_all.get("time")
+
         if extracted.get("guest_count"):
             data["guest_count"] = extracted["guest_count"]
         if extracted.get("date"):
@@ -141,7 +258,28 @@ def build_reservation_flow_handler(
                 update_reservation_flow_fn(phone, reservation_state_cls.ASK_NAME.value, data)
                 question = "Rezervasyon hangi isim adına olsun?" if lang == "tr" else "What name for the reservation?"
                 return ack + question
-            if len(message.strip()) >= 2:
+
+            edit_markers = ("pardon", "değiş", "degis", "düzelt", "duzelt", "yanlış", "yanlis", "actually", "sorry")
+            looks_like_edit = any(m in msg_lower for m in edit_markers) or bool(
+                extracted.get("guest_count") or extracted.get("date") or extracted.get("time")
+            )
+            if looks_like_edit:
+                changed_bits = []
+                if data.get("time") and data.get("time") != before_extract.get("time"):
+                    changed_bits.append(f"saati {data['time']}")
+                if data.get("date") and data.get("date") != before_extract.get("date"):
+                    changed_bits.append("tarihi")
+                if data.get("guest_count") and data.get("guest_count") != before_extract.get("guest_count"):
+                    changed_bits.append(f"kişi sayısını {data['guest_count']}")
+                update_reservation_flow_fn(phone, reservation_state_cls.ASK_NAME.value, data)
+                if lang == "tr":
+                    prefix = "Not aldım, "
+                    if changed_bits:
+                        prefix = f"Tamam, {', '.join(changed_bits)} güncelledim. "
+                    return prefix + "Şimdi rezervasyon hangi isim adına olsun?"
+                return "Updated. What name should the reservation be under now?"
+
+            if _is_likely_person_name(message):
                 data["customer_name"] = message.strip().title()
                 update_reservation_flow_fn(phone, reservation_state_cls.ASK_SPECIAL.value, data)
                 return (
@@ -149,7 +287,11 @@ def build_reservation_flow_handler(
                     if lang == "tr"
                     else f"Thanks {data['customer_name']}! Any special requests? (Type 'none' if not)"
                 )
-            return "Lütfen geçerli bir isim girin." if lang == "tr" else "Please enter a valid name."
+            return (
+                "İsmi anlayamadım. Lütfen sadece ad-soyad yazın. (Örn: Ahmet Yılmaz)"
+                if lang == "tr"
+                else "I could not parse the name. Please share only first and last name."
+            )
 
         if state == reservation_state_cls.ASK_SPECIAL.value:
             if msg_lower in ["yok", "hayır", "no", "none", "-"]:
@@ -158,20 +300,7 @@ def build_reservation_flow_handler(
                 data["special_requests"] = message.strip()
 
             update_reservation_flow_fn(phone, reservation_state_cls.CONFIRM.value, data)
-            formatted_date = format_date_turkish_fn(data["date"]) if lang == "tr" else format_date_english_fn(data["date"])
-            meal_names = {"breakfast": "Kahvaltı", "Lunch": "Öğle Yemeği", "Dinner": "Akşam Yemeği"}
-            meal_name = meal_names.get(data.get("meal_type", "Dinner"), "Akşam Yemeği")
-            confirm_msg = f"""📋 REZERVASYON ÖZETİ:
-━━━━━━━━━━━━━━━━━━━━
-📅 Tarih: {formatted_date}
-🕐 Saat: {data['time']}
-👥 Kişi: {data['guest_count']}
-👤 İsim: {data['customer_name']}
-🍽️ Öğün: {meal_name}"""
-            if data.get("special_requests"):
-                confirm_msg += f"\n📝 Not: {data['special_requests']}"
-            confirm_msg += "\n\n✅ Onaylamak için 'Evet', iptal için 'Hayır' yazın."
-            return confirm_msg
+            return _build_confirmation_summary(data)
 
         if state == reservation_state_cls.CONFIRM.value:
             if msg_lower in ["evet", "yes", "onay", "tamam", "ok"]:

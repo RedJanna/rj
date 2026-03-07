@@ -64,6 +64,23 @@ def _extract_elektra_amount(payload: Any) -> Optional[float]:
     return None
 
 
+def _extract_confirmation_url_from_payload(payload: Any) -> str:
+    if isinstance(payload, dict):
+        direct = str(payload.get("confirmation-url") or payload.get("confirmationUrl") or "").strip()
+        if direct:
+            return direct
+        for nested in payload.values():
+            url = _extract_confirmation_url_from_payload(nested)
+            if url:
+                return url
+    elif isinstance(payload, list):
+        for item in payload:
+            url = _extract_confirmation_url_from_payload(item)
+            if url:
+                return url
+    return ""
+
+
 def build_hotel_bookings_router(
     get_pending_hotel_bookings_fn: Callable[[], Any],
     get_all_hotel_bookings_fn: Callable[[int], Any],
@@ -490,6 +507,77 @@ def build_hotel_bookings_router(
         if not booking:
             return {"error": "Booking not found"}
         return booking
+
+    @router.post("/admin/hotel-bookings/{booking_id}/send-confirmation-form")
+    async def send_confirmation_form_api(booking_id: int):
+        booking = get_hotel_booking_fn(booking_id)
+        if not booking:
+            return {"success": False, "error": "Booking not found"}
+
+        customer_phone = str(booking.get("customer_phone") or "").strip()
+        if not customer_phone:
+            return {"success": False, "error": "Musteri telefonu bulunamadi"}
+
+        confirmation_url = ""
+        source = "booking_cache"
+
+        raw = booking.get("elektra_response")
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                confirmation_url = _extract_confirmation_url_from_payload(parsed)
+            except Exception:
+                confirmation_url = ""
+
+        if not confirmation_url and get_elektraweb_reservation_fn:
+            reservation_id, voucher_no = _extract_booking_refs(booking)
+            if reservation_id or voucher_no:
+                try:
+                    fetched = await get_elektraweb_reservation_fn(
+                        hotel_id=booking["hotel_id"],
+                        reservation_id=reservation_id or None,
+                        voucher_no=voucher_no or None,
+                    )
+                    confirmation_url = _extract_confirmation_url_from_payload(fetched)
+                    if confirmation_url:
+                        source = "elektra_get_reservation"
+                    update_hotel_booking_status_fn(
+                        booking_id,
+                        booking.get("status", booking_status.APPROVED),
+                        elektra_reservation_id=str(
+                            fetched.get("reservation-id")
+                            or fetched.get("id")
+                            or reservation_id
+                            or ""
+                        ),
+                        elektra_response=json.dumps(fetched, ensure_ascii=False)[:4000],
+                        admin_notes=f"Konfirmasyon formu kontrolu: {datetime.now().isoformat()}",
+                    )
+                except Exception:
+                    pass
+
+        if not confirmation_url:
+            return {
+                "success": False,
+                "error": "Konfirmasyon formu baglantisi bulunamadi (confirmation-url).",
+            }
+
+        lang = str(booking.get("lang") or "tr").strip().lower()
+        if lang == "en":
+            msg = f"Your reservation confirmation form:\n{confirmation_url}"
+        else:
+            msg = f"Rezervasyon onay formunuz:\n{confirmation_url}"
+
+        sent = await send_whatsapp_message_fn(customer_phone, msg)
+        if not sent:
+            return {"success": False, "error": "WhatsApp mesaji gonderilemedi"}
+
+        return {
+            "success": True,
+            "message": "Konfirmasyon formu musterinin WhatsApp hattina gonderildi.",
+            "confirmation_url": confirmation_url,
+            "source": source,
+        }
 
     @router.post("/admin/hotel-bookings/{booking_id}/approve")
     async def approve_booking_api(booking_id: int):

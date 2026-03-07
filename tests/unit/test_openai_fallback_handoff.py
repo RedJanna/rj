@@ -361,3 +361,50 @@ async def test_openai_fallback_collapses_restaurant_multi_info_to_single_step(mo
     assert "adım adım" in result["reply"].lower()
     assert "kişi sayısını" in result["reply"].lower()
     assert "telefon" not in result["reply"].lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_openai_fallback_blocks_self_confirmed_reservation_reply(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-local-test")
+    events = {"handoff": []}
+
+    async def _notify_admin_handoff(**kwargs):
+        events["handoff"].append(kwargs)
+
+    def _response_factory(reply: str, status: str = "ok", **kwargs):
+        return {"reply": reply, "status": status, **kwargs}
+
+    history = [
+        {"role": "assistant", "content": "📋 REZERVASYON ÖZETİ:\n✅ Onaylamak için 'Evet', iptal için 'Hayır' yazın."},
+    ]
+
+    result = await handle_openai_fallback(
+        client=_FakeClient("Teşekkür ederim, restoran rezervasyonunuz onaylanmıştır."),
+        openai_model="gpt-test",
+        info_system_prompt="",
+        history=history,
+        user_message="Evet",
+        phone="905551112233",
+        start_time=0.0,
+        add_to_history_fn=lambda *_args, **_kwargs: None,
+        save_message_fn=lambda *_args, **_kwargs: None,
+        schedule_followup_fn=lambda *_args, **_kwargs: None,
+        record_metric_fn=lambda *_args, **_kwargs: None,
+        maybe_start_qa_background_fn=lambda *_args, **_kwargs: None,
+        qa_enabled=False,
+        qa_agent=None,
+        admin_phone="",
+        send_whatsapp_message_fn=lambda *_args, **_kwargs: None,
+        qa_fail_notifications=[],
+        record_error_fn=lambda *_args, **_kwargs: None,
+        response_factory=_response_factory,
+        notify_admin_handoff_fn=_notify_admin_handoff,
+        activate_human_takeover_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result["status"] == "handoff"
+    assert result["reason_code"] == "reservation_self_confirm_guard"
+    assert "kesin onay" in result["reply"].lower()
+    assert len(events["handoff"]) == 1
+    assert events["handoff"][0]["category"] == "restoran_rezervasyon"

@@ -14,9 +14,14 @@ from app.services.state_store_service import JsonStateRepository, get_project_ro
 
 # Config dosyası
 PROJECT_ROOT = get_project_root()
-CONFIG_PATH = Path(
-    os.getenv("KASSANDRA_PDF_CONFIG_FILE", str(PROJECT_ROOT / "pdf_config.json"))
-).expanduser()
+# Empty env value resolves to "." with Path(""), which breaks lock path creation.
+# Fall back to project default when env is unset or blank.
+_pdf_config_raw = (os.getenv("KASSANDRA_PDF_CONFIG_FILE") or "").strip()
+CONFIG_PATH = (
+    Path(_pdf_config_raw).expanduser()
+    if _pdf_config_raw
+    else (PROJECT_ROOT / "pdf_config.json")
+)
 _CONFIG_STORE = JsonStateRepository(CONFIG_PATH)
 
 DEFAULT_FONT_PATH = (
@@ -117,7 +122,7 @@ def generate_reservation_pdf(reservation: dict) -> str:
         "created_date": datetime.now().strftime("%d.%m.%Y / %H:%M"),
         "customer_name": str(reservation.get('customer_name') or '-'),
         "phone": format_phone(reservation.get('customer_phone') or ''),
-        "guests": str(reservation.get('guests') or '1'),
+        "guests": str(reservation.get('guest_count') or reservation.get('guests') or '1'),
         "special_request": str(reservation.get('special_requests') or '-')[:35],
         "meal_type": str(reservation.get('meal_type') or '-'),
         "date": str(reservation.get('date') or '-'),

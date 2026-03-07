@@ -71,7 +71,6 @@ def tool_versions(root: Path) -> Dict[str, str]:
     for name, cmd in [
         ("node", ["node","-v"]),
         ("npm", ["npm","-v"]),
-        ("n8n", ["n8n","--version"]),
         ("cloudflared", ["cloudflared","--version"]),
         ("git", ["git","--version"]),
     ]:
@@ -85,11 +84,11 @@ def update_autogen_block(ai_brief_path: Path, new_block_md: str) -> None:
     end_idx = txt.find(AUTOGEN_END)
     if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
         raise RuntimeError("AUTOGEN blok marker'lari bulunamadi (AI_BRIEF.md).")
-    start_line_end = txt.find("\\n", start_idx)
+    start_line_end = txt.find("\n", start_idx)
     if start_line_end == -1:
         start_line_end = start_idx
     end_marker_end = end_idx + len(AUTOGEN_END)
-    updated = txt[:start_line_end+1] + new_block_md.rstrip() + "\\n" + txt[end_marker_end:]
+    updated = txt[:start_line_end+1] + new_block_md.rstrip() + "\n" + txt[end_marker_end:]
     ai_brief_path.write_text(updated, encoding="utf-8")
 
 def main():

@@ -3,7 +3,7 @@
 ## 1) WhatsApp (Meta Cloud API)
 - Token: SET/NOT SET
 - Phone ID: SET/NOT SET
-- Webhook: n8n üzerinden
+- Webhook: Backend API üzerinden
 
 ## 2) Elektraweb BookingAPI
 - Base URL: https://bookingapi.elektraweb.com (varsayılan)

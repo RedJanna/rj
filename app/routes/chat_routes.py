@@ -40,6 +40,7 @@ from app.services.language_guard_service import (
     normalize_guard_language,
 )
 from app.services.policy_guard_service import evaluate_policy_guard, is_new_pipeline_enabled
+from app.core.settings_service import load_settings, normalize_language_policy
 from app.services.slot_contract_service import (
     evaluate_slot_coverage,
     get_missing_slot_prompt,
@@ -48,6 +49,8 @@ from app.services.slot_contract_service import (
 from app.services.structured_log_service import log_event
 from app.services.booking_flow_service import get_payment_context
 from app.services.handoff_critical_registry import KNOWN_AUTO_INTENTS
+from app.services.transfer_reservation_service import get_transfer_booking_flow
+from app.handlers.transfer_start_handler import try_start_transfer_booking_flow
 
 
 class ChatRequest(BaseModel):
@@ -257,9 +260,30 @@ def _normalize_turkish_reply_text(text: str) -> str:
     return out
 
 
-def _normalize_language_code(lang: str) -> str:
+def _get_runtime_language_policy() -> dict[str, bool]:
+    try:
+        settings = load_settings()
+    except Exception:
+        settings = {}
+    return normalize_language_policy(settings.get("language_enabled"))
+
+
+def _first_enabled_language(language_policy: dict[str, bool]) -> str:
+    if language_policy.get("en", True):
+        return "en"
+    for code in LANGUAGE_PRIORITY:
+        if language_policy.get(code, True):
+            return code
+    return "en"
+
+
+def _normalize_language_code(lang: str, language_policy: dict[str, bool] | None = None) -> str:
     # Supported languages outside this list are forced to English.
-    return normalize_guard_language(normalize_language_code_svc(lang))
+    code = normalize_guard_language(normalize_language_code_svc(lang))
+    policy = language_policy if isinstance(language_policy, dict) else _get_runtime_language_policy()
+    if policy.get(code, True):
+        return code
+    return _first_enabled_language(policy)
 
 
 def _extract_language_switch_request(text: str) -> tuple[str, bool]:
@@ -333,16 +357,26 @@ def _resolve_language_lock(phone: str, user_message: str, load_conversation_fn, 
     )
 
 
-def _translate_reply_if_needed(reply: str, target_lang: str, openai_client, openai_model: str, detect_language_fn) -> str:
+def _translate_reply_if_needed(
+    reply: str,
+    target_lang: str,
+    openai_client,
+    openai_model: str,
+    detect_language_fn,
+    language_policy: dict[str, bool] | None = None,
+) -> str:
     text = (reply or "").strip()
-    lang = _normalize_language_code(target_lang)
+    lang = _normalize_language_code(target_lang, language_policy=language_policy)
     if not text or lang not in TRANSLATION_ONLY_LANGS:
         return text
 
     detected_lang = ""
     try:
         if callable(detect_language_fn):
-            detected_lang = _normalize_language_code(detect_language_fn(text))
+            detected_lang = _normalize_language_code(
+                detect_language_fn(text),
+                language_policy=language_policy,
+            )
     except Exception:
         detected_lang = ""
 
@@ -406,17 +440,27 @@ def _translate_reply_if_needed(reply: str, target_lang: str, openai_client, open
         return text
 
 
-def _enforce_language_lock(reply: str, target_lang: str, detect_language_fn, openai_client, openai_model: str) -> str:
+def _enforce_language_lock(
+    reply: str,
+    target_lang: str,
+    detect_language_fn,
+    openai_client,
+    openai_model: str,
+    language_policy: dict[str, bool] | None = None,
+) -> str:
     """
     Final guard: if model drifts to a different language, force one more translation pass.
     Runtime drift in mixed flows can still happen; this keeps customer-visible language stable.
     """
     text = (reply or "").strip()
-    lang = _normalize_language_code(target_lang)
+    lang = _normalize_language_code(target_lang, language_policy=language_policy)
     if not text or lang not in TRANSLATION_ONLY_LANGS:
         return text
     try:
-        detected = _normalize_language_code(detect_language_fn(text))
+        detected = _normalize_language_code(
+            detect_language_fn(text),
+            language_policy=language_policy,
+        )
     except Exception:
         detected = ""
     if detected == lang:
@@ -430,7 +474,10 @@ def _enforce_language_lock(reply: str, target_lang: str, detect_language_fn, ope
         detect_language_fn=detect_language_fn,
     )
     try:
-        retried_detected = _normalize_language_code(detect_language_fn(retried))
+        retried_detected = _normalize_language_code(
+            detect_language_fn(retried),
+            language_policy=language_policy,
+        )
     except Exception:
         retried_detected = ""
     if retried_detected == lang:
@@ -581,6 +628,10 @@ def _should_bypass_strict_ai_first(message: str) -> bool:
     Bu sayede LLM'in teknik placeholder veya erken bilgi isteme üretmesi engellenir.
     """
     if _looks_like_explicit_room_price_or_availability_query(message):
+        return True
+    # "4-5 Temmuz 3 yetişkin" gibi sadece slot payload'ı içeren takip mesajlarında
+    # LLM fallback'e düşmek uydurma fiyat riskini artırır; deterministic price zincirine yönlendir.
+    if _looks_like_price_slot_payload(message):
         return True
     if _looks_like_general_price_query_with_slots(message):
         return True
@@ -877,38 +928,6 @@ def _looks_like_late_checkin_info_query(message: str) -> bool:
     return has_late_checkin_signal and has_question
 
 
-def _should_skip_local_faq_for_booking(user_message: str) -> bool:
-    """
-    Rezervasyon baslatma/devam mesajlarinda local FAQ kisa devresini atla.
-    Ornek: "telefonumu gondereyim mi?" ifadesinin iletisim FAQ'ina dusmesini engeller.
-    """
-    if (
-        _looks_like_explicit_booking_create_signal(user_message)
-        or _looks_like_room_booking_create_request(user_message)
-        or _looks_like_direct_room_booking_create_request(user_message)
-    ):
-        return True
-    low = _normalize_for_keyword_match(user_message)
-    has_booking = any(marker in low for marker in ("rezerv", "booking", "reservation", "book"))
-    has_identity_or_contact = any(marker in low for marker in ("isim", "name", "telefon", "phone", "numara"))
-    has_share_or_start = any(marker in low for marker in ("gonder", "paylas", "send", "share", "baslat", "start"))
-    has_booking_progress = any(
-        marker in low
-        for marker in (
-            "rezervasyona gec",
-            "rezervasyona devam",
-            "rezervasyonu baslat",
-            "rezervasyonu baslatalim",
-            "book now",
-            "continue booking",
-            "proceed with booking",
-        )
-    )
-    if has_booking and has_booking_progress:
-        return True
-    return has_booking and has_identity_or_contact and has_share_or_start
-
-
 def _looks_like_phone_number_payload(message: str) -> bool:
     text = (message or "").strip()
     if not text:
@@ -954,6 +973,10 @@ def _has_recent_reservation_contact_prompt(history: list[Dict[str, Any]]) -> boo
                 "phone number",
                 "how many guests",
                 "kaç kişilik rezervasyon",
+                "kişi sayısını paylaşın",
+                "kisi sayisini paylasin",
+                "transfer tarihini paylaşın",
+                "transfer tarihini paylasin",
                 "transfer tarih",
             )
         ):
@@ -961,31 +984,49 @@ def _has_recent_reservation_contact_prompt(history: list[Dict[str, Any]]) -> boo
     return False
 
 
-def _should_send_first_message_welcome(message: str) -> bool:
+def _looks_like_reservation_followup_payload(message: str) -> bool:
     low = _normalize_for_keyword_match(message)
     if not low:
-        return True
-    # İlk mesaj açık bir işlem talebiyse (fiyat/rezervasyon/transfer/restoran) doğrudan akışa gir.
-    transactional_markers = (
-        "rezerv",
-        "booking",
-        "book",
-        "reserve",
-        "fiyat",
-        "price",
-        "musait",
-        "müsait",
-        "availability",
-        "transfer",
-        "havaliman",
-        "airport",
-        "restoran",
-        "restaurant",
-        "oda",
-        "room",
-    )
-    if any(marker in low for marker in transactional_markers):
         return False
+    if re.search(r"\b(\d{1,2})\s*(kisi|kisilik|person|people|guest|pax)\b", low):
+        return True
+    if re.search(r"\b([01]?\d|2[0-3])[:.][0-5]\d\b", low):
+        return True
+    if re.search(r"\b[a-z]{2}\s*\d{2,4}\b", low):
+        return True
+    if "->" in (message or ""):
+        return True
+    if _looks_like_restaurant_date_guest_followup(message):
+        return True
+    return False
+
+
+def _looks_like_restaurant_date_guest_followup(message: str) -> bool:
+    low = _normalize_for_keyword_match(message)
+    if not low:
+        return False
+    # "15 haziran 2 kisi", "12/07 4 kisi" gibi restoran follow-up payload'lari.
+    has_date_token = bool(
+        re.search(r"\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b", low)
+        or re.search(
+            r"\b\d{1,2}\s+(ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik|"
+            r"january|february|march|april|may|june|july|august|september|october|november|december)\b",
+            low,
+        )
+    )
+    if not has_date_token:
+        return False
+
+    if re.search(r"\b([1-9]|1[0-9]|20)\s*(kisi|kisilik|person|people|guest|pax)\b", low):
+        return True
+
+    # Kisa formatlarda kisi etiketi yazilmayabilir: "15 haziran 2"
+    short_numbers = [int(n) for n in re.findall(r"\b\d{1,2}\b", low)]
+    return any(1 <= n <= 20 for n in short_numbers)
+
+
+def _should_send_first_message_welcome(message: str) -> bool:
+    # Operasyon karari: ilk mesaj icerigi ne olursa olsun daima karsilama mesaji gonder.
     return True
 
 
@@ -1171,7 +1212,11 @@ def build_chat_router(**deps):
 
         detect_language_fn = deps["detect_language_fn"]
         load_conversation_fn = deps["load_conversation_fn"]
-        initial_lang = _resolve_language_lock(phone, user_message, load_conversation_fn, detect_language_fn)
+        language_policy = _get_runtime_language_policy()
+        initial_lang = _normalize_language_code(
+            _resolve_language_lock(phone, user_message, load_conversation_fn, detect_language_fn),
+            language_policy=language_policy,
+        )
 
         def _locked_detect_language_fn(_: str) -> str:
             return initial_lang
@@ -1212,6 +1257,7 @@ def build_chat_router(**deps):
                     deps["openai_client"],
                     deps["openai_model"],
                     deps["detect_language_fn"],
+                    language_policy=language_policy,
                 )
             normalized_reply = _enforce_language_lock(
                 normalized_reply,
@@ -1219,6 +1265,7 @@ def build_chat_router(**deps):
                 deps["detect_language_fn"],
                 deps["openai_client"],
                 deps["openai_model"],
+                language_policy=language_policy,
             )
             if needs_hard_language_guard(normalized_reply, initial_lang, deps["detect_language_fn"]):
                 normalized_reply = _enforce_language_lock(
@@ -1227,6 +1274,7 @@ def build_chat_router(**deps):
                     deps["detect_language_fn"],
                     deps["openai_client"],
                     deps["openai_model"],
+                    language_policy=language_policy,
                 )
             elapsed_ms = int((time_module.time() - start_time) * 1000)
             log_event(
@@ -1302,68 +1350,13 @@ def build_chat_router(**deps):
             trace_event({"stage": "gating", "event": "blocked", "status": getattr(precheck["response"], "status", "")})
             return precheck["response"]
 
-        lang = _normalize_language_code(precheck.get("lang") or initial_lang)
+        lang = _normalize_language_code(precheck.get("lang") or initial_lang, language_policy=language_policy)
         history = precheck.get("history") or []
         pending_payment_ctx = get_payment_context(phone) or {}
-
-        local_faq_match: Dict[str, Any] = {
-            "found": False,
-            "answer_tr": "",
-            "answer_en": "",
-            "answer_ru": "",
-        }
-        local_faq_fn = deps.get("check_local_faq_fn")
-        if callable(local_faq_fn):
-            try:
-                found, answer_tr, answer_en, _category, answer_ru = local_faq_fn(user_message)
-                local_faq_match = {
-                    "found": bool(found),
-                    "answer_tr": str(answer_tr or ""),
-                    "answer_en": str(answer_en or ""),
-                    "answer_ru": str(answer_ru or ""),
-                }
-            except Exception:
-                local_faq_match = {
-                    "found": False,
-                    "answer_tr": "",
-                    "answer_en": "",
-                    "answer_ru": "",
-                }
-
-        def _resolve_local_faq_reply() -> str:
-            if not local_faq_match.get("found"):
-                return ""
-            if lang == "en":
-                return str(local_faq_match.get("answer_en") or local_faq_match.get("answer_tr") or "")
-            if lang == "ru":
-                return str(
-                    local_faq_match.get("answer_ru")
-                    or local_faq_match.get("answer_en")
-                    or local_faq_match.get("answer_tr")
-                    or ""
-                )
-            return str(local_faq_match.get("answer_tr") or local_faq_match.get("answer_en") or "")
-
-        skip_local_faq_for_booking = _should_skip_local_faq_for_booking(user_message)
-
-        # Konusma devam ederken yakalanan deterministic FAQ'lari strict-ai-first'ten once cevapla.
-        if history and local_faq_match.get("found") and not skip_local_faq_for_booking:
-            local_reply = _resolve_local_faq_reply()
-            if local_reply:
-                deps["add_to_history_fn"](phone, "user", user_message)
-                deps["add_to_history_fn"](phone, "assistant", local_reply)
-                deps["save_message_fn"](phone, user_message, local_reply)
-                deps["schedule_followup_fn"](phone)
-                deps["record_metric_fn"](
-                    "local_faq",
-                    response_time=time_module.time() - start_time,
-                )
-                return resp(reply=local_reply, status="local_faq")
 
         if (
             not history
             and _should_send_first_message_welcome(user_message)
-            and not _looks_like_booking_payment_followup(user_message)
         ):
             welcome_reply = deps["get_welcome_message_fn"](lang)
             deps["add_to_history_fn"](phone, "user", user_message)
@@ -1375,6 +1368,7 @@ def build_chat_router(**deps):
             return resp(reply=welcome_reply, status="first_message")
 
         reservation_flow_state = deps["get_reservation_flow_fn"](phone)
+        transfer_flow_state = get_transfer_booking_flow(phone)
         price_flow_state = deps["get_price_flow_fn"](phone)
         booking_flow_state = deps["get_booking_flow_fn"](phone)
         active_domain_flow = deps["get_active_flow_fn"](phone)
@@ -1385,11 +1379,12 @@ def build_chat_router(**deps):
             if _has_non_idle_state(flow_candidate):
                 flow_lang = _extract_locked_lang_from_flow(flow_candidate)
                 if flow_lang:
-                    initial_lang = flow_lang
+                    initial_lang = _normalize_language_code(flow_lang, language_policy=language_policy)
                     break
 
         has_active_domain_flow = bool(
             _has_non_idle_state(reservation_flow_state)
+            or _has_non_idle_state(transfer_flow_state)
             or _has_non_idle_state(price_flow_state)
             or _has_non_idle_state(booking_flow_state)
             or bool(active_domain_flow)
@@ -1401,7 +1396,6 @@ def build_chat_router(**deps):
             or _should_bypass_strict_ai_first(user_message)
             or _has_recent_reservation_contact_prompt(history)
             or has_price_slot_followup_with_history
-            or bool(local_faq_match.get("found"))
             or bool(pending_payment_ctx)
         ):
             chat_summary_ctx["intent"] = "AI_FALLBACK"
@@ -1448,6 +1442,8 @@ def build_chat_router(**deps):
 
         # Explicit language switch
         switch_target, switch_supported = _extract_language_switch_request(user_message)
+        if switch_target and not language_policy.get(switch_target, True):
+            switch_supported = False
         if switch_target:
             switch_reply = _language_switch_confirmation(switch_target, switch_supported)
             deps["add_to_history_fn"](phone, "user", user_message)
@@ -1497,6 +1493,18 @@ def build_chat_router(**deps):
                     primary_intent = "PRICE_QUERY"
                     routed["primary_intent"] = "PRICE_QUERY"
                     routed["semantic_intent"] = routed.get("semantic_intent") or "PRICE_QUERY"
+            if (
+                str(primary_intent or "").upper() == "OUT_OF_SCOPE_OTHER"
+                and _has_recent_reservation_contact_prompt(history)
+                and _looks_like_reservation_followup_payload(user_message)
+            ):
+                dom = _recent_reservation_prompt_domain(history)
+                if dom == "restaurant":
+                    primary_intent = "RESTAURANT_BOOKING_CREATE"
+                    routed["primary_intent"] = "RESTAURANT_BOOKING_CREATE"
+                elif dom == "transfer":
+                    primary_intent = "TRANSFER_BOOKING_REQUEST"
+                    routed["primary_intent"] = "TRANSFER_BOOKING_REQUEST"
             primary_intent = _force_primary_intent_from_explicit_message(user_message, str(primary_intent or ""))
             if (
                 str(primary_intent or "").upper() not in {"PRICE_QUERY", "AVAILABILITY_QUERY"}
@@ -1536,6 +1544,9 @@ def build_chat_router(**deps):
             and not _looks_like_generic_price_or_availability_signal(user_message)
         ):
             primary_intent = "HOTEL_BOOKING_CREATE"
+        if _looks_like_late_checkin_info_query(user_message):
+            # "Gece gec/late check-in olur mu?" turu sorulari acil vaka degil, FAQ/policy bilgisidir.
+            primary_intent = "LOCAL_FAQ_INFO"
         if _looks_like_booking_payment_followup(user_message):
             # "kapora/odeme/link" takip sorularini fiyat slot-clarify dongusune dusurme.
             primary_intent = "PAYMENT_METHOD_QUERY"
@@ -1553,12 +1564,16 @@ def build_chat_router(**deps):
                 primary_intent = "TRANSFER_BOOKING_REQUEST"
             else:
                 primary_intent = "HOTEL_BOOKING_CREATE"
-        routed["primary_intent"] = primary_intent
+        if (
+            str(primary_intent or "").upper() in {"PRICE_QUERY", "AVAILABILITY_QUERY"}
+            and _recent_reservation_prompt_domain(history) == "restaurant"
+            and _looks_like_restaurant_date_guest_followup(user_message)
+        ):
+            # Restoran akışında istenen tarih+kişi follow-up'larını fiyat akışına kaçırma.
+            primary_intent = "RESTAURANT_BOOKING_CREATE"
         if _looks_like_late_checkin_info_query(user_message):
             primary_intent = "LOCAL_FAQ_INFO"
-            routed["primary_intent"] = "LOCAL_FAQ_INFO"
-            routed["semantic_intent"] = routed.get("semantic_intent") or "LOCAL_FAQ_INFO"
-            chat_summary_ctx["intent"] = primary_intent
+        routed["primary_intent"] = primary_intent
         slot_coverage = evaluate_slot_coverage(primary_intent, user_message)
         if _looks_like_room_booking_create_request(user_message) or _looks_like_direct_room_booking_create_request(user_message):
             primary_intent = "HOTEL_BOOKING_CREATE"
@@ -1606,6 +1621,7 @@ def build_chat_router(**deps):
         has_active_flow = bool(
             bool(active_domain_flow)
             or _has_non_idle_state(reservation_flow_state)
+            or _has_non_idle_state(transfer_flow_state)
             or _has_non_idle_state(price_flow_state)
             or _has_non_idle_state(booking_flow_state)
         )
@@ -1614,6 +1630,8 @@ def build_chat_router(**deps):
         unknown_guard_should_handoff = is_novel_topic or (
             is_low_confidence and str(primary_intent or "").upper() not in KNOWN_AUTO_INTENTS
         )
+        if _has_recent_reservation_contact_prompt(history) and _looks_like_reservation_followup_payload(user_message):
+            unknown_guard_should_handoff = False
         if _looks_like_late_checkin_info_query(user_message):
             unknown_guard_should_handoff = False
         if unknown_guard_should_handoff and not has_active_flow and not bool(pending_payment_ctx):
@@ -1653,9 +1671,14 @@ def build_chat_router(**deps):
             str(primary_intent or "").upper() == "HOTEL_BOOKING_CREATE"
             and _looks_like_explicit_booking_create_signal(user_message)
         )
+        skip_slot_clarify_for_stateful_create_flows = str(primary_intent or "").upper() in {
+            "RESTAURANT_BOOKING_CREATE",
+            "TRANSFER_BOOKING_REQUEST",
+        }
         if (
             should_request_slot_clarification(primary_intent, slot_coverage, has_active_flow=has_active_flow)
             and not skip_slot_clarify_for_explicit_booking_start
+            and not skip_slot_clarify_for_stateful_create_flows
         ):
             clarify_prompt = get_missing_slot_prompt(primary_intent) or "Lutfen eksik bilgileri tamamlayin."
             deps["add_to_history_fn"](phone, "user", user_message)
@@ -1673,9 +1696,26 @@ def build_chat_router(**deps):
             # keep flow continuity and avoid premature human handoff.
             needs_handoff = False
 
+        transfer_response = await try_start_transfer_booking_flow(
+            primary_intent=primary_intent,
+            user_message=user_message,
+            phone=phone,
+            history=history,
+            start_time=start_time,
+            detect_language_fn=_locked_detect_language_fn,
+            notify_admin_handoff_fn=deps["notify_admin_handoff_fn"],
+            add_to_history_fn=deps["add_to_history_fn"],
+            save_message_fn=deps["save_message_fn"],
+            response_factory=resp,
+            record_metric_fn=deps["record_metric_fn"],
+        )
+        if transfer_response is not None:
+            return transfer_response
+
         reservation_flow_active = _has_non_idle_state(reservation_flow_state)
         if _is_restaurant_flow_intent(primary_intent) or reservation_flow_active:
             restaurant_response = await deps["try_start_restaurant_reservation_flow_fn"](
+                primary_intent=primary_intent,
                 needs_handoff=needs_handoff,
                 handoff_category=handoff_category,
                 user_message=user_message,
@@ -1983,20 +2023,7 @@ def build_chat_router(**deps):
         if late_response is not None:
             return late_response
 
-        # STAGE 7: Deterministic local FAQ (canonical flow removed)
-        local_reply = _resolve_local_faq_reply()
-        if local_reply and not skip_local_faq_for_booking:
-            deps["add_to_history_fn"](phone, "user", user_message)
-            deps["add_to_history_fn"](phone, "assistant", local_reply)
-            deps["save_message_fn"](phone, user_message, local_reply)
-            deps["schedule_followup_fn"](phone)
-            deps["record_metric_fn"](
-                "local_faq",
-                response_time=time_module.time() - start_time,
-            )
-            return resp(reply=local_reply, status="local_faq")
-
-        # STAGE 8: Postcheck (basit kural: dusuk confidence + negatif duygu -> handoff)
+        # STAGE 7: Postcheck (basit kural: dusuk confidence + negatif duygu -> handoff)
         if sf["sentiment"] == "neg" and sf["intensity"] >= 0.75 and sf["frustration_loop"]:
             try:
                 await deps["notify_admin_handoff_fn"](

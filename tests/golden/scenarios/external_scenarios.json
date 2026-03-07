@@ -505,6 +505,28 @@
       "is_core": false,
       "smoke": false,
       "language": "tr"
+    },
+    {
+      "id": "al_49dab7ef16b5",
+      "source_id": "AL-AL_49DAB7EF16B5",
+      "category": "hotel_pricing",
+      "intent": "PRICE_QUERY",
+      "question": "1 ekim ile 3 ekim tarihleri arasında 2 yetişkin ve 7 yaşında 1 çocuk için müsaitlik var mı?",
+      "description": "Active learning onayi (2026-03-06)",
+      "is_core": false,
+      "smoke": false,
+      "language": "tr"
+    },
+    {
+      "id": "al_4cbd9d0b139c",
+      "source_id": "AL-AL_4CBD9D0B139C",
+      "category": "hotel_booking",
+      "intent": "HOTEL_BOOKING_CREATE",
+      "question": "530 449 84 53",
+      "description": "Active learning onayi (2026-03-06)",
+      "is_core": false,
+      "smoke": false,
+      "language": "tr"
     }
   ]
 }

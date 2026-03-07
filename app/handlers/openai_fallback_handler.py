@@ -19,6 +19,25 @@ _AI_HANDOFF_PATTERNS = [
     r"\by[öo]nlendiriyorum\b",
 ]
 
+_RESERVATION_SELF_CONFIRM_PATTERNS = [
+    r"\bonaylanm[ıi]şt[ıi]r\b",
+    r"\bonayland[ıi]\b",
+    r"\breservation (?:is|has been) confirmed\b",
+    r"\byour (?:reservation|booking) (?:is|has been) confirmed\b",
+    r"\bbook(?:ing)? confirmed\b",
+]
+
+_RESERVATION_CONFIRM_PROMPT_MARKERS = [
+    "onaylamak için 'evet'",
+    "onay için 'evet'",
+    "onaylıyor musunuz",
+    "do you confirm",
+    "confirm with 'yes'",
+    "reservation summary",
+    "rezervasyon özeti",
+    "transfer özeti",
+]
+
 
 def _ai_reply_requests_handoff(reply: str) -> bool:
     text = (reply or "").strip().lower()
@@ -86,6 +105,84 @@ def _looks_like_any_reservation_intent(text: str) -> bool:
         "airport transfer",
     ]
     return any(m in low for m in markers)
+
+
+def _is_affirmative_confirmation(message: str) -> bool:
+    low = (message or "").strip().lower()
+    if not low:
+        return False
+    yes_markers = ("evet", "yes", "onay", "tamam", "ok", "olur", "onaylıyorum", "confirm")
+    return any(marker in low for marker in yes_markers)
+
+
+def _history_has_reservation_confirmation_prompt(history: list[dict]) -> bool:
+    if not history:
+        return False
+    for item in reversed(history[-8:]):
+        if item.get("role") != "assistant":
+            continue
+        content = (item.get("content") or "").lower()
+        if any(marker in content for marker in _RESERVATION_CONFIRM_PROMPT_MARKERS):
+            return True
+    return False
+
+
+def _reply_claims_final_confirmation(reply: str) -> bool:
+    low = (reply or "").strip().lower()
+    if not low:
+        return False
+    return any(re.search(pattern, low, flags=re.IGNORECASE) for pattern in _RESERVATION_SELF_CONFIRM_PATTERNS)
+
+
+def _guard_reply_language(user_message: str, history: list[dict], reply: str) -> str:
+    combined = "\n".join(
+        [
+            str(user_message or ""),
+            str(reply or ""),
+            "\n".join(str(item.get("content") or "") for item in (history or [])[-4:]),
+        ]
+    ).lower()
+    if re.search(r"[çğıöşüÇĞİÖŞÜ]", combined) or any(
+        k in combined for k in ("rezervasyon", "onay", "evet", "hayır", "havaliman", "restoran")
+    ):
+        return "tr"
+    if any(k in combined for k in ("reservation", "booking", "confirm", "yes", "airport", "restaurant")):
+        return "en"
+    return "tr"
+
+
+def _reservation_pending_guard_reply(lang: str, domain: str) -> str:
+    code = (lang or "tr").strip().lower()
+    dom = (domain or "hotel").strip().lower()
+    if code == "en":
+        if dom == "restaurant":
+            return (
+                "I received your restaurant reservation request. "
+                "Our live team will share the final confirmation with you shortly."
+            )
+        if dom == "transfer":
+            return (
+                "I received your transfer request. "
+                "Our operations team will review and send final confirmation shortly."
+            )
+        return (
+            "I received your booking request. "
+            "Our live team will review it and share final confirmation shortly."
+        )
+    if dom == "restaurant":
+        return (
+            "Restoran rezervasyon talebinizi aldım. "
+            "Canlı ekibimiz kısa süre içinde kesin onayı sizinle paylaşacaktır."
+        )
+    if dom == "transfer":
+        return (
+            "Transfer talebinizi aldım. "
+            "Operasyon ekibimiz kontrol edip kesin onayı kısa süre içinde iletecektir."
+        )
+    return (
+        "Rezervasyon talebinizi aldım. "
+        "Canlı ekibimiz inceleyip kesin onayı kısa süre içinde sizinle paylaşacaktır."
+    )
 
 
 def _sanitize_ai_reply(reply: str, user_message: str) -> str:
@@ -218,6 +315,71 @@ async def handle_openai_fallback(
             max_tokens=500,
         )
         reply = _sanitize_ai_reply(completion.choices[0].message.content, user_message)
+
+        if (
+            _is_affirmative_confirmation(user_message)
+            and _history_has_reservation_confirmation_prompt(history)
+            and _reply_claims_final_confirmation(reply)
+        ):
+            guard_lang = _guard_reply_language(user_message, history, reply)
+            guard_domain = _reservation_domain(
+                "\n".join(
+                    [
+                        str(user_message or ""),
+                        str(reply or ""),
+                        "\n".join(str(item.get("content") or "") for item in (history or [])[-4:]),
+                    ]
+                )
+            )
+            guarded_reply = _reservation_pending_guard_reply(guard_lang, guard_domain)
+            handoff_category = {
+                "restaurant": "restoran_rezervasyon",
+                "transfer": "antalya_transfer",
+            }.get(guard_domain, "canli_destek")
+            try:
+                if callable(notify_admin_handoff_fn):
+                    await notify_admin_handoff_fn(
+                        category=handoff_category,
+                        priority="high",
+                        customer_phone=phone,
+                        customer_message=user_message,
+                        source=f"{handoff_source}.self_confirm_guard",
+                        detected_intent=detected_intent,
+                        confidence=0.85,
+                        conversation_summary=(
+                            "AI self-confirmation blocked; final confirmation requires live/admin approval."
+                        ),
+                        attempted_actions=["openai_fallback", "reservation_self_confirm_guard"],
+                        suggested_reply=(guarded_reply or "")[:240],
+                        tags=["reservation", "self_confirm_guard", guard_domain],
+                        correlation_id=correlation_id,
+                    )
+            except Exception:
+                pass
+            try:
+                if callable(activate_human_takeover_fn):
+                    activate_human_takeover_fn(phone, reason=f"reservation_self_confirm_guard:{guard_domain}")
+            except Exception:
+                pass
+
+            add_to_history_fn(phone, "user", user_message)
+            add_to_history_fn(phone, "assistant", guarded_reply)
+            save_message_fn(phone, user_message, f"[AI_SELF_CONFIRM_GUARD] {guarded_reply}")
+            schedule_followup_fn(phone)
+            elapsed = time.time() - start_time
+            record_metric_fn("handoff", category="reservation_self_confirm_guard", response_time=elapsed)
+            log_event(
+                "chat.openai.self_confirm_guard",
+                correlation_id=correlation_id,
+                phone=phone,
+                domain=guard_domain,
+            )
+            return response_factory(
+                reply=guarded_reply,
+                status="handoff",
+                reason_code="reservation_self_confirm_guard",
+            )
+
         add_to_history_fn(phone, "user", user_message)
         add_to_history_fn(phone, "assistant", reply)
         save_message_fn(phone, user_message, reply)

@@ -1,0 +1,102 @@
+📋 Senaryo: KS-PRC-001 - Konaklama Fiyat Sorgulama (WhatsApp) (V1)
+
+Senaryo Kodu ve Adı: KS-PRC-001 - Konaklama Fiyat Sorgulama (WhatsApp) V1
+Kanal: WhatsApp
+
+🎯 Hedef:
+Konaklama fiyatı talebi için gerekli ön bilgileri sohbet içinde eksiksiz toplamak; giriş-çıkış tarihi ve kişi sayısını netleştirip (varsa çocuk bilgilerini ekleyip) özetleyerek teyit almak ve price_api/availability_api ile fiyat-müsaitlik sonucunu misafire iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "Temmuz ayı 2 gecelik fiyatlarınızı öğrenebilir miyim?"
+- "Şu tarihlerde kaç TL/EUR, fiyat alabilir miyim?"
+- "Müsaitlik ve fiyat bilgisi rica edeceğim."
+- (Opsiyonel) "Balayı için fiyat alabilir miyim?"
+- (Opsiyonel) "Erken rezervasyon indirimi var mı, fiyat nedir?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Giriş Tarihi: (gg/aa/yyyy (sistem normalize eder))
+2) Çıkış Tarihi: (gg/aa/yyyy (sistem normalize eder))
+3) Yetişkin Sayısı: (Tam sayı, en az 1)
+4) Çocuk Sayısı: (Tam sayı (yoksa 0))
+5) Çocuk Yaşları: (Örn: 4, 7)
+
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının PRICE_QUERY niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki 5 slotu kontrol eder.
+- İlk mesajda eksik olan slotlar:
+  - Kullanıcıyı yormayacak şekilde gruplanarak sorulur.
+  - Önce net fiyat için zorunlu olanlar istenir: Giriş Tarihi + Çıkış Tarihi + Yetişkin Sayısı.
+  - Çocuk bilgisi belirsizse tek mesajda Çocuk Sayısı + Çocuk Yaşları birlikte istenir.
+- Validasyon:
+  - Giriş Tarihi >= bugün olmalı.
+  - Çıkış Tarihi > Giriş Tarihi olmalı.
+  - Yetişkin Sayısı >= 1 olmalı.
+  - Çocuk Sayısı 0 ise Çocuk Yaşları boş kabul edilir; Çocuk Sayısı > 0 ise Çocuk Yaşları istenir.
+- Sezon kuralı:
+  - Tarihler 10 Nisan - 10 Kasım sezonu dışında kalıyorsa fiyat sorgusu için “sezon dışı hizmet verilemediği” bilgisi verilir ve talep oluşturulmaz.
+- Tüm slotlar dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - availability_api ile müsaitlik kontrol edilir, ardından price_api ile fiyat alınır.
+  - Sonuç kullanıcıya iletilir ve talep kaydı oluşturulur.
+  - Webhook/API ile Rezervasyon & Satış ekibine bildirim düşer.
+- (Opsiyonel) Kullanıcı değişiklik isterse:
+  - İlgili slot güncellenir, özet yeniden gösterilir.
+- Handoff anahtar kelimeleri (sürpriz/çiçek/not/romantik masa/balayı) geçerse:
+  - Fiyat akışı tamamlandıktan sonra canlı desteğe aktarım önerilir veya doğrudan aktarılır (kullanıcı talebine göre).
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📅 Giriş Tarihi: [Giriş Tarihi]
+📅 Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Beklemede" düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Talebiniz onaylandı. Seçtiğiniz tarihler ve kişi bilgilerine göre fiyat/müsaitlik bilgisini hazırladım. İsterseniz rezervasyon adımına geçebiliriz."
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - "balayı sürprizi / sürpriz / surpriz"
+  - "çiçek / cicek"
+  - "romantik masa / odaya not"
+- Bot, aynı kritik bilgiyi üst üste 2 kez yanlış formatta alırsa (örn: tarih):
+  - "Tarihi anlayamadım. Örnek: 15/07/2026 şeklinde yazar mısınız?" → tekrar hatalıysa canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb.
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"Merhaba, Kassandra Otel’e hoş geldiniz 😊
+Net fiyat paylaşabilmem için lütfen giriş tarihi, çıkış tarihi ve yetişkin sayısını yazar mısınız?"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Harika, [dolu slot(lar)] not aldım. İşlemi tamamlamak için [eksik slot(lar)] bilgisini de alabilir miyim?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📅 Giriş Tarihi: [Giriş Tarihi]
+📅 Çıkış Tarihi: [Çıkış Tarihi]
+👤 Yetişkin Sayısı: [Yetişkin Sayısı]
+🧒 Çocuk Sayısı: [Çocuk Sayısı]
+🎂 Çocuk Yaşları: [Çocuk Yaşları]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Talebinizi oluşturdum ve Rezervasyon & Satış ekibi ile paylaştım.
+Müsaitlik ve fiyat bilgisini netleştirip size buradan ileteceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU]=KS-PRC-001, [SENARYO ADI]=Konaklama Fiyat Sorgulama (WhatsApp), [Kanal]=WhatsApp
+- [Giriş Tarihi], [Çıkış Tarihi], [Yetişkin Sayısı], [Çocuk Sayısı], [Çocuk Yaşları]
+- [Admin/Birim]=Rezervasyon & Satış, [Webhook/API adı]=price_api + availability_api, [Statü]=Beklemede
+- [Özel talepler]=sürpriz/çiçek/not/romantik masa/balayı, [Format örnekleri]=15/07/2026

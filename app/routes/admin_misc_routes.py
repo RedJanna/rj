@@ -134,7 +134,13 @@ def build_admin_misc_router(
         return reminder_page_html
 
     @router.get("/admin/reservations-page", response_class=HTMLResponse)
-    async def reservations_page():
+    async def reservations_page(request: Request):
+        session_token = request.cookies.get("kassandra_session")
+        if not session_token:
+            return RedirectResponse(url="/admin/login", status_code=302)
+        session = get_session_fn(session_token)
+        if not session or (get_user_fn(session.username) and get_user_fn(session.username).totp_enabled and not session.is_2fa_verified):
+            return RedirectResponse(url="/admin/login", status_code=302)
         return reservations_html
 
     @router.get("/admin/transfer-reservations-page", response_class=HTMLResponse)

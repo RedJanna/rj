@@ -35,12 +35,25 @@ def test_force_primary_intent_prefers_booking_for_explicit_booking_create_text()
     assert intent == "HOTEL_BOOKING_CREATE"
 
 
+def test_force_primary_intent_prefers_restaurant_booking_when_context_is_restaurant():
+    intent = force_primary_intent_from_explicit_message(
+        "Akşam yemeği için rezervasyon yapmak istiyorum.",
+        "HOTEL_BOOKING_CREATE",
+        looks_like_price_slot_payload_fn=lambda _m: False,
+    )
+    assert intent == "RESTAURANT_BOOKING_CREATE"
+
+
 def test_multilingual_price_signal_detects_arabic_price_query():
     assert looks_like_generic_price_or_availability_signal("يرجى مشاركة السعر الإجمالي من 14 إلى 18 أغسطس.") is True
 
 
 def test_multilingual_price_signal_detects_chinese_total_price_query():
     assert looks_like_generic_price_or_availability_signal("请提供2026年8月14日至18日两位成人的总价。") is True
+
+
+def test_generic_price_signal_ignores_restaurant_availability_question():
+    assert looks_like_generic_price_or_availability_signal("Akşam yemeği için müsaitlik var mı?") is False
 
 
 def test_explicit_booking_create_signal_handles_typo_variant():
@@ -57,3 +70,12 @@ def test_booking_payment_followup_detects_turkish_deposit_question():
     assert looks_like_booking_payment_followup(
         "Rezervasyonu tutmak için kapora gerekiyorsa ne kadar ve ne zamana kadar yatırmalıyız?"
     ) is True
+
+
+def test_force_primary_intent_keeps_restaurant_when_dinner_availability_is_asked():
+    intent = force_primary_intent_from_explicit_message(
+        "Akşam yemeği için müsaitlik var mı?",
+        "RESTAURANT_BOOKING_CREATE",
+        looks_like_price_slot_payload_fn=lambda _m: False,
+    )
+    assert intent == "RESTAURANT_BOOKING_CREATE"

@@ -28,6 +28,7 @@ from app.services.elektra_hoteladvisor_service import (
 from app.services.notification_service import notify_admin_handoff
 from app.services.access_control_service import activate_human_takeover
 from app.services.metrics_service import record_metric
+from app.services.reservation_change_interpreter import is_change_request
 from app.services.elektraweb_booking_service import fetch_price
 from app.services.elektraweb_booking_service import update_elektraweb_reservation
 
@@ -139,9 +140,30 @@ BOOKING_INTENT_EN = [
     "penthouse room", "premium room",
 ]
 
+RESTAURANT_BOOKING_CONTEXT_MARKERS = (
+    "restoran", "restaurant", "masa", "table",
+    "yemek", "yemegi", "aksam", "dinner", "ogle", "lunch",
+    "kahvalti", "breakfast",
+)
+
+
+def _looks_like_restaurant_booking_intent(message: str) -> bool:
+    low = _normalize_match_text(message or "")
+    if not low:
+        return False
+    has_restaurant_context = any(marker in low for marker in RESTAURANT_BOOKING_CONTEXT_MARKERS)
+    if not has_restaurant_context:
+        return False
+    has_booking_cue = any(k in low for k in ("rezerv", "reservation", "booking", "book", "reserve"))
+    has_room_cue = any(k in low for k in ("oda", "room", "deluxe", "superior", "exclusive", "penthouse", "premium"))
+    return has_booking_cue and not has_room_cue
+
 
 def detect_booking_intent(message: str) -> bool:
     """Mesajda otel booking niyeti var mi?"""
+    if _looks_like_restaurant_booking_intent(message):
+        return False
+
     low = _normalize_match_text(message or "")
     for kw in BOOKING_INTENT_TR:
         if _normalize_match_text(kw) in low:
@@ -2201,7 +2223,7 @@ async def _handle_payment_link_handoff(
         }
     return {
         "reply": (
-            "Ödeme linki ve ön ödeme taleplerinizi canlı müşteri temsilcimiz yönetmektedir. "
+            "Ön ödeme taleplerinizi canlı müşteri temsilcimiz yönetmektedir. "
             "Sizi şimdi temsilcimize bağlıyorum."
         ),
         "status": "handoff",
@@ -2455,6 +2477,15 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
             reply = "Rezervasyon onay formu bağlantısı henüz oluşmadı. Oluşur oluşmaz sizinle paylaşabilirim."
         return {"reply": reply, "status": "confirmation_form_unavailable", "log": None}
 
+    # Operasyon karari: on odeme talepleri (odeme linki veya havale/EFT) her zaman canli temsilciye devredilir.
+    if wants_link or wants_transfer:
+        return await _handle_payment_link_handoff(
+            phone=phone,
+            message=message,
+            lang=lang,
+            booking=booking,
+        )
+
     if wants_link:
         if not voucher_no and reservation_id:
             voucher_no = reservation_id
@@ -2661,26 +2692,6 @@ async def _handle_payment_intent(phone: str, message: str, lang: str) -> Optiona
             else:
                 reply += f"\n\nRezervasyon onay formunuz:\n{confirmation_url}"
         return {"reply": reply, "status": "payment_link_sent", "log": None}
-
-    if wants_transfer:
-        clear_payment_context(phone)
-        if lang == "en":
-            reply = (
-                f"Dear {guest_name},\n\n"
-                f"Reference: {booking_ctx}\n"
-                f"For bank transfer payments, please contact us at +905332503277.\n"
-                f"Please include your reservation number ({voucher_no}) in the transfer description.\n\n"
-                f"Kind regards,\nKassandra Ölüdeniz"
-            )
-        else:
-            reply = (
-                f"Sayın {guest_name},\n\n"
-                f"Referans: {booking_ctx}\n"
-                f"Havale/EFT ile ödeme için lütfen +905332503277 numarasından bizimle iletişime geçin.\n"
-                f"Transfer açıklamasına rezervasyon numaranızı ({voucher_no}) eklemeyi unutmayın.\n\n"
-                f"Saygılarımızla,\nKassandra Ölüdeniz"
-            )
-        return {"reply": reply, "status": "payment_transfer_sent", "log": None}
 
     return None
 
@@ -3507,6 +3518,46 @@ def _extract_phone_from_message(text: str) -> str:
     return ""
 
 
+def _normalize_phone_e164(raw_phone: str, default_country_code: str = "+90") -> str:
+    raw = (raw_phone or "").strip()
+    if not raw:
+        return ""
+    txt = raw.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if txt.startswith("00"):
+        txt = "+" + txt[2:]
+    if txt.startswith("+"):
+        digits = re.sub(r"\D", "", txt)
+        candidate = f"+{digits}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+        return ""
+
+    digits = re.sub(r"\D", "", txt)
+    if not digits:
+        return ""
+
+    # TR local heuristics
+    if digits.startswith("90") and len(digits) == 12:
+        candidate = "+" + digits
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    if digits.startswith("0") and len(digits) == 11:
+        candidate = f"{default_country_code}{digits[1:]}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    if len(digits) == 10:
+        candidate = f"{default_country_code}{digits}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+
+    # Already international without '+' (e.g. 447911123456)
+    if 10 <= len(digits) <= 15 and not digits.startswith("0"):
+        candidate = "+" + digits
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    return ""
+
+
 def _extract_email_from_message(text: str) -> str:
     """Mesajdan e-posta adresi cikar."""
     m = re.search(r'[\w\.\-\+]+@[\w\.\-]+\.\w{2,}', text or "")
@@ -3607,11 +3658,28 @@ def _wants_use_current_phone(text: str) -> bool:
     return any(h in low for h in hints)
 
 
+def _looks_like_slot_change_message(text: str) -> bool:
+    return is_change_request(text)
+
+
 async def _handle_ask_name(
     phone: str, message: str,
     data: Dict, lang: str,
 ) -> Dict[str, Any]:
     """Ad-soyad bilgisi topla (ilk adim)."""
+    if _looks_like_slot_change_message(message):
+        if lang == "en":
+            return {
+                "reply": "I noted your update. To continue this booking, please share full name (first and last name).",
+                "status": "booking_flow",
+                "log": None,
+            }
+        return {
+            "reply": "Değişiklik notunu aldım. Bu rezervasyona devam etmek için lütfen ad soyad bilginizi yazın.",
+            "status": "booking_flow",
+            "log": None,
+        }
+
     parsed = _extract_name_from_contact_message(message)
 
     if not parsed:
@@ -3658,10 +3726,22 @@ async def _handle_ask_phone(
     if not guest_phone and _wants_use_current_phone(message):
         guest_phone = (phone or "").strip()
 
-    if not guest_phone:
-        return {"reply": _guest_info_step_prompt(BookingFlowState.ASK_PHONE, lang), "status": "booking_flow", "log": None}
+    normalized_phone = _normalize_phone_e164(guest_phone)
 
-    data["guest_phone"] = guest_phone
+    if not normalized_phone:
+        if lang == "en":
+            return {
+                "reply": "Please share a valid phone number with country code (e.g., +905555555555).",
+                "status": "booking_flow",
+                "log": None,
+            }
+        return {
+            "reply": "Lütfen ülke koduyla geçerli bir telefon numarası paylaşın (örn: +905555555555).",
+            "status": "booking_flow",
+            "log": None,
+        }
+
+    data["guest_phone"] = normalized_phone
     next_state = _next_guest_info_state(data)
     save_booking_flow(phone, next_state, data)
     return {"reply": _guest_info_step_prompt(next_state, lang), "status": "booking_flow", "log": None}

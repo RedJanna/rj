@@ -1,0 +1,4 @@
+interface:
+  display_name: "Elektra Endpoint Ops"
+  short_description: "Elektra endpoint arizalarini operasyonel analiz et"
+  default_prompt: "Diagnose an Elektra endpoint incident and return a safe action plan covering config/auth/path/runtime checks plus validation steps."

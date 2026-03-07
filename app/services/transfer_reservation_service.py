@@ -12,8 +12,13 @@ TRANSFER_RESERVATIONS_FILE = resolve_data_file(
     "transfer_reservations.json",
     env_var="KASSANDRA_TRANSFER_RESERVATIONS_FILE",
 )
+TRANSFER_BOOKING_FLOW_FILE = resolve_data_file(
+    "transfer_booking_flows.json",
+    env_var="KASSANDRA_TRANSFER_BOOKING_FLOW_FILE",
+)
 
 _repo = JsonStateRepository(TRANSFER_RESERVATIONS_FILE)
+_flow_repo = JsonStateRepository(TRANSFER_BOOKING_FLOW_FILE)
 
 _MONTH_ALIASES = {
     "ocak": 1, "january": 1, "январь": 1, "января": 1,
@@ -359,3 +364,114 @@ def maybe_create_transfer_reservation_from_chat(
     if not details.get("transfer_date") and not details.get("transfer_time"):
         return None
     return create_transfer_reservation(customer_phone=phone, details=details, source="chat_confirmation")
+
+
+def _load_flow_store() -> Dict[str, Any]:
+    data = _flow_repo.load_dict()
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _save_flow_store(data: Dict[str, Any]) -> None:
+    _flow_repo.save_dict(data)
+
+
+def get_transfer_booking_flow(phone: str) -> Dict[str, Any]:
+    clean = re.sub(r"[^\d]", "", phone or "")
+    if not clean:
+        return {"state": "idle", "data": {}}
+    store = _load_flow_store()
+    item = store.get(clean)
+    if not isinstance(item, dict):
+        return {"state": "idle", "data": {}}
+    state = str(item.get("state") or "idle").strip().lower() or "idle"
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    return {"state": state, "data": data}
+
+
+def update_transfer_booking_flow(phone: str, state: str, data: Optional[Dict[str, Any]] = None) -> None:
+    clean = re.sub(r"[^\d]", "", phone or "")
+    if not clean:
+        return
+    store = _load_flow_store()
+    current = store.get(clean) if isinstance(store.get(clean), dict) else {}
+    merged_data: Dict[str, Any] = {}
+    if isinstance(current.get("data"), dict):
+        merged_data.update(current["data"])
+    if isinstance(data, dict):
+        merged_data.update(data)
+    store[clean] = {
+        "state": str(state or "idle").strip().lower() or "idle",
+        "data": merged_data,
+        "updated_at": datetime.now().isoformat(),
+    }
+    _save_flow_store(store)
+
+
+def clear_transfer_booking_flow(phone: str) -> None:
+    clean = re.sub(r"[^\d]", "", phone or "")
+    if not clean:
+        return
+    store = _load_flow_store()
+    if clean in store:
+        del store[clean]
+        _save_flow_store(store)
+
+
+def parse_transfer_date_input(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
+    ref = now or datetime.now()
+    year, month, day = _extract_date_parts(text or "")
+    if not month or not day:
+        return None
+    if not year:
+        year = ref.year
+    try:
+        parsed = datetime(year, month, day)
+    except ValueError:
+        return None
+    if parsed.date() < ref.date():
+        return None
+    return parsed.strftime("%Y-%m-%d")
+
+
+def extract_transfer_time_input(text: str) -> Optional[str]:
+    match = re.search(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)\b", text or "")
+    if not match:
+        return None
+    hh = int(match.group(1))
+    mm = int(match.group(2))
+    return f"{hh:02d}:{mm:02d}"
+
+
+def extract_transfer_flight_no(text: str) -> Optional[str]:
+    match = re.search(r"\b([A-Za-z]{2}\s*\d{2,4})\b", text or "")
+    if not match:
+        return None
+    return re.sub(r"\s+", "", match.group(1)).upper()
+
+
+def extract_transfer_guest_count(text: str) -> Optional[int]:
+    low = (text or "").lower()
+    match = re.search(r"\b(\d{1,2})\s*(?:kişi|kisi|kişilik|kisilik|guest|guests|person|people|pax)\b", low)
+    if not match:
+        return None
+    count = int(match.group(1))
+    if not (1 <= count <= 20):
+        return None
+    return count
+
+
+def extract_transfer_route(text: str) -> Optional[str]:
+    if "->" in (text or ""):
+        parts = [p.strip() for p in (text or "").split("->", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return f"{parts[0]} -> {parts[1]}"
+    low = (text or "").lower()
+    if any(k in low for k in ("dalaman", "havaliman", "havaalani", "airport")):
+        return "Dalaman Havalimani -> Kassandra Oludeniz"
+    return None
+
+
+def is_affirmative_reply(text: str) -> bool:
+    return _is_affirmative(text)

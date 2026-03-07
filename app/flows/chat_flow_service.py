@@ -17,13 +17,11 @@ class ChatFlowService:
         model_getter: Callable[[], str],
         system_prompt_getter: Callable[[], str],
         detect_language_fn: Callable[[str], str],
-        check_local_faq_fn: Callable[[str], Any],
     ) -> None:
         self._api_key = api_key
         self._model_getter = model_getter
         self._system_prompt_getter = system_prompt_getter
         self._detect_language = detect_language_fn
-        self._check_local_faq = check_local_faq_fn
 
         self._openai_client = OpenAI(api_key=api_key)
         self._use_langchain = os.getenv("USE_LANGCHAIN_FLOW", "0").strip() == "1"
@@ -38,21 +36,7 @@ class ChatFlowService:
         }
 
     def generate(self, phone: str, message: str, history: List[Dict[str, str]] | None = None) -> Dict[str, Any]:
-        faq_found, faq_answer_tr, faq_answer_en, faq_category, faq_answer_ru = self._check_local_faq(message)
         lang = self._detect_language(message) or "tr"
-        if faq_found:
-            if lang == "ru":
-                response = faq_answer_ru
-            elif lang == "en":
-                response = faq_answer_en
-            else:
-                response = faq_answer_tr
-            return {
-                "response": response,
-                "source": "LOCAL_FAQ",
-                "lang": lang,
-                "faq_category": faq_category,
-            }
 
         model = self._model_getter()
         system_prompt = self._system_prompt_getter()
@@ -99,4 +83,3 @@ class ChatFlowService:
         if fallback_err:
             payload["langchain_fallback_error"] = fallback_err
         return payload
-

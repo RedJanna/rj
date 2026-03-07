@@ -18,7 +18,6 @@ def build_admin_monitoring_router(
     whatsapp_phone_id: str,
     whatsapp_token: str,
     error_logs: List[Dict[str, Any]],
-    check_local_faq_fn: Callable[[str], Any],
     detect_language_fn: Callable[[str], str],
     get_openai_response_fn: Callable[[str, str], Awaitable[str]],
 ) -> APIRouter:
@@ -130,20 +129,9 @@ def build_admin_monitoring_router(
     async def test_chat_endpoint(phone: str = "TEST_BOT_001", message: str = "Merhaba"):
         start_time = datetime.now()
         try:
-            found, answer_tr, answer_en, _faq_source, answer_ru = check_local_faq_fn(message)
-            lang = detect_language_fn(message)
-            if lang == "ru":
-                local_response = answer_ru
-            elif lang == "en":
-                local_response = answer_en
-            else:
-                local_response = answer_tr
-            if found and local_response:
-                response_text = local_response
-                response_source = "LOCAL"
-            else:
-                response_text = await get_openai_response_fn(phone, message)
-                response_source = "OPENAI"
+            _ = detect_language_fn(message)
+            response_text = await get_openai_response_fn(phone, message)
+            response_source = "OPENAI"
             elapsed = (datetime.now() - start_time).total_seconds()
             return {
                 "status": "ok",

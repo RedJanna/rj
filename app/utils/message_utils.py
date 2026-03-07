@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from typing import Tuple
 import re
-from app.content.local_faq_data import (
-    LOCAL_FAQ,
-    LOCAL_MAX_WORDS,
-    check_local_faq,
-)
 
 
 # ======================================================
@@ -78,6 +73,7 @@ def is_greeting(text: str) -> Tuple[bool, str]:
 
 def get_welcome_message(lang: str = "tr") -> str:
     """Karşılama mesajı - dil destekli"""
+    lang = (lang or "en").strip().lower()
     if lang == "en":
         return """Hello! 👋
 
@@ -91,6 +87,62 @@ How can I assist you today?
 4. Special requests (surprise, celebration, etc.)
 
 You can type a number or ask your question directly 😊"""
+
+    if lang == "de":
+        return """Hallo! 👋
+
+Willkommen im Kassandra Ölüdeniz. 🌊
+Ich bin hier, um Ihnen bei einem besonderen Aufenthalt zu helfen.
+
+Wie kann ich Ihnen heute helfen?
+1. Reservierung / Zimmerinformationen
+2. Transfer & Transport
+3. Restaurant & Frühstück
+4. Sonderwünsche (Überraschung, Feier usw.)
+
+Sie können eine Nummer eingeben oder Ihre Frage direkt schreiben 😊"""
+
+    if lang == "es":
+        return """¡Hola! 👋
+
+Bienvenido a Kassandra Ölüdeniz. 🌊
+Estoy aquí para ayudarte con una experiencia de alojamiento especial.
+
+¿Cómo puedo ayudarte hoy?
+1. Reserva / Información de habitaciones
+2. Traslado y transporte
+3. Restaurante y desayuno
+4. Solicitudes especiales (sorpresa, celebración, etc.)
+
+Puedes escribir un número o hacer tu pregunta directamente 😊"""
+
+    if lang == "fr":
+        return """Bonjour ! 👋
+
+Bienvenue à Kassandra Ölüdeniz. 🌊
+Je suis là pour vous aider à organiser un séjour exceptionnel.
+
+Comment puis-je vous aider aujourd'hui ?
+1. Réservation / Informations sur les chambres
+2. Transfert et transport
+3. Restaurant et petit-déjeuner
+4. Demandes spéciales (surprise, célébration, etc.)
+
+Vous pouvez taper un numéro ou poser votre question directement 😊"""
+
+    if lang == "pt":
+        return """Olá! 👋
+
+Bem-vindo ao Kassandra Ölüdeniz. 🌊
+Estou aqui para ajudar você com uma experiência de hospedagem especial.
+
+Como posso ajudar você hoje?
+1. Reserva / Informações sobre quartos
+2. Transfer e transporte
+3. Restaurante e café da manhã
+4. Pedidos especiais (surpresa, celebração, etc.)
+
+Você pode digitar um número ou fazer sua pergunta diretamente 😊"""
 
     if lang == "ru":
         return """Здравствуйте! 👋
@@ -106,7 +158,50 @@ You can type a number or ask your question directly 😊"""
 
 Вы можете выбрать номер или задать вопрос напрямую 😊"""
 
-    return """Merhaba,
+    if lang == "ar":
+        return """مرحبًا! 👋
+
+مرحبًا بك في Kassandra Ölüdeniz. 🌊
+أنا هنا لمساعدتك في تجربة إقامة مميزة.
+
+كيف يمكنني مساعدتك اليوم؟
+1. الحجز / معلومات الغرف
+2. النقل والمواصلات
+3. المطعم والإفطار
+4. الطلبات الخاصة (مفاجأة، احتفال، إلخ)
+
+يمكنك كتابة رقم الخيار أو إرسال سؤالك مباشرة 😊"""
+
+    if lang == "zh":
+        return """您好！👋
+
+欢迎来到 Kassandra Ölüdeniz。🌊
+我在这里为您提供特别的住宿协助。
+
+今天我可以如何帮助您？
+1. 预订 / 房型信息
+2. 接送与交通
+3. 餐厅与早餐
+4. 特别需求（惊喜、庆祝等）
+
+您可以输入数字，或直接发送您的问题 😊"""
+
+    if lang == "hi":
+        return """नमस्ते! 👋
+
+Kassandra Ölüdeniz में आपका स्वागत है। 🌊
+मैं आपकी विशेष ठहरने की योजना में मदद करने के लिए यहां हूं।
+
+आज मैं आपकी कैसे मदद कर सकता/सकती हूं?
+1. बुकिंग / कमरे की जानकारी
+2. ट्रांसफर और परिवहन
+3. रेस्टोरेंट और नाश्ता
+4. विशेष अनुरोध (सरप्राइज़, सेलिब्रेशन आदि)
+
+आप नंबर टाइप कर सकते हैं या अपना प्रश्न सीधे लिख सकते हैं 😊"""
+
+    if lang == "tr":
+        return """Merhaba,
 
 Kassandra Ölüdeniz'e hoş geldiniz. 🌊
 Size özel bir konaklama deneyimi hazırlamak için buradayım.
@@ -118,6 +213,19 @@ Size nasıl yardımcı olabilirim?
 4. Özel istekler (sürpriz, kutlama, vb.)
 
 Seçiminizi numara ile belirtebilir veya doğrudan sorunuzu yazabilirsiniz 😊"""
+
+    return """Hello! 👋
+
+Welcome to Kassandra Ölüdeniz. 🌊
+I'm here to help you with a special accommodation experience.
+
+How can I assist you today?
+1. Reservation / Room information
+2. Transfer & Transportation
+3. Restaurant & Breakfast
+4. Special requests (surprise, celebration, etc.)
+
+You can type a number or ask your question directly 😊"""
 
 def is_menu_selection(text: str) -> Tuple[bool, int]:
     t = text.strip()
@@ -614,4 +722,3 @@ def build_price_reply(user_message: str) -> Tuple[str, str]:
 
 
 # NOTE:
-# Local FAQ data/functions are centralized in app/content/local_faq_data.py.

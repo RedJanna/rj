@@ -7,6 +7,7 @@ import time
 
 async def try_start_restaurant_reservation_flow(
     *,
+    primary_intent: str,
     needs_handoff: bool,
     handoff_category: str,
     user_message: str,
@@ -52,18 +53,18 @@ async def try_start_restaurant_reservation_flow(
                 return True
         return False
 
+    has_restaurant_intent = str(primary_intent or "").upper() == "RESTAURANT_BOOKING_CREATE"
     has_restaurant_category = (handoff_category == "restoran_rezervasyon")
     # Kullanici ilk adimi kanonik cevapla almis olsa bile, devam mesajini restaurant flow'a sok.
     looks_like_restaurant_followup = _has_recent_restaurant_prompt(history) and any(
         k in msg_lower for k in ["kişi", "kisi", "person", "people", ":", "ağustos", "agustos", "temmuz", "haziran", "pm", "am"]
     )
 
-    if not (has_restaurant_category or looks_like_restaurant_followup):
+    if not (has_restaurant_intent or has_restaurant_category or looks_like_restaurant_followup):
         return None
 
     customer_lang = detect_language_fn(user_message)
     extracted_data = {"language": customer_lang}
-    missing_fields = []
 
     guest_numbers = re.findall(r"(\d+)\s*(?:kişi|kisilik|person|people|guest|pax)", user_message.lower())
     if not guest_numbers:
@@ -108,9 +109,6 @@ async def try_start_restaurant_reservation_flow(
             add_to_history_fn(phone, "assistant", reply)
             save_message_fn(phone, user_message, f"[GRUP REZERVASYONU] {reply}")
             return response_factory(reply=reply, status="handoff")
-    else:
-        missing_fields.append("guest_count")
-
     parsed_date = extract_date_from_message_fn(user_message)
     if not parsed_date:
         parsed_date = parse_date_input_fn(user_message)
@@ -118,61 +116,54 @@ async def try_start_restaurant_reservation_flow(
         date_phrase = extract_date_phrase_fn(user_message)
         if date_phrase:
             parsed_date = extract_date_from_message_fn(date_phrase) or parse_date_input_fn(date_phrase)
-
-    if parsed_date:
-        if parsed_date >= datetime.now().strftime("%Y-%m-%d"):
-            is_in_season, season_error = is_within_season_fn(parsed_date)
-            if is_in_season:
-                extracted_data["date"] = parsed_date
-            else:
-                clear_reservation_flow_fn(phone)
-                reply = season_error
-                add_to_history_fn(phone, "user", user_message)
-                add_to_history_fn(phone, "assistant", reply)
-                save_message_fn(phone, user_message, f"[SEZON DIŞI] {reply}")
-                return response_factory(reply=reply, status="season_blocked")
-        else:
-            missing_fields.append("date")
-    else:
-        missing_fields.append("date")
+    if parsed_date and parsed_date >= datetime.now().strftime("%Y-%m-%d"):
+        is_in_season, season_error = is_within_season_fn(parsed_date)
+        if not is_in_season:
+            clear_reservation_flow_fn(phone)
+            reply = season_error
+            add_to_history_fn(phone, "user", user_message)
+            add_to_history_fn(phone, "assistant", reply)
+            save_message_fn(phone, user_message, f"[SEZON DIŞI] {reply}")
+            return response_factory(reply=reply, status="season_blocked")
+        extracted_data["date"] = parsed_date
 
     extracted_time = extract_time_from_message_fn(user_message)
     if extracted_time:
         extracted_data["time"] = extracted_time
-    else:
-        missing_fields.append("time")
-
-    if extracted_time:
         meal_type = get_meal_type_from_time_fn(extracted_time)
         if meal_type:
             extracted_data["meal_type"] = meal_type
-        else:
-            extracted_data.pop("meal_type", None)
 
-    if not missing_fields:
+    if guest_numbers and extracted_data.get("date") and extracted_data.get("time"):
         update_reservation_flow_fn(phone, reservation_state_cls.ASK_NAME.value, extracted_data)
         if customer_lang == "en":
-            reply = f"Perfect! I have noted:\n• {extracted_data['guest_count']} people\n• Date: {extracted_data['date']}\n• Time: {extracted_data['time']}\n\nWhat name should the reservation be under?"
+            reply = (
+                f"Perfect! I noted {extracted_data['guest_count']} people, {extracted_data['date']} at {extracted_data['time']}.\n"
+                "What name should the reservation be under?"
+            )
         else:
-            reply = f"Harika! Not ettim:\n• {extracted_data['guest_count']} kişi\n• Tarih: {extracted_data['date']}\n• Saat: {extracted_data['time']}\n\nRezervasyon hangi isim üzerine olacak?"
-    elif "guest_count" in missing_fields and len(missing_fields) == 1:
-        update_reservation_flow_fn(phone, reservation_state_cls.ASK_GUESTS.value, extracted_data)
+            reply = (
+                f"Harika! {extracted_data['guest_count']} kişi, {extracted_data['date']} tarihi ve {extracted_data['time']} saati için not ettim. 📝\n\n"
+                "Rezervasyon hangi isim üzerine olacak?"
+            )
+    elif guest_numbers and extracted_data.get("date"):
+        update_reservation_flow_fn(phone, reservation_state_cls.ASK_TIME.value, extracted_data)
         if customer_lang == "en":
-            reply = "Of course! I'd be happy to help. 🍽️\n\nHow many people will the reservation be for?"
+            reply = (
+                f"Great! Noted for {extracted_data['guest_count']} people on {extracted_data['date']}. 📝\n\n"
+                "What time would you prefer? (Lunch: 12:00-15:00, Dinner: 18:00-22:00)"
+            )
         else:
-            reply = "Restoran rezervasyonunuz için yardımcı olurum. 🍽️\n\nKaç kişilik rezervasyon yapmak istersiniz?"
-    elif "date" in missing_fields and "guest_count" not in missing_fields:
+            reply = (
+                f"Harika! {extracted_data['guest_count']} kişi, {extracted_data['date']} tarihi için not ettim. 📝\n\n"
+                "Hangi saati tercih edersiniz? (Öğle: 12:00-15:00, Akşam: 18:00-22:00)"
+            )
+    elif guest_numbers:
         update_reservation_flow_fn(phone, reservation_state_cls.ASK_DATE.value, extracted_data)
         if customer_lang == "en":
             reply = f"Great! Noted for {extracted_data['guest_count']} people. 📝\n\nWhich date would you like? (e.g., tomorrow, July 15, 20/07)"
         else:
             reply = f"Harika! {extracted_data['guest_count']} kişi için not ettim. 📝\n\nHangi tarih için rezervasyon yapmak istersiniz? (Örn: yarın, 15 Temmuz, 20/07)"
-    elif "time" in missing_fields and "date" not in missing_fields and "guest_count" not in missing_fields:
-        update_reservation_flow_fn(phone, reservation_state_cls.ASK_TIME.value, extracted_data)
-        if customer_lang == "en":
-            reply = f"Perfect! {extracted_data['guest_count']} people on {extracted_data['date']}. 📝\n\nWhat time would you prefer? (Lunch: 12:00-15:00, Dinner: 18:00-22:00)"
-        else:
-            reply = f"Harika! {extracted_data['guest_count']} kişi, {extracted_data['date']} tarihi için not ettim. 📝\n\nHangi saati tercih edersiniz? (Öğle: 12:00-15:00, Akşam: 18:00-22:00)"
     else:
         update_reservation_flow_fn(phone, reservation_state_cls.ASK_GUESTS.value, extracted_data)
         if customer_lang == "en":

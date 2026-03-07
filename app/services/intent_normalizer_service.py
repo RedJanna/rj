@@ -40,6 +40,12 @@ ROOM_CONTEXT_MARKERS = (
     "कमरा", "दृश्य",
 )
 
+RESTAURANT_CONTEXT_MARKERS = (
+    "restoran", "restaurant", "masa", "table",
+    "yemek", "yemegi", "yemeg", "aksam", "aksam yemegi", "dinner", "ogle", "lunch",
+    "kahvalti", "breakfast", "meal",
+)
+
 def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
     return any(m in text for m in markers)
 
@@ -80,6 +86,15 @@ def _normalize_for_keyword_match(message: str) -> str:
     mapped = stripped.translate(_CONFUSABLE_CHAR_MAP)
     mapped = re.sub(r"[^a-z0-9\s]", " ", mapped)
     return re.sub(r"\s+", " ", mapped).strip()
+
+
+def _has_restaurant_context_without_room_context(message: str) -> bool:
+    low = _normalize_for_keyword_match(message)
+    if not low:
+        return False
+    has_restaurant_context = _contains_any(low, RESTAURANT_CONTEXT_MARKERS)
+    has_room_context = _contains_any(low, ROOM_CONTEXT_MARKERS)
+    return has_restaurant_context and not has_room_context
 
 
 def looks_like_booking_payment_followup(message: str) -> bool:
@@ -125,6 +140,8 @@ def looks_like_generic_price_or_availability_signal(message: str) -> bool:
     low = (message or "").lower()
     if not low:
         return False
+    if _has_restaurant_context_without_room_context(message):
+        return False
     return _contains_any(low, PRICE_AVAILABILITY_MARKERS)
 
 
@@ -166,6 +183,18 @@ def looks_like_explicit_booking_create_signal(message: str) -> bool:
     return has_booking and has_create
 
 
+def looks_like_restaurant_booking_signal(message: str) -> bool:
+    low = _normalize_for_keyword_match(message)
+    if not low:
+        return False
+    has_restaurant_context = _contains_any(low, RESTAURANT_CONTEXT_MARKERS)
+    if not has_restaurant_context:
+        return False
+    has_booking_markers = any(k in low for k in ("rezerv", "booking", "book", "reserve", "reservation"))
+    has_room_markers = _contains_any(low, ROOM_CONTEXT_MARKERS)
+    return has_booking_markers and not has_room_markers
+
+
 def force_primary_intent_from_explicit_message(
     message: str,
     current_intent: str,
@@ -174,21 +203,7 @@ def force_primary_intent_from_explicit_message(
 ) -> str:
     low = (message or "").lower()
     has_booking_markers = looks_like_explicit_booking_create_signal(message)
-
-    if any(
-        k in low
-        for k in (
-            "rezervasyonu başlatalım",
-            "rezervasyonu baslatalim",
-            "rezervasyon başlatalım",
-            "rezervasyon baslatalim",
-            "start reservation",
-            "start booking",
-            "book now",
-        )
-    ):
-        return "HOTEL_BOOKING_CREATE"
-
+    has_restaurant_booking_markers = looks_like_restaurant_booking_signal(message)
     has_payment_markers = any(
         k in low
         for k in (
@@ -206,9 +221,26 @@ def force_primary_intent_from_explicit_message(
             "prepayment",
         )
     )
-
     has_price_markers = looks_like_generic_price_or_availability_signal(message)
+
+    if any(
+        k in low
+        for k in (
+            "rezervasyonu başlatalım",
+            "rezervasyonu baslatalim",
+            "rezervasyon başlatalım",
+            "rezervasyon baslatalim",
+            "start reservation",
+            "start booking",
+            "book now",
+        )
+    ):
+        if has_restaurant_booking_markers and not has_price_markers and not has_payment_markers:
+            return "RESTAURANT_BOOKING_CREATE"
+        return "HOTEL_BOOKING_CREATE"
     if has_booking_markers and not has_price_markers and not has_payment_markers:
+        if has_restaurant_booking_markers:
+            return "RESTAURANT_BOOKING_CREATE"
         return "HOTEL_BOOKING_CREATE"
 
     if has_price_markers and not has_payment_markers:

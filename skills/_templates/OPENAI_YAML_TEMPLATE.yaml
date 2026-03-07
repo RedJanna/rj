@@ -1,0 +1,5 @@
+interface:
+  display_name: "<Kisa Gorunen Isim>"
+  short_description: "<1 satir ne yapar>"
+  default_prompt: "<Bu skill ile yapilacak isi net tarif eden varsayilan prompt>"
+

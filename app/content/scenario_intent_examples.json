@@ -8,7 +8,8 @@
       "Tarihleri ve oda tipini seçtim, rezervasyonu tamamlayalım.",
       "Tamam, bu odayı ayırtmak istiyorum. Ne yapmam lazım?",
       "Ödemeyi nasıl yapacağım, bilgileri vereyim.",
-      "Seçtiğim oda için işlemleri bitirmek istiyorum."
+      "Seçtiğim oda için işlemleri bitirmek istiyorum.",
+      "530 449 84 53"
     ],
     "PRICE_QUERY": [
       "Fiyat alabilir miyim?",
@@ -19,7 +20,8 @@
       "2 yetişkin 2 çocuk için fiyat istiyorum.",
       "Aile odası ücretlerinizi öğrenebilir miyim?",
       "Çocuklu aileler için tatil fiyatlarınız nedir?",
-      "Biz eşim ve çocuklarla geleceğiz, fiyat alabilir miyim?"
+      "Biz eşim ve çocuklarla geleceğiz, fiyat alabilir miyim?",
+      "1 ekim ile 3 ekim tarihleri arasında 2 yetişkin ve 7 yaşında 1 çocuk için müsaitlik var mı?"
     ],
     "AVAILABILITY_QUERY": [
       "Aynı tarihlerde oda müsait mi?",

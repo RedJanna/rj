@@ -465,6 +465,43 @@ def _extract_price_data_pax_counts(error_text: str) -> Optional[Dict[str, int]]:
         return None
 
 
+def _normalize_phone_e164(raw_phone: str, default_country_code: str = "+90") -> str:
+    raw = str(raw_phone or "").strip()
+    if not raw:
+        return ""
+    txt = raw.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if txt.startswith("00"):
+        txt = "+" + txt[2:]
+    if txt.startswith("+"):
+        digits = re.sub(r"\D", "", txt)
+        candidate = f"+{digits}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+        return ""
+
+    digits = re.sub(r"\D", "", txt)
+    if not digits:
+        return ""
+
+    if digits.startswith("90") and len(digits) == 12:
+        candidate = "+" + digits
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    if digits.startswith("0") and len(digits) == 11:
+        candidate = f"{default_country_code}{digits[1:]}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    if len(digits) == 10:
+        candidate = f"{default_country_code}{digits}"
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    if 10 <= len(digits) <= 15 and not digits.startswith("0"):
+        candidate = "+" + digits
+        if re.fullmatch(r"\+[1-9]\d{9,14}", candidate):
+            return candidate
+    return ""
+
+
 def _is_no_rooms_available_error(error_text: str) -> bool:
     txt = (error_text or "").lower()
     return (
@@ -1104,6 +1141,12 @@ async def create_elektraweb_reservation(
         raise ElektrawebConfigError("Eksik config: Elektra_Booking ortam degiskeni bos.")
 
     jwt = await _login_get_jwt(api_key, timeout_sec=timeout_sec)
+    phone_cc = (os.getenv("ELEKTRA_DEFAULT_PHONE_COUNTRY_CODE") or "+90").strip() or "+90"
+    normalized_guest_phone = _normalize_phone_e164(guest_phone, default_country_code=phone_cc)
+    if guest_phone and not normalized_guest_phone:
+        raise ElektrawebAuthError(
+            "invalid guest phone format: please use E.164 with country code (e.g. +905555555555)"
+        )
 
     endpoint_candidates = _resolve_endpoint_candidates("create_reservation", hotel_id)
 
@@ -1123,8 +1166,8 @@ async def create_elektraweb_reservation(
     if guest_birth_date:
         primary_guest["birthday"] = guest_birth_date
         primary_guest["birth-date"] = guest_birth_date
-    if guest_phone:
-        primary_guest["phone"] = str(guest_phone)
+    if normalized_guest_phone:
+        primary_guest["phone"] = str(normalized_guest_phone)
     if guest_email:
         primary_guest["email"] = str(guest_email)
 
@@ -1418,13 +1461,13 @@ async def create_elektraweb_reservation(
         payload["on-payment-amount"] = deposit_amount
     if currency_id:
         payload["currency-id"] = int(currency_id)
-    if guest_phone:
-        payload["payer-info"]["phone"] = str(guest_phone)
+    if normalized_guest_phone:
+        payload["payer-info"]["phone"] = str(normalized_guest_phone)
     if guest_email:
         payload["payer-info"]["email"] = str(guest_email)
         payload["contact-email"] = str(guest_email)
-    if guest_phone:
-        payload["contact-phone"] = str(guest_phone)
+    if normalized_guest_phone:
+        payload["contact-phone"] = str(normalized_guest_phone)
     if voucher_no:
         payload["voucher-no"] = str(voucher_no)
     if effective_offer_id:

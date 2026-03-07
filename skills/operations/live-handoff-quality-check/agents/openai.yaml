@@ -1,0 +1,4 @@
+interface:
+  display_name: "Live Handoff Quality Check"
+  short_description: "Canliya dusen handoff kalitesini denetle"
+  default_prompt: "Use $live-handoff-quality-check to audit live handoff quality and return an action-focused quality report."

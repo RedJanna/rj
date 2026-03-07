@@ -24,6 +24,7 @@ apscheduler>=3.10.0
 
 # PDF Oluşturma
 reportlab>=4.0.0
+pypdf>=4.0.0
 qrcode[pil]>=7.4.0
 Pillow>=10.0.0
 

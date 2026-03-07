@@ -3,7 +3,8 @@ setlocal EnableExtensions
 title Cloudflare Tunnel
 
 set "ROOT=%~dp0"
-set "TUNNEL_NAME=nexlume-api"
+set "TUNNEL_NAME=%CF_TUNNEL_NAME%"
+if "%TUNNEL_NAME%"=="" set "TUNNEL_NAME=nexlume-api"
 set "CF_EXE=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
 
 cd /d "%ROOT%"

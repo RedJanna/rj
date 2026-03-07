@@ -1,0 +1,4 @@
+interface:
+  display_name: "Elektra Config Readiness"
+  short_description: "Elektra env ve endpoint hazirligini kontrol et"
+  default_prompt: "Use $elektra-config-readiness to evaluate Elektra configuration readiness and return a deploy-go/no-go report."

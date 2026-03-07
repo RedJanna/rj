@@ -31,6 +31,18 @@ SETTINGS_AUDIT_FILE = Path(
 
 VALID_ROOM_KEYS = ["deluxe", "superior", "exclusiveLand", "exclusivePool", "penthouseLand", "penthouse", "premium"]
 DEFAULT_CURRENCY_POLICY = {"EUR": True, "USD": True, "TRY": True, "GBP": True}
+DEFAULT_LANGUAGE_POLICY = {
+    "en": True,
+    "tr": True,
+    "ru": True,
+    "de": True,
+    "ar": True,
+    "es": True,
+    "fr": True,
+    "zh": True,
+    "hi": True,
+    "pt": True,
+}
 
 
 @dataclass(frozen=True)
@@ -161,6 +173,7 @@ def load_settings() -> dict:
         "quiet_handoff_room_keys": ["superior"],
         "standard_room_keys": ["deluxe", "superior"],
         "currency_enabled": dict(DEFAULT_CURRENCY_POLICY),
+        "language_enabled": dict(DEFAULT_LANGUAGE_POLICY),
         "updated_at": datetime.now().isoformat(),
         "updated_by": "system"
     }
@@ -184,6 +197,16 @@ def save_settings(settings: dict):
     settings["updated_at"] = datetime.now().isoformat()
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
+
+
+def normalize_language_policy(payload: dict[str, Any] | None) -> dict[str, bool]:
+    merged = dict(DEFAULT_LANGUAGE_POLICY)
+    if not isinstance(payload, dict):
+        return merged
+    for code in merged.keys():
+        if code in payload:
+            merged[code] = bool(payload.get(code))
+    return merged
 
 
 def is_automation_enabled() -> bool:

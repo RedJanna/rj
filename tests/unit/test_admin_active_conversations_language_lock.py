@@ -117,3 +117,14 @@ async def test_active_conversations_includes_pause_reason_when_present(tmp_path,
     by_phone = {item["phone"]: item for item in data["conversations"]}
     assert by_phone["905553333333"]["is_paused"] is True
     assert by_phone["905553333333"]["paused_reason"] == "human_takeover:test_pause_reason"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_reservations_page_requires_session_cookie(tmp_path):
+    app = _build_app(tmp_path)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=False) as client:
+        resp = await client.get("/admin/reservations-page")
+    assert resp.status_code == 302
+    assert resp.headers.get("location") == "/admin/login"

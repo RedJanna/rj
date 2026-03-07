@@ -581,7 +581,6 @@
 ### Test Öncesi Checklist
 - [ ] Bot çalışır durumda mı? (`/health` endpoint kontrol)
 - [ ] Elektraweb API aktif mi?
-- [ ] WhatsApp webhook bağlantısı açık mı? (n8n + Cloudflare)
 - [ ] Test telefon numarası blacklist'te değil mi?
 - [ ] Sezon tarihleri kontrol edildi mi? (Bugünün tarihi sezon içinde/dışında)
 

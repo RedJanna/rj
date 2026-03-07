@@ -260,3 +260,66 @@ def test_settings_update_currency_policy_rejects_invalid_json(monkeypatch):
     data = resp.json()
     assert data["success"] is False
     assert "gecersiz JSON" in data["error"]
+
+
+@pytest.mark.unit
+def test_settings_update_language_policy_accepts_json_payload(monkeypatch):
+    monkeypatch.setattr(admin_ops_routes, "append_settings_audit_entry", lambda **_kwargs: None)
+    state = {
+        "automation_enabled": True,
+        "followup_enabled": False,
+        "operational_rules_enabled": True,
+        "followup_minutes": 10,
+        "language_enabled": {
+            "en": True,
+            "tr": True,
+            "ru": True,
+            "de": True,
+            "ar": True,
+            "es": True,
+            "fr": True,
+            "zh": True,
+            "hi": True,
+            "pt": True,
+        },
+    }
+
+    def load_settings():
+        return dict(state)
+
+    def save_settings(new_settings):
+        state.update(new_settings)
+
+    async def _noop_async(*args, **kwargs):
+        return True
+
+    app = FastAPI()
+    router = build_admin_ops_router(
+        load_settings_fn=load_settings,
+        save_settings_fn=save_settings,
+        is_automation_enabled_fn=lambda: state.get("automation_enabled", True),
+        is_followup_enabled_fn=lambda: state.get("followup_enabled", False),
+        notify_critical_action_fn=_noop_async,
+        conversations_dir=None,
+        load_conversation_fn=lambda p: {},
+        send_whatsapp_message_fn=_noop_async,
+        admin_phone="905550000000",
+        whatsapp_phone_id="pid",
+        whatsapp_token="token",
+    )
+    app.include_router(router)
+
+    @app.middleware("http")
+    async def _inject_user(request, call_next):
+        class _User:
+            username = "test_admin"
+        request.state.user = _User()
+        request.state.auth_via_token = True
+        return await call_next(request)
+
+    client = TestClient(app)
+    resp = client.post('/settings?language_enabled_json={"en":false,"tr":true,"ru":true,"de":true,"ar":true,"es":true,"fr":true,"zh":true,"hi":true,"pt":false}')
+    data = resp.json()
+    assert data["language_enabled"]["en"] is False
+    assert data["language_enabled"]["pt"] is False
+    assert data["language_enabled"]["tr"] is True

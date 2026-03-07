@@ -197,6 +197,12 @@ def _get_intent_examples() -> Dict[str, tuple[str, ...]]:
     return out
 
 
+def clear_intent_examples_cache() -> None:
+    """Flush in-memory cache so newly approved scenarios are used immediately."""
+    _load_external_intent_examples.cache_clear()
+    _get_intent_examples.cache_clear()
+
+
 def _tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9çğıöşüâêîôûа-яё]+", _normalize(text), flags=re.IGNORECASE))
 

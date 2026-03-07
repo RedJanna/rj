@@ -1,0 +1,4 @@
+interface:
+  display_name: "Intent Regression Guard"
+  short_description: "Intent degisikliklerinde regresyonu yakala"
+  default_prompt: "Use $intent-regression-guard to assess an intent change and produce a regression-risk report with focused checks."

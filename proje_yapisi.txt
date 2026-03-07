@@ -32,7 +32,7 @@ C:.
 |   pdf_config.json
 |   proje_yapisi.txt
 |   rate_limits.json
-|   README_INSTALL.md
+|   README.md
 |   requirements.txt
 |   requirements_pip.txt
 |   reservations.db
@@ -41,7 +41,6 @@ C:.
 |   somefile.py
 |   start_backend.bat
 |   start_cloudflare.bat
-|   start_n8n.bat
 |   TECH_STACK_REPORT.md
 |   test_pdf.py
 |   
@@ -296,7 +295,6 @@ C:.
 |       post-commit
 |       
 +---logs
-+---n8n_workflows
 |       Whatsapp Mesaj v5.json
 |       
 +---reservation_pdfs

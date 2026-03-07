@@ -1,0 +1,4 @@
+interface:
+  display_name: "Intent Ops Triage"
+  short_description: "Intent sapmalarini operasyonel triage et"
+  default_prompt: "Diagnose an intent routing incident and produce an operational triage report with root cause, fix scope, and validation commands."

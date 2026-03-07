@@ -1,0 +1,79 @@
+📋 Senaryo: OOS-001 - Genel Konu Yönlendirme (V1)
+
+Senaryo Kodu ve Adı: OOS-001 - Genel Konu Yönlendirme V1
+Kanal: WhatsApp
+
+🎯 Hedef:
+Kapsam dışı veya belirsiz konularda misafirin konusunu tek cümlede netleştirip doğru ekibe yönlendirmek; sohbeti uzatmadan konu özetini alıp teyit ederek kaydı Operasyon ekibine iletmek.
+
+🗣️ Tetikleyici Niyetler (Intents):
+- "Bir konuda bilgi alacaktım ama tam nereye yazacağımı bilemedim."
+- "Size bir şey danışacağım."
+- "Otel hakkında farklı bir sorum var."
+- (Opsiyonel) "Balayı için sürpriz bir şey ayarlamak istiyorum."
+- (Opsiyonel) "Romantik masa/çiçek/not hazırlatabilir miyiz?"
+
+📥 Gerekli Bilgiler (Slotlar - En Fazla 5):
+1) Free Text Topic: (Sistem doğrulama/normalizasyon kurallarına göre)
+
+
+⚙️ Karar Kuralı (Business Logic):
+- Kullanıcının OUT_OF_SCOPE_OTHER niyeti algılandığında senaryo tetiklenir.
+- Sistem, yukarıdaki slotu kontrol eder.
+- İlk mesajda eksik olan slot:
+  - Kullanıcıyı yormayacak şekilde tek cümlelik konu istenir.
+- Slot dolduğunda sistem:
+  - “Özet + Teyit” mesajı gösterir.
+- Kullanıcı onay verirse:
+  - Talep kaydı oluşturulur.
+  - Webhook/API ile Operasyon birimine bildirim düşer.
+- (Opsiyonel) Kullanıcı değişiklik isterse:
+  - Free Text Topic güncellenir, özet yeniden gösterilir.
+- Kullanıcı mesajında handoff_keywords geçerse (sürpriz/surpriz/çiçek/cicek/not/romantik masa/balayı/balayi):
+  - Canlı desteğe aktarılır.
+
+✅ Özet Teyit Formatı (Şablon):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📝 Konu: [Free Text Topic]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+🔄 Onay / Eskalasyon (Escalation & Fallback):
+1) Admin Onayı:
+- Talep admin panelinde "Beklemede" düşer.
+- Admin onaylayınca kullanıcıya otomatik mesaj:
+  - "Teşekkürler. Talebinizi aldık ve ilgili ekibe ilettik. En kısa sürede buradan dönüş sağlayacağız."
+
+2) Canlı Desteğe Aktarma (Eskalasyon):
+- Kullanıcı şu özel taleplerde bulunursa:
+  - Sürpriz organizasyon (balayı/sürpriz)
+  - Çiçek/Not iletimi
+  - Romantik masa talebi
+- Bot, aynı kritik bilgiyi üst üste 2 kez belirsiz/çok uzun şekilde alırsa:
+  - "Daha doğru yönlendirebilmem için konunuzu tek cümleyle yazar mısınız? Örn: 'Odam için ekstra yastık talep ediyorum.'" → tekrar belirsizse canlıya aktar
+- Kullanıcı doğrudan insan isterse:
+  - "Canlı destek / müşteri temsilcisi / operatör" vb.
+
+💬 Standart Yanıt Mesajları (TR)
+1) İlk Karşılama + Toplu Bilgi Talebi:
+"Merhaba, Kassandra Otel’e hoş geldiniz 😊
+Doğru yönlendirme için konunuzu tek cümleyle yazar mısınız: [Free Text Topic]"
+
+2) Eksik Bilgi Varsa (Dinamik):
+"Teşekkürler. Doğru yönlendirebilmem için konunuzu tek cümleyle netleştirir misiniz?"
+
+3) Teyit Mesajı (Tüm bilgiler toplandığında):
+"Bilgileriniz için teşekkürler. Hemen kontrol edelim:
+📝 Konu: [Free Text Topic]
+
+Bilgiler doğruysa 'Evet' yazarak onaylayabilir veya değiştirmek istediğiniz bir yer varsa bana söyleyebilirsiniz."
+
+4) Kapanış / İşlem Oluşturuldu:
+"Mükemmel! ✅ Talebinizi oluşturdum ve Operasyon ekibi ile paylaştım.
+Onaylandığında size buradan bilgi vereceğim.
+Başka yardımcı olabileceğim bir konu var mı?"
+
+🧩 Değişkenler / Placeholder Listesi (Opsiyonel):
+- [SENARYO KODU], [SENARYO ADI], [Kanal]
+- [Free Text Topic], [Admin/Birim]=Operasyon, [Webhook/API adı]=OpsNotifyWebhook, [Statü]=Beklemede
+- [Özel talepler]=sürpriz/çiçek/not/romantik masa/balayı, [Format örnekleri]=tek cümle konu, [Onay metinleri]=otomatik onay mesajı

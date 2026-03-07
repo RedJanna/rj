@@ -34,8 +34,6 @@ from app.utils.message_utils import (
     # language / hotel / price
     detect_language, detect_hotel, detect_price_request,
     extract_date_phrase,
-    # local faq
-    LOCAL_FAQ, LOCAL_MAX_WORDS, check_local_faq,
 )
 from fastapi import FastAPI
 # ---- Consolidated imports (moved from below) ----
@@ -57,7 +55,7 @@ import time as time_module  # Metrik için
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DOTENV_PATH = _PROJECT_ROOT / ".env"
 if _DOTENV_PATH.exists():
-    load_dotenv(dotenv_path=_DOTENV_PATH, override=False)
+    load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
     print(f"[ENV] .env yüklendi: {_DOTENV_PATH}")
 
 # ======================================================
@@ -187,7 +185,6 @@ from app.routes.hotel_bookings_routes import build_hotel_bookings_router
 from app.routes.restaurant_plan_routes import build_restaurant_plan_router
 from app.routes.admin_misc_routes import build_admin_misc_router
 from app.routes.flow_routes import build_flow_router
-from app.routes.local_faq_routes import build_local_faq_router
 from app.routes.followup_routes import build_followup_router
 from app.routes.system_routes import build_system_router
 from app.routes.chat_routes import build_chat_router
@@ -349,6 +346,71 @@ notify_admin_reservation_change = build_notify_admin_reservation_change(
 # ======================================================
 app = FastAPI(title="Kassandra WhatsApp Bot")
 configure_http(app, require_admin)
+
+
+@app.get("/privacy", include_in_schema=False)
+@app.get("/privacy-policy", include_in_schema=False)
+async def privacy_policy_page():
+    return HTMLResponse(
+        content="""
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy - Nexlume</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f7f7f8; color: #111; }
+      main { max-width: 860px; margin: 40px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 28px; }
+      h1 { margin-top: 0; font-size: 28px; }
+      h2 { margin-top: 24px; font-size: 20px; }
+      p, li { line-height: 1.6; }
+      .muted { color: #666; font-size: 14px; }
+      code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="muted">Last updated: 2026-03-05</p>
+
+      <p>
+        This page explains how Nexlume handles personal data when users communicate via WhatsApp and related services.
+      </p>
+
+      <h2>1. Data We Process</h2>
+      <ul>
+        <li>Phone number and message content sent by the user.</li>
+        <li>Operational metadata such as timestamps and delivery events.</li>
+      </ul>
+
+      <h2>2. Why We Process Data</h2>
+      <ul>
+        <li>To answer user requests and provide reservation/support workflows.</li>
+        <li>To improve reliability, quality control, and security monitoring.</li>
+      </ul>
+
+      <h2>3. Data Retention</h2>
+      <p>
+        Data is stored only as long as needed for service delivery, operational audits, and legal obligations.
+      </p>
+
+      <h2>4. Sharing</h2>
+      <p>
+        Data may be processed by infrastructure providers strictly for delivering messaging and platform operations.
+      </p>
+
+      <h2>5. Contact</h2>
+      <p>
+        For privacy requests, contact: <code>gonenomer1453@gmail.com</code>
+      </p>
+    </main>
+  </body>
+</html>
+""".strip()
+    )
+
+
 system_test_router = get_system_test_router()
 try:
     recovery_limit = int(os.getenv("ACTIVE_CONVERSATION_RECOVERY_LIMIT", "300"))

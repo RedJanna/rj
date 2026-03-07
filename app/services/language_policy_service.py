@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 from typing import Callable
 
 LANGUAGE_PRIORITY = ["en", "tr", "ru", "de", "ar", "es", "fr", "zh", "hi", "pt"]
@@ -210,6 +211,17 @@ def resolve_language_lock(
     try:
         conv = load_conversation_fn(phone) or {}
         messages = conv.get("messages") or []
+
+        # Eski (stale) konuşma geçmişi yeni oturuma dil seed'i taşımamalı.
+        # Aksi halde "merhaba" gibi net TR girişleri EN'e kayabiliyor.
+        updated_at_raw = str(conv.get("updated_at") or "").strip()
+        if updated_at_raw:
+            try:
+                updated_at = datetime.fromisoformat(updated_at_raw)
+                if datetime.now() - updated_at > timedelta(minutes=30):
+                    return current
+            except Exception:
+                pass
 
         for msg in reversed(messages):
             txt = (msg.get("user_message") or "").strip()

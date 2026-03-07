@@ -88,3 +88,68 @@ async def test_ask_name_accepts_unicode_name_variants(monkeypatch):
     assert data["guest_first_name"] == "Oomer"
     assert data["guest_last_name"] == "Oomër"
     assert saved_states and saved_states[-1] == BookingFlowState.ASK_PHONE
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ask_phone_normalizes_to_e164_and_moves_next(monkeypatch):
+    saved_states: list[str] = []
+    data = {"guest_first_name": "Omer", "guest_last_name": "Gonen"}
+
+    monkeypatch.setattr(h, "save_booking_flow", lambda _phone, state, _data: saved_states.append(state))
+
+    result = await h._handle_ask_phone(
+        phone="905304498453",
+        message="0530 449 84 53",
+        data=data,
+        lang="tr",
+    )
+
+    assert result is not None
+    assert result["status"] == "booking_flow"
+    assert data["guest_phone"] == "+905304498453"
+    assert saved_states and saved_states[-1] == BookingFlowState.ASK_EMAIL
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ask_phone_rejects_invalid_short_number(monkeypatch):
+    data = {"guest_first_name": "Omer", "guest_last_name": "Gonen"}
+    called = {"save": False}
+
+    monkeypatch.setattr(h, "save_booking_flow", lambda *_args, **_kwargs: called.update({"save": True}))
+
+    result = await h._handle_ask_phone(
+        phone="905304498453",
+        message="+7 2565 025",
+        data=data,
+        lang="tr",
+    )
+
+    assert result is not None
+    assert result["status"] == "booking_flow"
+    assert "ülke koduyla geçerli" in result["reply"].lower()
+    assert data.get("guest_phone", "") == ""
+    assert called["save"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ask_name_does_not_treat_change_message_as_name(monkeypatch):
+    saved_states: list[str] = []
+    data = {}
+
+    monkeypatch.setattr(h, "save_booking_flow", lambda _phone, state, _data: saved_states.append(state))
+
+    result = await h._handle_ask_name(
+        phone="905304498453",
+        message="Pardon saati 19:00 olarak değiştirebilir miyiz?",
+        data=data,
+        lang="tr",
+    )
+
+    assert result is not None
+    assert result["status"] == "booking_flow"
+    assert "ad soyad" in result["reply"].lower()
+    assert "guest_first_name" not in data
+    assert saved_states == []
