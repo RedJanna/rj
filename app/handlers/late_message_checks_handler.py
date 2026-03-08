@@ -1,6 +1,37 @@
 from __future__ import annotations
 
 import time
+from typing import Any
+
+from app.services.hotel_runtime_info_service import get_hotel_runtime_info
+
+
+def _season_range_text_tr(info: dict[str, Any]) -> str:
+    month_names = {
+        1: "Ocak",
+        2: "Şubat",
+        3: "Mart",
+        4: "Nisan",
+        5: "Mayıs",
+        6: "Haziran",
+        7: "Temmuz",
+        8: "Ağustos",
+        9: "Eylül",
+        10: "Ekim",
+        11: "Kasım",
+        12: "Aralık",
+    }
+
+    def _fmt(mmdd: str) -> str:
+        try:
+            month, day = [int(x) for x in str(mmdd or "").split("-", 1)]
+            return f"{day} {month_names.get(month, 'Nisan')}"
+        except Exception:
+            return "10 Nisan"
+
+    opening = _fmt(str(info.get("hotel_opening_mmdd") or "04-01"))
+    closing = _fmt(str(info.get("hotel_closing_mmdd") or "11-30"))
+    return f"{opening} - {closing}"
 
 
 def try_handle_late_message_checks(
@@ -133,9 +164,11 @@ def try_handle_late_message_checks(
         parsed_date = parse_turkish_date_fn(user_message)
         if parsed_date and not is_hotel_open_fn(parsed_date):
             date_str = format_date_turkish_fn(parsed_date)
+            runtime_info = get_hotel_runtime_info()
+            season_text = _season_range_text_tr(runtime_info)
             reply = (
                 f"Maalesef {date_str} tarihi için transfer hizmeti veremiyoruz. "
-                "Otelimiz 10 Nisan - 10 Kasım tarihleri arasında açıktır ve transfer hizmeti sadece bu dönemde geçerlidir. "
+                f"Otelimiz {season_text} tarihleri arasında açıktır ve transfer hizmeti sadece bu dönemde geçerlidir. "
                 "Bu tarihlerde size yardımcı olmaktan mutluluk duyarız! 😊"
             )
             add_to_history_fn(phone, "user", user_message)

@@ -39,13 +39,11 @@ from app.services.elektraweb_booking_service import (
     _infer_currency,
 )
 from app.core.settings_service import get_currency_policy
+from app.services.hotel_runtime_info_service import get_hotel_runtime_info
 
 # ===========================================================
 # 0) SEZON KONTROLÜ (Sezon dışı taleplerde Elektra'ya gitme)
 # ===========================================================
-
-HOTEL_SEASON_START_MMDD = (os.getenv("HOTEL_SEASON_START_MMDD") or "04-10").strip()  # 10 Nisan
-HOTEL_SEASON_END_MMDD = (os.getenv("HOTEL_SEASON_END_MMDD") or "11-10").strip()      # 10 Kasım
 
 _MONTH_TR = {
     1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
@@ -56,12 +54,20 @@ _MONTH_EN = {
     7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
 }
 
+
+def _season_mmdd() -> Tuple[str, str]:
+    info = get_hotel_runtime_info()
+    start_mmdd = str(info.get("hotel_opening_mmdd") or "04-01")
+    end_mmdd = str(info.get("hotel_closing_mmdd") or "11-30")
+    return start_mmdd, end_mmdd
+
+
 def _parse_mmdd(mmdd: str) -> Tuple[int, int]:
     try:
         m, d = mmdd.split("-", 1)
         return int(m), int(d)
     except Exception:
-        return (4, 10)
+        return (4, 1)
 
 def _fmt_mmdd(mmdd: str, lang: str) -> str:
     m, d = _parse_mmdd(mmdd)
@@ -88,8 +94,9 @@ def _is_out_of_season(from_date: str, to_date: str) -> bool:
     if d1.year != d2.year:
         return True
 
-    sm, sd = _parse_mmdd(HOTEL_SEASON_START_MMDD)
-    em, ed = _parse_mmdd(HOTEL_SEASON_END_MMDD)
+    season_start_mmdd, season_end_mmdd = _season_mmdd()
+    sm, sd = _parse_mmdd(season_start_mmdd)
+    em, ed = _parse_mmdd(season_end_mmdd)
     season_start = date(d1.year, sm, sd)
     season_end = date(d1.year, em, ed)
 
@@ -97,7 +104,8 @@ def _is_out_of_season(from_date: str, to_date: str) -> bool:
     return not (d1 >= season_start and d2 <= allowed_checkout)
 
 def _build_out_of_season_reply(lang: str, from_date: str, to_date: str) -> str:
-    season_str = f"{_fmt_mmdd(HOTEL_SEASON_START_MMDD, lang)} - {_fmt_mmdd(HOTEL_SEASON_END_MMDD, lang)}"
+    season_start_mmdd, season_end_mmdd = _season_mmdd()
+    season_str = f"{_fmt_mmdd(season_start_mmdd, lang)} - {_fmt_mmdd(season_end_mmdd, lang)}"
     req_str = f"{_fmt_iso_date(from_date, lang)} - {_fmt_iso_date(to_date, lang)}"
     if lang == "en":
         return (
@@ -632,9 +640,6 @@ def detect_handoff_price(message: str) -> Tuple[bool, str]:
             return True, kw.strip()
     return False, ""
 
-HOTEL_SEASON_START_MMDD = (os.getenv("HOTEL_SEASON_START_MMDD") or "04-10").strip()  # 10 Nisan
-HOTEL_SEASON_END_MMDD   = (os.getenv("HOTEL_SEASON_END_MMDD")   or "11-10").strip()  # 10 Kasım
-
 _MONTH_TR = {1:"Ocak",2:"Şubat",3:"Mart",4:"Nisan",5:"Mayıs",6:"Haziran",7:"Temmuz",8:"Ağustos",9:"Eylül",10:"Ekim",11:"Kasım",12:"Aralık"}
 _MONTH_EN = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",7:"July",8:"August",9:"September",10:"October",11:"November",12:"December"}
 
@@ -643,8 +648,8 @@ def _parse_mmdd(mmdd: str) -> Tuple[int, int]:
         m, d = mmdd.split("-", 1)
         return int(m), int(d)
     except Exception:
-        # fallback: 10 April - 10 November
-        return (4, 10)
+        # fallback: April 1
+        return (4, 1)
 
 def _fmt_mmdd(mmdd: str, lang: str) -> str:
     m, d = _parse_mmdd(mmdd)
@@ -672,8 +677,9 @@ def _is_out_of_season(from_date: str, to_date: str) -> bool:
     if d1.year != d2.year:
         return True
 
-    sm, sd = _parse_mmdd(HOTEL_SEASON_START_MMDD)
-    em, ed = _parse_mmdd(HOTEL_SEASON_END_MMDD)
+    season_start_mmdd, season_end_mmdd = _season_mmdd()
+    sm, sd = _parse_mmdd(season_start_mmdd)
+    em, ed = _parse_mmdd(season_end_mmdd)
     season_start = date(d1.year, sm, sd)
     season_end   = date(d1.year, em, ed)
 
@@ -683,7 +689,8 @@ def _is_out_of_season(from_date: str, to_date: str) -> bool:
     return not (d1 >= season_start and d2 <= allowed_checkout)
 
 def _build_out_of_season_reply(lang: str, from_date: str, to_date: str) -> str:
-    season_str = f"{_fmt_mmdd(HOTEL_SEASON_START_MMDD, lang)} - {_fmt_mmdd(HOTEL_SEASON_END_MMDD, lang)}"
+    season_start_mmdd, season_end_mmdd = _season_mmdd()
+    season_str = f"{_fmt_mmdd(season_start_mmdd, lang)} - {_fmt_mmdd(season_end_mmdd, lang)}"
     req_str = f"{_fmt_iso_date(from_date, lang)} - {_fmt_iso_date(to_date, lang)}"
     if lang == "en":
         return (

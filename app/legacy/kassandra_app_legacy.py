@@ -427,7 +427,17 @@ def _set_openai_model_runtime(new_model: str) -> None:
     global OPENAI_MODEL
     OPENAI_MODEL = new_model
 def _get_system_prompt_runtime() -> str:
-    return INFO_SYSTEM_PROMPT
+    try:
+        from app.services.hotel_runtime_info_service import (
+            build_runtime_hard_override_block,
+            get_hotel_runtime_info,
+        )
+
+        info = get_hotel_runtime_info()
+        runtime_block = build_runtime_hard_override_block(info)
+        return INFO_SYSTEM_PROMPT + runtime_block
+    except Exception:
+        return INFO_SYSTEM_PROMPT
 get_openai_response = build_openai_response_fn(
     client=client,
     model_getter=_get_openai_model_runtime,
