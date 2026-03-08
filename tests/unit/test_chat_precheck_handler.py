@@ -90,6 +90,47 @@ async def test_precheck_runs_operational_rule_for_explicit_reservation_operation
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_precheck_runs_operational_rule_for_transfer_fee_question(monkeypatch):
+    called = {"count": 0}
+
+    def _op_rule(_msg, _history, **_kwargs):
+        called["count"] += 1
+        return {"reply": "Dalaman transfer 75 EUR", "status": "operational_transfer_fee_info"}
+
+    monkeypatch.setattr(precheck, "evaluate_operational_reservation_rule", _op_rule)
+    kwargs = _base_kwargs("Dalaman havalimanı transfer ücreti kaç euro?")
+    kwargs["load_conversation_fn"] = lambda _p: {
+        "messages": [{"role": "assistant", "content": "Size nasıl yardımcı olabilirim?"}]
+    }
+
+    result = await precheck.run_chat_prechecks(**kwargs)
+
+    assert called["count"] == 1
+    assert result["response"] is not None
+    assert result["response"]["status"] == "operational_transfer_fee_info"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_precheck_skips_operational_rule_on_first_message(monkeypatch):
+    called = {"count": 0}
+
+    def _op_rule(_msg, _history, **_kwargs):
+        called["count"] += 1
+        return {"reply": "unexpected", "status": "operational_transfer_fee_info"}
+
+    monkeypatch.setattr(precheck, "evaluate_operational_reservation_rule", _op_rule)
+
+    result = await precheck.run_chat_prechecks(
+        **_base_kwargs("Dalaman havalimanı transfer ücreti kaç euro?")
+    )
+
+    assert called["count"] == 0
+    assert result["response"] is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_precheck_notifies_admin_when_customer_confirms_payment():
     notified: list[dict] = []
 

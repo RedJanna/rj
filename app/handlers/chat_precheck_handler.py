@@ -24,13 +24,19 @@ def _looks_like_price_availability_followup(user_message: str) -> bool:
         "update", "cancel", "modify",
         "voucher", "rez id", "rez no", "rezervasyon no", "rezervasyon id",
     ]
+    room_context_markers = [
+        "oda", "room", "konaklama", "stay", "gece", "night",
+        "adult", "çocuk", "cocuk", "yetişkin", "yetiskin",
+        "manzara", "view", "board", "check-in", "check in", "check-out", "check out",
+    ]
 
     if any(k in text for k in hard_operation_markers):
         return False
     has_price_signal = any(k in text for k in price_markers)
     has_question_signal = ("?" in text) or any(k in text for k in ["ne kadar", "kaç", "kac", "müsait mi", "musait mi"])
     has_anchor = any(k in text for k in anchors)
-    return has_price_signal and has_question_signal and has_anchor
+    has_room_context = any(k in text for k in room_context_markers)
+    return has_price_signal and has_question_signal and has_anchor and has_room_context
 
 
 def _looks_like_payment_completed_confirmation(user_message: str) -> bool:
@@ -222,7 +228,11 @@ async def run_chat_prechecks(
     # Deterministik operasyon kural katmani (LLM oncesi)
     try:
         op_result = None
-        if is_operational_rules_enabled_fn() and not _looks_like_price_availability_followup(user_message):
+        if (
+            persisted_messages
+            and is_operational_rules_enabled_fn()
+            and not _looks_like_price_availability_followup(user_message)
+        ):
             op_result = evaluate_operational_reservation_rule(user_message, persisted_messages, lang=lang)
         if op_result:
             if op_result.get("notify_admin_handoff"):

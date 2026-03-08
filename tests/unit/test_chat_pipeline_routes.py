@@ -265,6 +265,36 @@ async def test_chat_strict_ai_first_bypasses_for_price_query_and_runs_price_chai
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_chat_menu_selection_is_handled_before_strict_ai_fallback(monkeypatch):
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [{"role": "assistant", "content": "Size nasıl yardımcı olabilirim?"}],
+        }
+
+    app, events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_non_first,
+            "is_menu_selection_fn": lambda message: (str(message).strip() == "2", 2 if str(message).strip() == "2" else 0),
+            "get_menu_response_fn": lambda selection, lang="tr": f"menu-{selection}-{lang}",
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {"phone": "+905551112233", "message": "2", "message_id": "menu-1"},
+    )
+
+    assert status == 200
+    assert body["status"] == "ok"
+    assert body["reply"].startswith("menu-2-")
+    assert events["metrics"][-1][0] == "menu"
+    assert events["metrics"][-1][1]["category"] == "menu_2"
+    assert events["saved"][-1][2].startswith("menu-2-")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_chat_language_switch_rejects_disabled_language(monkeypatch):
     monkeypatch.setenv("STRICT_AI_FIRST", "0")
     monkeypatch.setattr(

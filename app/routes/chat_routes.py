@@ -1390,6 +1390,39 @@ def build_chat_router(**deps):
             or bool(active_domain_flow)
         )
 
+        is_menu_selection, menu_selection = deps["is_menu_selection_fn"](user_message)
+        if is_menu_selection and not has_active_domain_flow and not bool(pending_payment_ctx):
+            conversation_lang = lang or initial_lang or "tr"
+            if history:
+                recent_text = " ".join(
+                    str(message.get("content", ""))
+                    for message in history[-4:]
+                    if isinstance(message, dict)
+                ).strip()
+                if recent_text:
+                    conversation_lang = _normalize_language_code(
+                        _locked_detect_language_fn(recent_text),
+                        language_policy=language_policy,
+                    )
+            menu_reply = deps["get_menu_response_fn"](menu_selection, conversation_lang)
+            deps["add_to_history_fn"](phone, "user", user_message)
+            deps["add_to_history_fn"](phone, "assistant", menu_reply)
+            deps["save_message_fn"](phone, user_message, menu_reply)
+            deps["schedule_followup_fn"](phone)
+            deps["record_metric_fn"](
+                "menu",
+                category=f"menu_{menu_selection}",
+                response_time=time_module.time() - start_time,
+            )
+            trace_event(
+                {
+                    "stage": "response_generator",
+                    "event": "early_menu_selection",
+                    "selection": menu_selection,
+                }
+            )
+            return resp(reply=menu_reply, status="ok")
+
         has_price_slot_followup_with_history = _looks_like_price_slot_followup_with_history(user_message, history)
         if strict_ai_first and not (
             has_active_domain_flow
