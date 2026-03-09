@@ -1,6 +1,16 @@
 from app.services.policy_guard_service import evaluate_policy_guard, is_new_pipeline_enabled
 
 
+def test_policy_guard_uses_runtime_cancellation_window(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.policy_guard_service.build_cancellation_policy_reply",
+        lambda lang: f"runtime-policy-{lang}-8days",
+    )
+    result = evaluate_policy_guard("Sezonda iptal kosullari nasil?", lang="tr")
+    assert result["handled"] is True
+    assert result["reply"] == "runtime-policy-tr-8days"
+
+
 def test_policy_guard_handles_cancellation_policy_question_tr():
     result = evaluate_policy_guard("Sezonda iptal kosullari nasil?", lang="tr")
     assert result["handled"] is True

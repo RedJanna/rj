@@ -33,6 +33,20 @@ def get_conversation_file(phone: str) -> Path:
 def _conversation_repo(phone: str) -> JsonStateRepository:
     return JsonStateRepository(get_conversation_file(phone))
 
+
+def _is_conversation_expired(conversation: dict) -> bool:
+    if not isinstance(conversation, dict):
+        return False
+    updated_at = conversation.get("updated_at")
+    messages = conversation.get("messages") or []
+    if not updated_at or not messages:
+        return False
+    try:
+        last_update = datetime.fromisoformat(updated_at)
+    except (ValueError, TypeError):
+        return False
+    return datetime.now() - last_update > timedelta(minutes=HISTORY_EXPIRY_MINUTES)
+
 def load_conversation(phone: str) -> dict:
     if not phone:
         return {"phone": None, "messages": [], "created_at": None, "updated_at": None}
@@ -105,16 +119,62 @@ def schedule_conversation_cleanup(phone: str, delay_minutes: int = 5):
 
 
 def _cleanup_conversation_and_flows(phone: str) -> None:
-    """Sohbet temizliği sırasında reservation flow temizliğini güvenli yap."""
+    """Sohbet temizliği sırasında tüm transient flow state'lerini güvenli temizle."""
     clear_conversation(phone)
+    _clear_runtime_state_for_fresh_conversation(phone)
+    print(f"🧹 Otomatik temizlik: {phone} - Konuşma + transient akış state'i temizlendi")
+
+
+def _clear_runtime_state_for_fresh_conversation(phone: str) -> None:
+    """Timeout veya manuel reset sonrası transient flow/cache state'ini temizle."""
+    clean_phone = _normalize_phone(phone)
+    if not clean_phone:
+        return
+
+    conversation_history.pop(clean_phone, None)
+    last_activity.pop(clean_phone, None)
+    recovered_active_phones.discard(clean_phone)
+
+    actions = []
     try:
-        # Circular import riskini azaltmak için lazy import.
-        from app.services.restaurant_reservation_flow_service import clear_reservation_flow as _clear_reservation_flow
-        _clear_reservation_flow(phone)
+        from app.services.price_flow_service import clear_price_flow as _clear_price_flow
+        actions.append(lambda: _clear_price_flow(clean_phone))
     except Exception as e:
-        # Scheduler thread'i NameError/import hatasıyla düşmesin.
+        print(f"⚠️ Price flow cleanup atlandı: {e}")
+
+    try:
+        from app.services.restaurant_reservation_flow_service import clear_reservation_flow as _clear_reservation_flow
+        actions.append(lambda: _clear_reservation_flow(clean_phone))
+    except Exception as e:
         print(f"⚠️ Reservation flow cleanup atlandı: {e}")
-    print(f"🧹 Otomatik temizlik: {phone} - Konuşma + Rezervasyon akışı temizlendi")
+
+    try:
+        from app.services.booking_flow_service import purge_booking_flow_data as _purge_booking_flow_data
+        actions.append(lambda: _purge_booking_flow_data(clean_phone))
+    except Exception as e:
+        print(f"⚠️ Booking flow cleanup atlandı: {e}")
+
+    try:
+        from app.services.transfer_reservation_service import clear_transfer_booking_flow as _clear_transfer_booking_flow
+        actions.append(lambda: _clear_transfer_booking_flow(clean_phone))
+    except Exception as e:
+        print(f"⚠️ Transfer flow cleanup atlandı: {e}")
+
+    try:
+        from app.services.routing_state_service import (
+            clear_active_flow as _clear_active_flow,
+            clear_domain_lock as _clear_domain_lock,
+        )
+        actions.append(lambda: _clear_active_flow(clean_phone))
+        actions.append(lambda: _clear_domain_lock(clean_phone))
+    except Exception as e:
+        print(f"⚠️ Routing state cleanup atlandı: {e}")
+
+    for action in actions:
+        try:
+            action()
+        except Exception as e:
+            print(f"⚠️ Runtime state cleanup adımı atlandı: {e}")
 
 def save_conversation(phone: str, conversation: dict):
     """Tüm konuşma nesnesini (dict) JSON olarak kaydeder (cancel state için)."""
@@ -143,16 +203,11 @@ def save_message(phone: str, user_message: str, bot_reply: str, is_price_templat
     conversation = load_conversation(phone)
 
     # 10 dakika inaktivite kontrolü — eski konuşmayı sıfırla
-    updated_at = conversation.get("updated_at")
-    if updated_at and conversation.get("messages"):
-        try:
-            last_update = datetime.fromisoformat(updated_at)
-            if datetime.now() - last_update > timedelta(minutes=HISTORY_EXPIRY_MINUTES):
-                conversation["messages"] = []
-                conversation["created_at"] = datetime.now().isoformat()
-                print(f"🔄 Konuşma süresi doldu, sıfırlandı: {re.sub(r'[^0-9]', '', phone)[:6]}***")
-        except (ValueError, TypeError):
-            pass
+    if _is_conversation_expired(conversation):
+        conversation["messages"] = []
+        conversation["created_at"] = datetime.now().isoformat()
+        _clear_runtime_state_for_fresh_conversation(phone)
+        print(f"🔄 Konuşma süresi doldu, sıfırlandı: {re.sub(r'[^0-9]', '', phone)[:6]}***")
 
     message_entry = {
         "timestamp": datetime.now().isoformat(),
@@ -302,6 +357,11 @@ def is_recovered_active_phone(phone: str) -> bool:
 
 def get_conversation_history(phone: str) -> List[dict]:
     if not phone:
+        return []
+
+    conversation = load_conversation(phone)
+    if _is_conversation_expired(conversation):
+        _clear_runtime_state_for_fresh_conversation(phone)
         return []
 
     if phone in conversation_history:

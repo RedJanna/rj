@@ -101,8 +101,6 @@ def looks_like_booking_payment_followup(message: str) -> bool:
     low = (message or "").strip().lower()
     if not low:
         return False
-    if low in {"1", "2", "bir", "iki"}:
-        return True
     markers = (
         "odeme link",
         "ödeme link",
@@ -202,8 +200,10 @@ def force_primary_intent_from_explicit_message(
     looks_like_price_slot_payload_fn: Callable[[str], bool],
 ) -> str:
     low = (message or "").lower()
+    normalized_low = _normalize_for_keyword_match(message)
     has_booking_markers = looks_like_explicit_booking_create_signal(message)
     has_restaurant_booking_markers = looks_like_restaurant_booking_signal(message)
+    has_room_context = _contains_any(normalized_low, ROOM_CONTEXT_MARKERS)
     has_payment_markers = any(
         k in low
         for k in (
@@ -222,6 +222,49 @@ def force_primary_intent_from_explicit_message(
         )
     )
     has_price_markers = looks_like_generic_price_or_availability_signal(message)
+    has_transfer_context = any(
+        k in normalized_low
+        for k in ("transfer", "havaliman", "havaalani", "airport", "dalaman", "antalya")
+    )
+    has_transfer_booking_details = any(
+        k in normalized_low
+        for k in (
+            "ucus",
+            "flight",
+            "rota",
+            "route",
+            "bagaj",
+            "luggage",
+            "baggage",
+            "bebek koltugu",
+            "baby seat",
+            "guest",
+            "kisi",
+        )
+    ) or bool(looks_like_price_slot_payload_fn(message))
+    has_local_faq_markers = any(
+        k in normalized_low
+        for k in (
+            "wifi",
+            "wi fi",
+            "internet",
+            "kahvalti",
+            "breakfast",
+            "check in",
+            "check out",
+            "checkout",
+            "konum",
+            "adres",
+            "location",
+            "sezon",
+            "season",
+            "havuz",
+            "pool",
+            "spa",
+            "otopark",
+            "parking",
+        )
+    )
 
     if any(
         k in low
@@ -242,6 +285,12 @@ def force_primary_intent_from_explicit_message(
         if has_restaurant_booking_markers:
             return "RESTAURANT_BOOKING_CREATE"
         return "HOTEL_BOOKING_CREATE"
+    if has_transfer_context and not has_payment_markers and not has_room_context:
+        if has_transfer_booking_details or any(k in normalized_low for k in ("rezerv", "booking", "book", "reserve")):
+            return "TRANSFER_BOOKING_REQUEST"
+        return "TRANSFER_INFO"
+    if has_local_faq_markers and not has_payment_markers and not has_room_context and not has_transfer_context:
+        return "LOCAL_FAQ_INFO"
 
     if has_price_markers and not has_payment_markers:
         return "PRICE_QUERY"

@@ -239,12 +239,67 @@ def get_hotel_runtime_info(settings: dict[str, Any] | None = None) -> dict[str, 
     return normalize_hotel_runtime_info(payload if isinstance(payload, dict) else {})
 
 
+def get_welcome_message_for_lang(lang: str = "tr", info: dict[str, Any] | None = None) -> str:
+    payload = info or get_hotel_runtime_info()
+    lang_norm = (lang or "en").strip().lower()
+    if lang_norm not in LANGUAGE_CODES:
+        lang_norm = "en"
+    i18n = payload.get("welcome_message_i18n")
+    if not isinstance(i18n, dict):
+        i18n = dict(DEFAULT_WELCOME_I18N)
+    text = str(i18n.get(lang_norm) or "").strip()
+    if text:
+        return text
+    fallback = str(i18n.get("en") or "").strip()
+    if fallback:
+        return fallback
+    return DEFAULT_WELCOME_I18N["en"]
+
+
 def get_message_delay_seconds() -> int:
     info = get_hotel_runtime_info()
     try:
         return int(info.get("message_delay_seconds") or 0)
     except Exception:
         return 0
+
+
+def format_runtime_mmdd(mmdd: str, lang: str = "tr") -> str:
+    month_names_tr = {
+        1: "Ocak",
+        2: "Şubat",
+        3: "Mart",
+        4: "Nisan",
+        5: "Mayıs",
+        6: "Haziran",
+        7: "Temmuz",
+        8: "Ağustos",
+        9: "Eylül",
+        10: "Ekim",
+        11: "Kasım",
+        12: "Aralık",
+    }
+    month_names_en = {
+        1: "January",
+        2: "February",
+        3: "March",
+        4: "April",
+        5: "May",
+        6: "June",
+        7: "July",
+        8: "August",
+        9: "September",
+        10: "October",
+        11: "November",
+        12: "December",
+    }
+    try:
+        month, day = [int(x) for x in str(mmdd or "").split("-")]
+    except Exception:
+        return "April 1" if (lang or "").strip().lower() == "en" else "1 Nisan"
+    if (lang or "").strip().lower() == "en":
+        return f"{month_names_en.get(month, 'April')} {day}"
+    return f"{day} {month_names_tr.get(month, 'Nisan')}"
 
 
 def season_bounds_for_year(year: int, info: dict[str, Any] | None = None) -> tuple[date_type, date_type]:
@@ -273,6 +328,55 @@ def build_cancellation_policy_reply(lang: str = "tr", info: dict[str, Any] | Non
             "- Невозвратный тариф: цена ниже, отмена/возврат не предусмотрены.\n"
             f"- Тариф с бесплатной отменой: цена выше, 100% возврат при отмене не позднее чем за {days} дней до заезда.\n"
             "- После заезда отмена/возврат не предусмотрены."
+        )
+    if lang_norm == "de":
+        return (
+            "Unsere Stornierungsbedingungen hängen vom Tariftyp ab:\n"
+            "- Nicht erstattungsfähig: günstigerer Preis, keine Stornierung/Erstattung.\n"
+            f"- Kostenlose Stornierung: höherer Preis, 100% Erstattung bis {days} Tage vor Check-in.\n"
+            "- Nach dem Check-in ist keine Stornierung/Erstattung möglich."
+        )
+    if lang_norm == "es":
+        return (
+            "La política de cancelación depende del tipo de tarifa:\n"
+            "- No reembolsable: precio más bajo, sin cancelación/reembolso.\n"
+            f"- Cancelación gratuita: precio más alto, reembolso del 100% hasta {days} días antes del check-in.\n"
+            "- Después del check-in no hay cancelación/reembolso."
+        )
+    if lang_norm == "fr":
+        return (
+            "Notre politique d'annulation dépend du type de tarif:\n"
+            "- Non remboursable: prix plus bas, sans annulation/remboursement.\n"
+            f"- Annulation gratuite: prix plus élevé, remboursement à 100% jusqu'à {days} jours avant l'arrivée.\n"
+            "- Après l'arrivée, aucune annulation/remboursement n'est possible."
+        )
+    if lang_norm == "pt":
+        return (
+            "Nossa política de cancelamento depende do tipo de tarifa:\n"
+            "- Não reembolsável: preço mais baixo, sem cancelamento/reembolso.\n"
+            f"- Cancelamento gratuito: preço mais alto, reembolso de 100% até {days} dias antes do check-in.\n"
+            "- Após o check-in, não há cancelamento/reembolso."
+        )
+    if lang_norm == "ar":
+        return (
+            "تعتمد سياسة الإلغاء على نوع السعر:\n"
+            "- غير قابل للاسترداد: سعر أقل، بدون إلغاء/استرداد.\n"
+            f"- إلغاء مجاني: سعر أعلى، استرداد 100% حتى {days} أيام قبل تسجيل الدخول.\n"
+            "- بعد تسجيل الدخول لا يوجد إلغاء/استرداد."
+        )
+    if lang_norm == "zh":
+        return (
+            "取消政策取决于房价类型：\n"
+            "- 不可退款：价格更低，不可取消/退款。\n"
+            f"- 免费取消：价格更高，入住前{days}天可100%退款。\n"
+            "- 入住后不可取消/退款。"
+        )
+    if lang_norm == "hi":
+        return (
+            "रद्दीकरण नीति चुनी गई दर पर निर्भर करती है:\n"
+            "- नॉन-रिफंडेबल: कम कीमत, कोई कैंसलेशन/रिफंड नहीं।\n"
+            f"- फ्री कैंसलेशन: अधिक कीमत, चेक-इन से {days} दिन पहले तक 100% रिफंड।\n"
+            "- चेक-इन के बाद कैंसलेशन/रिफंड उपलब्ध नहीं है।"
         )
     return (
         "Our cancellation policy depends on rate type:\n"
@@ -340,6 +444,10 @@ def build_runtime_hard_override_block(info: dict[str, Any] | None = None) -> str
     sales_followup_days = int(payload.get("free_cancel_sales_followup_days_before_checkin") or 5)
     restaurant_close = str(payload.get("restaurant_bar_closing_time") or "22:00")
     pool_close = str(payload.get("pool_bar_closing_time") or "22:00")
+    message_delay = int(payload.get("message_delay_seconds") or 0)
+    admin_phone = str(payload.get("admin_phone") or "")
+    chef_phone = str(payload.get("chef_phone") or "")
+    welcome_tr = str(payload.get("welcome_message_tr") or "").strip()
     runtime_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     return (
         "\n\nRUNTIME_HOTEL_CONFIG (HARD OVERRIDE):\n"
@@ -350,8 +458,11 @@ def build_runtime_hard_override_block(info: dict[str, Any] | None = None) -> str
         f"- Free-cancel sales follow-up lead time: {sales_followup_days} days before check-in\n"
         f"- Restaurant-bar closing time: {restaurant_close}\n"
         f"- Pool-bar closing time: {pool_close}\n"
+        f"- Message delay seconds: {message_delay}\n"
+        f"- Admin phone: {admin_phone}\n"
+        f"- Chef phone: {chef_phone}\n"
+        f"- Welcome message (TR): {welcome_tr}\n"
         f"- Full runtime payload (JSON): {runtime_json}\n"
         "- If any static text conflicts with this block, ALWAYS use this block.\n"
         "- If a new key appears in runtime payload, treat it as authoritative."
     )
-    return base

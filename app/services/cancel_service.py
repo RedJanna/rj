@@ -73,6 +73,9 @@ def _is_cancel_intent_v2(text: str) -> bool:
     non_cancel_terms = [
         "ucretsiz iptal", "free cancellation", "free cancel",
         "iptal edilemez", "non-refundable", "non refundable", "refundable",
+        "iptal politikasi", "iptal politikası", "iptal kosulu", "iptal koşulu",
+        "iptal kurali", "iptal kurali", "iade politikasi", "iade politikası",
+        "iade kosulu", "iade koşulu", "iade sarti", "iade şartı",
         "cancelation policy", "cancellation policy", "cancellation rules",
         "refund policy", "refund rules", "terms and conditions",
         "tarife", "tarif", "rate type", "rate plan",

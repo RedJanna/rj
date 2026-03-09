@@ -342,6 +342,22 @@ class TestMenuSelection:
             assert response is not None
             assert len(response) > 0
 
+    @pytest.mark.unit
+    def test_menu_response_uses_runtime_transfer_and_restaurant_values(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.utils.message_utils.get_hotel_runtime_info",
+            lambda: {
+                "dalaman_transfer_fee_eur": 99,
+                "antalya_transfer_fee_eur": 170,
+                "restaurant_bar_closing_time": "23:15",
+            },
+        )
+        transfer_response = get_menu_response(2, "tr")
+        restaurant_response = get_menu_response(3, "tr")
+        assert "99" in transfer_response
+        assert "170" in transfer_response
+        assert "23:15" in restaurant_response
+
 
 class TestWelcomeAndClosingMessages:
     """Karşılama ve kapanış mesajları testleri"""
@@ -368,6 +384,19 @@ class TestWelcomeAndClosingMessages:
         assert "2." in msg
         assert "3." in msg
         assert "4." in msg
+
+    @pytest.mark.unit
+    def test_welcome_message_uses_runtime_translation(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.utils.message_utils.get_hotel_runtime_info",
+            lambda: {
+                "welcome_message_i18n": {
+                    "tr": "Merhaba runtime",
+                    "en": "Hello from runtime",
+                }
+            },
+        )
+        assert get_welcome_message("en") == "Hello from runtime"
     
     
     @pytest.mark.unit

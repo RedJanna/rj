@@ -21,6 +21,10 @@ from app.core.settings_service import (
     normalize_language_policy,
     get_valid_room_keys,
 )
+from app.services.hotel_runtime_info_service import (
+    maybe_generate_welcome_translations,
+    normalize_hotel_runtime_info,
+)
 from app.services.handoff_packet_service import validate_handoff_packet
 from app.services.metrics_service import list_events
 from app.services.daily_learning_report_service import (
@@ -391,6 +395,7 @@ def build_admin_ops_router(
         standard_room_keys: str = None,
         currency_enabled_json: str = None,
         language_enabled_json: str = None,
+        hotel_runtime_info_json: str = None,
     ):
         settings = load_settings_fn()
         old_settings = dict(settings)
@@ -474,6 +479,27 @@ def build_admin_ops_router(
                     "error": "language_enabled_json bir obje olmalidir.",
                 }
             settings["language_enabled"] = normalize_language_policy(parsed)
+        if hotel_runtime_info_json is not None:
+            try:
+                parsed = json.loads(hotel_runtime_info_json)
+            except Exception:
+                return {
+                    "success": False,
+                    "error": "hotel_runtime_info_json gecersiz JSON formatinda.",
+                }
+            if not isinstance(parsed, dict):
+                return {
+                    "success": False,
+                    "error": "hotel_runtime_info_json bir obje olmalidir.",
+                }
+            normalized_runtime_info = normalize_hotel_runtime_info(parsed)
+            tr_welcome = str(normalized_runtime_info.get("welcome_message_tr") or "").strip()
+            current_i18n = normalized_runtime_info.get("welcome_message_i18n")
+            normalized_runtime_info["welcome_message_i18n"] = maybe_generate_welcome_translations(
+                tr_welcome,
+                current_i18n if isinstance(current_i18n, dict) else None,
+            )
+            settings["hotel_runtime_info"] = normalized_runtime_info
 
         if "quiet_auto_room_keys" in settings and "quiet_handoff_room_keys" in settings:
             overlap = sorted(set(settings.get("quiet_auto_room_keys", [])) & set(settings.get("quiet_handoff_room_keys", [])))
@@ -533,6 +559,13 @@ def build_admin_ops_router(
                 key="language_enabled",
                 old_value=old_settings.get("language_enabled", dict(DEFAULT_LANGUAGE_POLICY)),
                 new_value=settings.get("language_enabled", dict(DEFAULT_LANGUAGE_POLICY)),
+                updated_by=updated_by,
+            )
+        if old_settings.get("hotel_runtime_info") != settings.get("hotel_runtime_info"):
+            append_settings_audit_entry(
+                key="hotel_runtime_info",
+                old_value=old_settings.get("hotel_runtime_info"),
+                new_value=settings.get("hotel_runtime_info"),
                 updated_by=updated_by,
             )
 

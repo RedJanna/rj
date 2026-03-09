@@ -201,10 +201,31 @@ class TestIsWithinSeason:
         ("2026-01-15", False),  # Kış
         ("2026-12-25", False),  # Aralık
     ])
-    def test_season_dates(self, date: str, expected_within: bool):
+    def test_season_dates(self, monkeypatch, date: str, expected_within: bool):
         """Sezon tarihleri kontrolü"""
+        monkeypatch.setattr(
+            "app.services.restaurant_reservation_flow_service.season_bounds_for_year",
+            lambda year: (
+                datetime(year, 4, 10).date(),
+                datetime(year, 11, 10).date(),
+            ),
+        )
         result, message = is_within_season(date)
         assert result == expected_within, f"Date: {date}, Expected: {expected_within}, Got: {result}, Message: {message}"
+
+    @pytest.mark.unit
+    def test_season_message_uses_runtime_dates(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.utils.date_utils.season_bounds_for_year",
+            lambda year: (
+                datetime(year, 4, 20).date(),
+                datetime(year, 11, 10).date(),
+            ),
+        )
+        result, message = is_within_season("2026-04-15")
+        assert result is False
+        assert "20 Nisan" in message
+        assert "10 Kasım" in message
 
 
 class TestValidateReservationTime:

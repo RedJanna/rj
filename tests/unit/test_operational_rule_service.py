@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.operational_rule_service import evaluate_operational_reservation_rule
 
 
@@ -181,3 +183,72 @@ def test_room_price_comparison_question_does_not_trigger_rezid_rule():
         [],
     )
     assert result is None
+
+
+@pytest.mark.unit
+def test_pool_bar_hours_question_returns_runtime_value(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.operational_rule_service.get_hotel_runtime_info",
+        lambda: {
+            "pool_bar_closing_time": "17:00",
+            "restaurant_bar_closing_time": "22:00",
+            "hotel_opening_mmdd": "04-20",
+            "hotel_closing_mmdd": "11-10",
+        },
+    )
+    result = evaluate_operational_reservation_rule("havuz bar saat kaçta kapanıyor", [])
+    assert result is not None
+    assert result["status"] == "operational_pool_bar_hours"
+    assert "17:00" in result["reply"]
+
+
+@pytest.mark.unit
+def test_hotel_opening_question_returns_runtime_dates(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.operational_rule_service.get_hotel_runtime_info",
+        lambda: {
+            "pool_bar_closing_time": "17:00",
+            "restaurant_bar_closing_time": "22:00",
+            "hotel_opening_mmdd": "04-20",
+            "hotel_closing_mmdd": "11-10",
+        },
+    )
+    result = evaluate_operational_reservation_rule("peki otel ne zaman açılıyor", [])
+    assert result is not None
+    assert result["status"] == "operational_hotel_season_info"
+    assert "20 Nisan" in result["reply"]
+    assert "10 Kasım" in result["reply"]
+
+
+@pytest.mark.unit
+def test_transfer_fee_question_uses_runtime_values(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.operational_rule_service.get_hotel_runtime_info",
+        lambda: {
+            "dalaman_transfer_fee_eur": 95,
+            "antalya_transfer_fee_eur": 180,
+            "free_cancel_sales_followup_days_before_checkin": 4,
+        },
+    )
+    result = evaluate_operational_reservation_rule("Antalya transfer ücreti ne kadar?", [])
+    assert result is not None
+    assert result["status"] == "operational_transfer_fee_info"
+    assert "180" in result["reply"]
+
+
+@pytest.mark.unit
+def test_sales_followup_question_uses_runtime_days(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.operational_rule_service.get_hotel_runtime_info",
+        lambda: {
+            "free_cancel_sales_followup_days_before_checkin": 3,
+            "free_cancellation_days_before_checkin": 7,
+        },
+    )
+    result = evaluate_operational_reservation_rule(
+        "Ücretsiz iptal rezervasyonlarında satış birimi kaç gün önce iletişime geçiyor?",
+        [],
+    )
+    assert result is not None
+    assert result["status"] == "operational_sales_followup_info"
+    assert "3 gün" in result["reply"]

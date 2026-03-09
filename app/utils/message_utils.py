@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Tuple
 import re
 
+from app.services.hotel_runtime_info_service import (
+    get_hotel_runtime_info,
+    get_welcome_message_for_lang,
+)
+
 
 # ======================================================
 # 9. MESAJ TESPİT FONKSİYONLARI
@@ -72,160 +77,8 @@ def is_greeting(text: str) -> Tuple[bool, str]:
     return False, "tr"
 
 def get_welcome_message(lang: str = "tr") -> str:
-    """Karşılama mesajı - dil destekli"""
-    lang = (lang or "en").strip().lower()
-    if lang == "en":
-        return """Hello! 👋
-
-Welcome to Kassandra Ölüdeniz. 🌊
-I'm here to help you with a special accommodation experience.
-
-How can I assist you today?
-1. Reservation / Room information
-2. Transfer & Transportation
-3. Restaurant & Breakfast
-4. Special requests (surprise, celebration, etc.)
-
-You can type a number or ask your question directly 😊"""
-
-    if lang == "de":
-        return """Hallo! 👋
-
-Willkommen im Kassandra Ölüdeniz. 🌊
-Ich bin hier, um Ihnen bei einem besonderen Aufenthalt zu helfen.
-
-Wie kann ich Ihnen heute helfen?
-1. Reservierung / Zimmerinformationen
-2. Transfer & Transport
-3. Restaurant & Frühstück
-4. Sonderwünsche (Überraschung, Feier usw.)
-
-Sie können eine Nummer eingeben oder Ihre Frage direkt schreiben 😊"""
-
-    if lang == "es":
-        return """¡Hola! 👋
-
-Bienvenido a Kassandra Ölüdeniz. 🌊
-Estoy aquí para ayudarte con una experiencia de alojamiento especial.
-
-¿Cómo puedo ayudarte hoy?
-1. Reserva / Información de habitaciones
-2. Traslado y transporte
-3. Restaurante y desayuno
-4. Solicitudes especiales (sorpresa, celebración, etc.)
-
-Puedes escribir un número o hacer tu pregunta directamente 😊"""
-
-    if lang == "fr":
-        return """Bonjour ! 👋
-
-Bienvenue à Kassandra Ölüdeniz. 🌊
-Je suis là pour vous aider à organiser un séjour exceptionnel.
-
-Comment puis-je vous aider aujourd'hui ?
-1. Réservation / Informations sur les chambres
-2. Transfert et transport
-3. Restaurant et petit-déjeuner
-4. Demandes spéciales (surprise, célébration, etc.)
-
-Vous pouvez taper un numéro ou poser votre question directement 😊"""
-
-    if lang == "pt":
-        return """Olá! 👋
-
-Bem-vindo ao Kassandra Ölüdeniz. 🌊
-Estou aqui para ajudar você com uma experiência de hospedagem especial.
-
-Como posso ajudar você hoje?
-1. Reserva / Informações sobre quartos
-2. Transfer e transporte
-3. Restaurante e café da manhã
-4. Pedidos especiais (surpresa, celebração, etc.)
-
-Você pode digitar um número ou fazer sua pergunta diretamente 😊"""
-
-    if lang == "ru":
-        return """Здравствуйте! 👋
-
-Добро пожаловать в Kassandra Ölüdeniz. 🌊
-Я здесь, чтобы помочь вам организовать незабываемый отдых.
-
-Чем могу помочь?
-1. Бронирование / Информация о номерах
-2. Трансфер и транспорт
-3. Ресторан и завтрак
-4. Особые пожелания (сюрприз, праздник и т.д.)
-
-Вы можете выбрать номер или задать вопрос напрямую 😊"""
-
-    if lang == "ar":
-        return """مرحبًا! 👋
-
-مرحبًا بك في Kassandra Ölüdeniz. 🌊
-أنا هنا لمساعدتك في تجربة إقامة مميزة.
-
-كيف يمكنني مساعدتك اليوم؟
-1. الحجز / معلومات الغرف
-2. النقل والمواصلات
-3. المطعم والإفطار
-4. الطلبات الخاصة (مفاجأة، احتفال، إلخ)
-
-يمكنك كتابة رقم الخيار أو إرسال سؤالك مباشرة 😊"""
-
-    if lang == "zh":
-        return """您好！👋
-
-欢迎来到 Kassandra Ölüdeniz。🌊
-我在这里为您提供特别的住宿协助。
-
-今天我可以如何帮助您？
-1. 预订 / 房型信息
-2. 接送与交通
-3. 餐厅与早餐
-4. 特别需求（惊喜、庆祝等）
-
-您可以输入数字，或直接发送您的问题 😊"""
-
-    if lang == "hi":
-        return """नमस्ते! 👋
-
-Kassandra Ölüdeniz में आपका स्वागत है। 🌊
-मैं आपकी विशेष ठहरने की योजना में मदद करने के लिए यहां हूं।
-
-आज मैं आपकी कैसे मदद कर सकता/सकती हूं?
-1. बुकिंग / कमरे की जानकारी
-2. ट्रांसफर और परिवहन
-3. रेस्टोरेंट और नाश्ता
-4. विशेष अनुरोध (सरप्राइज़, सेलिब्रेशन आदि)
-
-आप नंबर टाइप कर सकते हैं या अपना प्रश्न सीधे लिख सकते हैं 😊"""
-
-    if lang == "tr":
-        return """Merhaba,
-
-Kassandra Ölüdeniz'e hoş geldiniz. 🌊
-Size özel bir konaklama deneyimi hazırlamak için buradayım.
-
-Size nasıl yardımcı olabilirim?
-1. Rezervasyon / Oda bilgisi
-2. Transfer & Ulaşım
-3. Restoran & kahvaltı
-4. Özel istekler (sürpriz, kutlama, vb.)
-
-Seçiminizi numara ile belirtebilir veya doğrudan sorunuzu yazabilirsiniz 😊"""
-
-    return """Hello! 👋
-
-Welcome to Kassandra Ölüdeniz. 🌊
-I'm here to help you with a special accommodation experience.
-
-How can I assist you today?
-1. Reservation / Room information
-2. Transfer & Transportation
-3. Restaurant & Breakfast
-4. Special requests (surprise, celebration, etc.)
-
-You can type a number or ask your question directly 😊"""
+    """Karşılama mesajı - runtime otel verisini önceliklendirir."""
+    return get_welcome_message_for_lang(lang, get_hotel_runtime_info())
 
 def is_menu_selection(text: str) -> Tuple[bool, int]:
     t = text.strip()
@@ -234,25 +87,60 @@ def is_menu_selection(text: str) -> Tuple[bool, int]:
     return False, 0
 
 def get_menu_response(selection: int, lang: str = "tr") -> str:
-    """Menü seçimi cevabı - dil destekli"""
+    """Menü seçimi cevabı - runtime otel verisini önceliklendirir."""
+    info = get_hotel_runtime_info()
+    dalaman_fee = int(info.get("dalaman_transfer_fee_eur") or 75)
+    antalya_fee = int(info.get("antalya_transfer_fee_eur") or 140)
+    restaurant_close = str(info.get("restaurant_bar_closing_time") or "22:00")
+
     responses_tr = {
         1: "Rezervasyon veya oda bilgisi için size yardımcı olabilirim. Hangi tarihler için ve kaç kişilik konaklama düşünüyorsunuz?",
-        2: "Transfer hizmetimiz hakkında bilgi almak istiyorsunuz. Dalaman Havalimanı'ndan otelimize tek yön transfer ücreti 75€'dur (nakit ödeme). Antalya Havalimanı'ndan da transfer hizmetimiz mevcuttur; detaylı bilgi için müşteri temsilcimize bağlanabilirsiniz. Hangi havalimanından ve ne zaman geleceksiniz?",
-        3: "Restoran ve kahvaltı hakkında bilgi vermek isterim:\n\n☕ Kahvaltı: 08:00 - 10:30 (dahil)\n🍽️ Restoran: 11:00 - 22:00\n\nMenümüzü incelemek için: https://www.kassandrarestaurant.com/menuler",
+        2: (
+            "Transfer hizmetimiz hakkında bilgi almak istiyorsunuz. "
+            f"Dalaman Havalimanı'ndan otelimize tek yön transfer ücreti {dalaman_fee}€'dur (nakit ödeme). "
+            f"Antalya Havalimanı'ndan otelimize tek yön transfer ücreti {antalya_fee}€'dur. "
+            "Hangi havalimanından ve ne zaman geleceksiniz?"
+        ),
+        3: (
+            "Restoran ve kahvaltı hakkında bilgi vermek isterim:\n\n"
+            "☕ Kahvaltı: 08:00 - 10:30 (dahil)\n"
+            f"🍽️ Restoran-Bar kapanış: {restaurant_close}\n\n"
+            "Menümüzü incelemek için: https://www.kassandrarestaurant.com/menuler"
+        ),
         4: "Özel isteklerinizi memnuniyetle karşılarız! Lütfen sürpriz, kutlama veya başka taleplerinizi detaylandırabilir misiniz?"
     }
     
     responses_en = {
         1: "I can help you with reservation or room information. What dates are you considering and for how many guests?",
-        2: "You want information about our transfer service. Transfer from Dalaman Airport to our hotel is 75€ one way (cash payment). We also provide transfers from Antalya Airport; for detailed information, you can be connected to our representative. Which airport and when will you arrive?",
-        3: "Let me tell you about our restaurant and breakfast:\n\n☕ Breakfast: 08:00 - 10:30 (included)\n🍽️ Restaurant: 11:00 - 22:00\n\nView our menu: https://www.kassandrarestaurant.com/menuler",
+        2: (
+            "You want information about our transfer service. "
+            f"Transfer from Dalaman Airport to our hotel is {dalaman_fee}€ one way (cash payment). "
+            f"Transfer from Antalya Airport to our hotel is {antalya_fee}€ one way. "
+            "Which airport and when will you arrive?"
+        ),
+        3: (
+            "Let me tell you about our restaurant and breakfast:\n\n"
+            "☕ Breakfast: 08:00 - 10:30 (included)\n"
+            f"🍽️ Restaurant-Bar closing time: {restaurant_close}\n\n"
+            "View our menu: https://www.kassandrarestaurant.com/menuler"
+        ),
         4: "We would be happy to accommodate your special requests! Please provide details about your surprise, celebration, or other requests."
     }
 
     responses_ru = {
         1: "Я могу помочь вам с бронированием или информацией о номерах. На какие даты и на сколько гостей вы планируете проживание?",
-        2: "Трансфер из аэропорта Даламан до нашего отеля — 75€ в одну сторону (оплата наличными). Мы также предоставляем трансфер из аэропорта Анталья; для подробной информации вас могут соединить с нашим представителем. Из какого аэропорта и когда вы прибываете?",
-        3: "Расскажу о нашем ресторане и завтраке:\n\n☕ Завтрак: 08:00 - 10:30 (включён в стоимость)\n🍽️ Ресторан: 11:00 - 22:00\n\nНаше меню: https://www.kassandrarestaurant.com/menuler",
+        2: (
+            "Трансфер из аэропорта Даламан до нашего отеля — "
+            f"{dalaman_fee}€ в одну сторону (оплата наличными). "
+            f"Трансфер из аэропорта Анталья до нашего отеля — {antalya_fee}€ в одну сторону. "
+            "Из какого аэропорта и когда вы прибываете?"
+        ),
+        3: (
+            "Расскажу о нашем ресторане и завтраке:\n\n"
+            "☕ Завтрак: 08:00 - 10:30 (включён в стоимость)\n"
+            f"🍽️ Время закрытия ресторана-бара: {restaurant_close}\n\n"
+            "Наше меню: https://www.kassandrarestaurant.com/menuler"
+        ),
         4: "Мы будем рады выполнить ваши особые пожелания! Пожалуйста, расскажите подробнее о вашем сюрпризе, празднике или других просьбах."
     }
 
@@ -646,7 +534,8 @@ Penthouse Jakuzili (45m2): İade yapılmaz: {{penthouse_iade}} | Ücretsiz İpta
 Premium Jakuzili (45m2): İade yapılmaz: {{premium_iade}} | Ücretsiz İptal: {{premium_ucretsiz}}
 
 Giriş: 14:00 | Çıkış: 12:00
-Ücretsiz iptal: Girişten 5 gün öncesine kadar %100 iade.
+Ücretsiz iptal: Girişten {{free_cancel_days}} gün öncesine kadar %100 iade.
+Ücretsiz iptal rezervasyonlarında satış birimimiz girişten {{sales_followup_days}} gün önce sizinle iletişime geçer.
 Rezervasyon onayı için 1 gecelik ödeme alınır.
 """
 
@@ -666,7 +555,8 @@ Penthouse Jacuzzi (45m2): Non-refundable: {{penthouse_iade}} | Free Cancel: {{pe
 Premium Jacuzzi (45m2): Non-refundable: {{premium_iade}} | Free Cancel: {{premium_ucretsiz}}
 
 Check-in: 2:00 PM | Check-out: 12:00 PM
-Free cancellation: 100% refund up to 5 days before arrival.
+Free cancellation: 100% refund up to {{free_cancel_days}} days before arrival.
+For free-cancellation bookings, our sales team contacts guests {{sales_followup_days}} days before check-in.
 """
 
 TEMPLATE_BOUTIQUE_RU = """
@@ -685,7 +575,8 @@ Penthouse Джакузи (45м2): Без возврата: {{penthouse_iade}} | 
 Premium Джакузи (45м2): Без возврата: {{premium_iade}} | Бесплатная отмена: {{premium_ucretsiz}}
 
 Заезд: 14:00 | Выезд: 12:00
-Бесплатная отмена: 100% возврат до 5 дней до заезда.
+Бесплатная отмена: 100% возврат при отмене не позднее чем за {{free_cancel_days}} дней до заезда.
+По бронированиям с бесплатной отменой наш отдел продаж связывается с гостем за {{sales_followup_days}} дней до заезда.
 """
 
 PRICE_PLACEHOLDERS = [
@@ -699,6 +590,9 @@ def build_price_reply(user_message: str) -> Tuple[str, str]:
     lang = detect_language(user_message)
     hotel = detect_hotel(user_message)
     adults, children = parse_guests(user_message)
+    runtime_info = get_hotel_runtime_info()
+    free_cancel_days = int(runtime_info.get("free_cancellation_days_before_checkin") or 5)
+    sales_followup_days = int(runtime_info.get("free_cancel_sales_followup_days_before_checkin") or 5)
     
     if lang == "ru":
         template = TEMPLATE_BOUTIQUE_RU
@@ -713,6 +607,8 @@ def build_price_reply(user_message: str) -> Tuple[str, str]:
     reply = reply.replace("{{gece_sayisi}}", "{{gece_sayisi}}")
     reply = reply.replace("{{yetişkin}}", str(adults) if adults else "{{yetişkin}}")
     reply = reply.replace("{{çocuk}}", str(children) if children else "{{çocuk}}")
+    reply = reply.replace("{{free_cancel_days}}", str(free_cancel_days))
+    reply = reply.replace("{{sales_followup_days}}", str(sales_followup_days))
     
     for key in PRICE_PLACEHOLDERS:
         reply = reply.replace("{{" + key + "}}", "___ €")

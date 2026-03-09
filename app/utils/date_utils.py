@@ -13,6 +13,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Tuple, Optional
 
+from app.services.hotel_runtime_info_service import format_runtime_mmdd, season_bounds_for_year
+
 
 # ======================================================
 # SEZON AYARLARI
@@ -207,25 +209,23 @@ def format_date_short(date_str: str) -> str:
 def is_within_season(date_str: str) -> Tuple[bool, str]:
     """
     Tarih sezon içinde mi kontrol et.
-    Sezon: 10 Nisan - 10 Kasım
+    Sezon aralığı runtime otel verisinden okunur.
     
     Returns: (is_valid: bool, error_message: str)
     """
     try:
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        month = date_obj.month
-        day = date_obj.day
-        
-        season_start = (SEASON_SETTINGS["season_start_month"], SEASON_SETTINGS["season_start_day"])
-        season_end = (SEASON_SETTINGS["season_end_month"], SEASON_SETTINGS["season_end_day"])
-        
-        # 10 Nisan öncesi
-        if (month, day) < season_start:
-            return False, f"Üzgünüz, otelimiz ve restoranımız 10 Nisan - 10 Kasım tarihleri arasında hizmet vermektedir. Seçtiğiniz tarih ({format_date_turkish(date_str)}) sezon dışındadır."
-        
-        # 10 Kasım sonrası
-        if (month, day) > season_end:
-            return False, f"Üzgünüz, otelimiz ve restoranımız 10 Nisan - 10 Kasım tarihleri arasında hizmet vermektedir. Seçtiğiniz tarih ({format_date_turkish(date_str)}) sezon dışındadır."
+        selected_date = date_obj.date()
+        season_start, season_end = season_bounds_for_year(date_obj.year)
+        opening_text = format_runtime_mmdd(season_start.strftime("%m-%d"), "tr")
+        closing_text = format_runtime_mmdd(season_end.strftime("%m-%d"), "tr")
+
+        if selected_date < season_start or selected_date > season_end:
+            return (
+                False,
+                f"Üzgünüz, otelimiz ve restoranımız {opening_text} - {closing_text} tarihleri arasında hizmet vermektedir. "
+                f"Seçtiğiniz tarih ({format_date_turkish(date_str)}) sezon dışındadır.",
+            )
         
         return True, ""
     except:
@@ -234,10 +234,21 @@ def is_within_season(date_str: str) -> Tuple[bool, str]:
 
 def is_within_season_en(date_str: str) -> Tuple[bool, str]:
     """İngilizce hata mesajı ile sezon kontrolü"""
+    try:
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        return False, "Invalid date"
     is_valid, _ = is_within_season(date_str)
     if not is_valid:
         formatted = format_date_english(date_str)
-        return False, f"Sorry, our hotel and restaurant operate between April 10 - November 10. Your selected date ({formatted}) is outside the season."
+        season_start, season_end = season_bounds_for_year(date_obj.year)
+        opening_text = format_runtime_mmdd(season_start.strftime("%m-%d"), "en")
+        closing_text = format_runtime_mmdd(season_end.strftime("%m-%d"), "en")
+        return (
+            False,
+            f"Sorry, our hotel and restaurant operate between {opening_text} - {closing_text}. "
+            f"Your selected date ({formatted}) is outside the season.",
+        )
     return True, ""
 
 

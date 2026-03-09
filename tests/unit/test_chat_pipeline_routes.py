@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from datetime import date
 
 import app.routes.chat_routes as chat_routes
 
@@ -101,7 +102,7 @@ def _build_test_app(overrides: dict | None = None) -> tuple[FastAPI, dict]:
         "format_date_turkish_fn": _return_none_sync,
         "get_welcome_message_fn": _return_none_sync,
         "is_greeting_fn": lambda *_args, **_kwargs: False,
-        "is_menu_selection_fn": lambda *_args, **_kwargs: False,
+        "is_menu_selection_fn": lambda *_args, **_kwargs: (False, 0),
         "get_menu_response_fn": _return_none_sync,
         "try_handle_elektra_price_entry_fn": _return_none_async,
         "detect_price_request_fn": lambda *_args, **_kwargs: False,
@@ -193,6 +194,61 @@ async def test_chat_returns_clarify_required_when_slots_missing(monkeypatch):
     assert status == 200
     assert body["status"] == "fallback"
     assert body["reply"] == "fallback"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_price_query_season_blocked_before_slot_clarify(monkeypatch):
+    monkeypatch.setenv("NEW_PIPELINE_ENABLED", "1")
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(
+        chat_routes,
+        "route_intent",
+        lambda _message, _domain: {
+            "primary_intent": "PRICE_QUERY",
+            "domain_hint": "hotel",
+            "semantic_intent": "PRICE_QUERY",
+            "semantic_confidence": 0.91,
+            "router": "intent_router_v1",
+        },
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "evaluate_slot_coverage",
+        lambda _intent, _message: {
+            "intent_name": "PRICE_QUERY",
+            "required_slots": ["check_in_date", "check_out_date", "adult_count"],
+            "missing_required_slots": ["adult_count"],
+            "has_minimum_required": False,
+        },
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: True,
+    )
+    monkeypatch.setattr(
+        chat_routes,
+        "season_bounds_for_year",
+        lambda year: (date(year, 4, 20), date(year, 11, 10)),
+    )
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {"response": None, "lang": "tr", "history": [{"role": "assistant", "content": "prev"}]}
+
+    app, _events = _build_test_app(overrides={"run_chat_prechecks_fn": _run_chat_prechecks_non_first})
+    status, body = await _post_chat(
+        app,
+        {
+            "phone": "+905551112233",
+            "message": "3 Nisan ile 5 Nisan arası için fiyat bilgisi alabilir miyim ?",
+            "message_id": "m-season-1",
+        },
+    )
+
+    assert status == 200
+    assert body["status"] == "season_blocked"
+    assert "20 Nisan" in body["reply"]
 
 
 @pytest.mark.unit
@@ -830,6 +886,56 @@ async def test_chat_restaurant_guest_followup_does_not_trigger_unknown_guard_han
     assert status == 200
     assert body["status"] == "reservation_flow_started"
     assert body["reply"] == "restoran-adim-2"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_chat_hotel_price_payload_is_not_reclassified_as_restaurant_followup(monkeypatch):
+    monkeypatch.setenv("STRICT_AI_FIRST", "0")
+    monkeypatch.setattr(chat_routes, "infer_primary_intent", lambda _message, _hint: "PRICE_QUERY")
+    monkeypatch.setattr(
+        chat_routes,
+        "should_request_slot_clarification",
+        lambda _intent, _coverage, has_active_flow=False: False,
+    )
+
+    async def _restaurant_start(**_kwargs):
+        return chat_routes.ChatResponse(reply="restoran-adim-2", status="reservation_flow_started")
+
+    async def _price_entry(**_kwargs):
+        return chat_routes.ChatResponse(reply="price-flow", status="price_flow")
+
+    async def _run_chat_prechecks_non_first(**_kwargs):
+        return {
+            "response": None,
+            "lang": "tr",
+            "history": [
+                {
+                    "role": "assistant",
+                    "content": "Restoran rezervasyonu için adım adım ilerleyeceğiz. İlk adım: Lütfen kişi sayısını paylaşın.",
+                }
+            ],
+        }
+
+    app, _events = _build_test_app(
+        overrides={
+            "run_chat_prechecks_fn": _run_chat_prechecks_non_first,
+            "try_start_restaurant_reservation_flow_fn": _restaurant_start,
+            "try_handle_price_flow_entry_fn": _price_entry,
+        }
+    )
+    status, body = await _post_chat(
+        app,
+        {
+            "phone": "+905551112233",
+            "message": "21 Nisan ile 23 Nisan arasında 2 yetişkin",
+            "message_id": "m-hotel-price-followup-1",
+        },
+    )
+
+    assert status == 200
+    assert body["status"] == "price_flow"
+    assert body["reply"] == "price-flow"
 
 
 @pytest.mark.unit

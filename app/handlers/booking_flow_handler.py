@@ -53,6 +53,7 @@ from app.services.booking_flow_service import (
     ROOM_TYPE_MAP,
 )
 from app.core.settings_service import get_quiet_room_policy
+from app.services.cancel_service import _is_cancel_intent_v2
 
 
 # ============================
@@ -547,23 +548,40 @@ def _build_booking_pending_reply(
 # ============================
 
 CANCEL_KEYWORDS = [
-    "iptal", "vazgec", "vazgeciyorum", "istemiyorum",
+    "iptal", "vazgec", "vazgeciyorum", "vazgectim", "istemiyorum",
     "cancel", "stop", "dur", "birakmak", "birak",
-    "cik", "cikis",
 ]
 
 
+CONFIRM_YES_KEYWORDS = ["evet", "yes", "onay", "onayla", "onayliyorum", "tamam", "ok", "olur"]
+CONFIRM_NO_KEYWORDS = ["hayir", "no", "iptal", "vazgec", "vazgectim", "istemiyorum", "red"]
+
+
+def _normalize_short_reply(message: str) -> str:
+    low = _normalize_match_text(message or "")
+    low = re.sub(r"[^a-z0-9\s]", " ", low)
+    low = re.sub(r"\s+", " ", low).strip()
+    return low
+
+
+def _matches_short_reply(message: str, keywords: list[str]) -> bool:
+    normalized = _normalize_short_reply(message)
+    if not normalized:
+        return False
+    return any(normalized == kw or normalized.startswith(f"{kw} ") for kw in keywords)
+
+
+def _matches_exact_reply(message: str, keywords: list[str]) -> bool:
+    normalized = _normalize_short_reply(message)
+    if not normalized:
+        return False
+    return normalized in keywords
+
+
 def _is_cancel(message: str) -> bool:
-    low = _turkish_lower(message or "").strip()
-    # "ücretsiz iptal" = fiyat tipi seçimi, gerçek iptal DEĞİL
-    non_cancel_phrases = [
-        "ucretsiz iptal", "free cancel", "free cancellation",
-        "iptal edilemez", "iptal edilemeyen",
-    ]
-    for phrase in non_cancel_phrases:
-        if phrase in low:
-            return False
-    return any(kw in low for kw in CANCEL_KEYWORDS)
+    if _is_cancel_intent_v2(message):
+        return True
+    return _matches_exact_reply(message, CANCEL_KEYWORDS)
 
 
 # ============================
@@ -3794,16 +3812,13 @@ async def _handle_confirm(
     """Onay / red isle."""
     low = _turkish_lower(message).strip()
 
-    yes_keywords = ["evet", "yes", "onay", "onayla", "onayliyorum", "tamam", "ok", "olur"]
-    no_keywords = ["hayir", "no", "iptal", "vazgec", "istemiyorum", "red"]
-
-    if any(kw in low for kw in no_keywords):
+    if _matches_short_reply(message, CONFIRM_NO_KEYWORDS):
         clear_booking_flow(phone)
         if lang == "en":
             return {"reply": "Reservation request cancelled. How can I help you?", "status": "booking_cancelled", "log": None}
         return {"reply": "Rezervasyon talebi iptal edildi. Size nasıl yardımcı olabilirim?", "status": "booking_cancelled", "log": None}
 
-    if not any(kw in low for kw in yes_keywords):
+    if not _matches_short_reply(message, CONFIRM_YES_KEYWORDS):
         if lang == "en":
             return {"reply": "Please confirm with 'Yes' or cancel with 'No'.", "status": "booking_flow", "log": None}
         return {"reply": "Lütfen 'Evet' ile onaylayın veya 'Hayır' ile iptal edin.", "status": "booking_flow", "log": None}

@@ -15,6 +15,7 @@ set "ROOT=%~dp0"
 set "APP=%ROOT%kassandra_openai_bot.py"
 set "PREFLIGHT=%ROOT%tools\preflight_check.py"
 set "VENV_PY=%ROOT%venv\Scripts\python.exe"
+set "DOTVENV_PY=%ROOT%.venv\Scripts\python.exe"
 set "UVICORN_MODULE=app.main:app"
 set "UVICORN_RELOAD_FLAGS="
 set "BACKEND_RUNNER_DEFAULT=uvicorn"
@@ -65,7 +66,21 @@ if not exist "%APP%" (
 )
 
 if not exist "%VENV_PY%" (
-  echo HATA: venv python bulunamadi: %VENV_PY%
+  if exist "%DOTVENV_PY%" (
+    set "VENV_PY=%DOTVENV_PY%"
+  ) else if defined VIRTUAL_ENV (
+    if exist "%VIRTUAL_ENV%\Scripts\python.exe" (
+      set "VENV_PY=%VIRTUAL_ENV%\Scripts\python.exe"
+    )
+  )
+)
+
+if not exist "%VENV_PY%" (
+  echo HATA: Python bulunamadi.
+  echo Beklenen yollar:
+  echo - %ROOT%venv\Scripts\python.exe
+  echo - %ROOT%.venv\Scripts\python.exe
+  if defined VIRTUAL_ENV echo - %VIRTUAL_ENV%\Scripts\python.exe
   pause
   exit /b 1
 )

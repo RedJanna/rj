@@ -7,12 +7,20 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List
+from uuid import uuid4
+
+import httpx
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services.access_control_service import load_paused
+from app.services.admin_chat_lab_service import (
+    append_chat_lab_event,
+    build_chat_lab_snapshot,
+)
+from app.services.conversation_store import is_recovered_active_phone, purge_phone_data
+from app.services.correlation_service import CORRELATION_HEADER
 from app.utils.message_utils import detect_language
-from app.services.conversation_store import is_recovered_active_phone
 
 
 SUPPORTED_LANGS = {"en", "tr", "ru", "de", "ar", "es", "fr", "zh", "hi", "pt"}
@@ -216,6 +224,563 @@ HOTEL_RUNTIME_PAGE_HTML = """<!DOCTYPE html>
 </html>
 """
 
+ADMIN_CHAT_LAB_HTML = """<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Chat Laboratuvarı</title>
+  <style>
+    :root{
+      --bg:#f3efe7;
+      --ink:#1e2331;
+      --muted:#6f7486;
+      --panel:#151b2f;
+      --panel-2:#1d2540;
+      --line:rgba(255,255,255,.08);
+      --hero:#d3a85f;
+      --hero-2:#f05e4a;
+      --user:#1aa6a6;
+      --bot:#ffffff;
+      --ok:#93e6ae;
+      --warn:#f7cb6b;
+      --danger:#ff8d8d;
+      --debug:#0f1425;
+      --chip:#24304f;
+      --shadow:0 20px 50px rgba(9,14,28,.18);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:"Trebuchet MS","Segoe UI",sans-serif;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(240,94,74,.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(211,168,95,.18), transparent 22%),
+        linear-gradient(180deg, #efe7d8 0%, var(--bg) 32%, #e8edf4 100%);
+    }
+    .shell{min-height:100vh;display:grid;grid-template-rows:auto 1fr}
+    .topbar{
+      background:linear-gradient(120deg,#131a31,#1b2443 60%,#202b50);
+      color:#eef3ff;
+      padding:18px 22px;
+      box-shadow:0 10px 35px rgba(10,16,32,.25);
+      position:sticky;top:0;z-index:20;
+    }
+    .topbar-inner{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
+    .brand{display:flex;align-items:center;gap:14px}
+    .brand-mark{
+      width:44px;height:44px;border-radius:14px;
+      background:linear-gradient(135deg,var(--hero),var(--hero-2));
+      display:grid;place-items:center;font-size:20px;color:#161922;font-weight:900;
+      box-shadow:0 12px 22px rgba(240,94,74,.25);
+    }
+    .brand h1{
+      margin:0;
+      font-family:"Palatino Linotype","Book Antiqua",serif;
+      font-size:28px;
+      letter-spacing:.01em;
+    }
+    .brand p{margin:4px 0 0;color:#b9c1d8;font-size:13px}
+    .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .controls label{font-size:12px;color:#a9b2cf;margin-bottom:4px;display:block}
+    .control{min-width:170px}
+    .topbar select,.topbar input{
+      width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.07);color:#fff;outline:none;
+    }
+    .btn{
+      border:0;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer;
+      transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease;
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn-primary{background:linear-gradient(135deg,var(--hero),var(--hero-2));color:#13161f;box-shadow:0 10px 24px rgba(240,94,74,.24)}
+    .btn-subtle{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.1)}
+    .btn-danger{background:#f54d57;color:#fff}
+    .main{
+      display:grid;
+      grid-template-columns:minmax(0,1.3fr) minmax(330px,.7fr);
+      gap:18px;
+      padding:18px;
+      align-items:start;
+    }
+    .panel{
+      background:rgba(255,255,255,.58);
+      backdrop-filter:blur(16px);
+      border:1px solid rgba(18,28,48,.07);
+      border-radius:22px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .chat-shell{
+      min-height:calc(100vh - 132px);
+      display:grid;
+      grid-template-rows:auto 1fr auto auto;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.7), rgba(245,244,239,.84)),
+        radial-gradient(circle at 20% 0%, rgba(26,166,166,.08), transparent 26%);
+    }
+    .toolbar{
+      padding:18px 20px 10px;
+      display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;
+    }
+    .toolbar h2{margin:0;font-size:21px;font-family:"Palatino Linotype","Book Antiqua",serif}
+    .toolbar p{margin:6px 0 0;color:var(--muted);font-size:13px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px 14px}
+    .chip{
+      background:rgba(36,48,79,.08);color:#27304f;border:1px solid rgba(39,48,79,.08);
+      padding:8px 12px;border-radius:999px;font-size:12px;cursor:pointer;
+    }
+    .chip:hover{background:rgba(36,48,79,.14)}
+    .chat-window{
+      padding:6px 20px 18px;
+      overflow:auto;
+      display:flex;flex-direction:column;gap:14px;
+      min-height:420px;max-height:56vh;
+    }
+    .msg{display:flex;flex-direction:column;max-width:min(82%,720px)}
+    .msg.user{align-self:flex-end}
+    .msg.bot{align-self:flex-start}
+    .bubble{
+      padding:16px 18px;
+      border-radius:18px;
+      line-height:1.52;
+      white-space:pre-wrap;
+      word-break:break-word;
+      box-shadow:0 10px 24px rgba(22,28,40,.08);
+    }
+    .user .bubble{
+      background:linear-gradient(135deg,#1ca8a3,#198390);
+      color:#f7ffff;border-bottom-right-radius:6px;
+    }
+    .bot .bubble{
+      background:rgba(255,255,255,.92);
+      color:#1d2434;border:1px solid rgba(20,26,40,.08);border-bottom-left-radius:6px;
+    }
+    .meta{
+      margin-top:6px;font-size:11px;color:var(--muted);padding:0 4px;
+      display:flex;gap:8px;flex-wrap:wrap;
+    }
+    .composer{padding:14px 18px;border-top:1px solid rgba(25,31,48,.07)}
+    .composer-inner{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}
+    .composer textarea{
+      width:100%;min-height:82px;max-height:220px;resize:vertical;border-radius:18px;
+      border:1px solid rgba(27,35,59,.12);padding:15px 16px;background:rgba(255,255,255,.82);color:#1e2331;
+      font:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+    }
+    .composer-actions{display:flex;gap:10px;align-items:center}
+    .mini-note{font-size:12px;color:var(--muted);padding:0 2px;margin-top:8px}
+    .debug{
+      background:linear-gradient(180deg,#151b2f 0%, #101528 100%);
+      color:#eef3ff;
+      min-height:calc(100vh - 132px);
+      display:grid;
+      grid-template-rows:auto auto auto 1fr;
+    }
+    .debug-head{padding:18px 18px 10px;border-bottom:1px solid var(--line)}
+    .debug-head h3{margin:0;font-size:18px;font-family:"Palatino Linotype","Book Antiqua",serif}
+    .debug-head p{margin:6px 0 0;color:#aab4d7;font-size:12px}
+    .debug-grid{
+      padding:14px 14px 10px;
+      display:grid;grid-template-columns:1fr;gap:10px;
+    }
+    .debug-card{
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px 12px 10px;
+    }
+    .debug-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#93a1ca;margin-bottom:7px}
+    .badge{
+      display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;
+      font-size:12px;font-weight:700;
+    }
+    .badge.good{background:rgba(147,230,174,.14);color:var(--ok)}
+    .badge.warn{background:rgba(247,203,107,.14);color:var(--warn)}
+    .badge.danger{background:rgba(255,141,141,.14);color:var(--danger)}
+    .json-block,.trace-list,.event-list{
+      font-family:"Consolas","SFMono-Regular",monospace;
+      font-size:12px;line-height:1.5;
+      background:rgba(0,0,0,.24);border-radius:14px;border:1px solid rgba(255,255,255,.05);
+      padding:12px;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    }
+    .trace-wrap{padding:0 14px 14px}
+    .trace-wrap h4{margin:2px 0 10px;color:#dbe5ff;font-size:13px}
+    .trace-item,.event-item{
+      padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)
+    }
+    .trace-item:last-child,.event-item:last-child{border-bottom:0}
+    .trace-stage{color:#f0c97d;font-weight:700}
+    .trace-meta{color:#aab4d7;font-size:11px;margin-top:4px}
+    .status-bar{
+      display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;
+      padding:10px 18px 16px;color:var(--muted);font-size:12px
+    }
+    .pulse{
+      width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;
+      background:#42d392;box-shadow:0 0 0 rgba(66,211,146,.45);animation:pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%{box-shadow:0 0 0 0 rgba(66,211,146,.35)}
+      70%{box-shadow:0 0 0 12px rgba(66,211,146,0)}
+      100%{box-shadow:0 0 0 0 rgba(66,211,146,0)}
+    }
+    @media (max-width: 1100px){
+      .main{grid-template-columns:1fr}
+      .chat-shell,.debug{min-height:auto}
+      .chat-window{max-height:none}
+    }
+    @media (max-width: 720px){
+      .topbar{padding:16px}
+      .main{padding:12px}
+      .toolbar,.chips,.composer,.debug-head,.debug-grid,.trace-wrap{padding-left:14px;padding-right:14px}
+      .msg{max-width:92%}
+      .composer-inner{grid-template-columns:1fr}
+      .composer-actions{justify-content:space-between}
+      .controls{width:100%}
+      .control{min-width:0;flex:1 1 100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">◎</div>
+          <div>
+            <h1>Chat Laboratuvarı</h1>
+            <p>WhatsApp pipeline ile aynı çekirdek, Meta olmadan canlı debug çalışma alanı.</p>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label>Model</label>
+            <select id="modelSelect"></select>
+          </div>
+          <div class="control">
+            <label>Test Telefonu</label>
+            <input id="phoneInput" value="905599991234" />
+          </div>
+          <button class="btn btn-subtle" onclick="resetConversation()">Reset</button>
+          <a href="/admin/tools" class="btn btn-subtle" style="text-decoration:none;display:inline-flex;align-items:center;">Araçlara Dön</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <section class="panel chat-shell">
+        <div class="toolbar">
+          <div>
+            <h2>Admin Sohbet Simülatörü</h2>
+            <p>Buradan gönderilen her mesaj gerçek `/chat` akışına gider. Sağ panel correlation trace ve flow state'i anlık gösterir.</p>
+          </div>
+          <button class="btn btn-primary" onclick="refreshSnapshot()">Debug Yenile</button>
+        </div>
+
+        <div class="chips">
+          <button class="chip" onclick="usePrompt('Bana 21 Nisan ile 23 Nisan arasında fiyat bilgisi verir misin')">Konaklama fiyatı</button>
+          <button class="chip" onclick="usePrompt('Dalaman transfer ücreti kaç euro?')">Transfer ücreti</button>
+          <button class="chip" onclick="usePrompt('22 Nisan akşamı için restoranda 2 kişilik masa ayırtmak istiyorum')">Restoran rezervasyonu</button>
+          <button class="chip" onclick="usePrompt('Otel ne zaman açılıyor?')">Operasyon bilgisi</button>
+        </div>
+
+        <div id="chatWindow" class="chat-window">
+          <div class="msg bot">
+            <div class="bubble">Hazır. Mesaj gönderdiğinde hem bot cevabı hem de backend iç trace burada izlenir.</div>
+            <div class="meta"><span>system</span></div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer-inner">
+            <div>
+              <textarea id="messageInput" placeholder="Mesajınızı yazın. Örn: 21 Nisan ile 23 Nisan arasında 2 yetişkin için fiyat nedir?"></textarea>
+              <div class="mini-note">Enter + Shift yeni satır. Sadece Enter gönderir.</div>
+            </div>
+            <div class="composer-actions">
+              <button class="btn btn-subtle" onclick="insertGreeting()">Merhaba</button>
+              <button class="btn btn-primary" onclick="sendMessage()">Gönder</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-bar">
+          <div><span class="pulse"></span><span id="statusText">Hazır</span></div>
+          <div id="correlationText">correlation: -</div>
+        </div>
+      </section>
+
+      <aside class="panel debug">
+        <div class="debug-head">
+          <h3>Debug Panel</h3>
+          <p>Trace, flow state, backend olayları ve tam iç snapshot burada tutulur.</p>
+        </div>
+
+        <div class="debug-grid">
+          <div class="debug-card"><div class="debug-label">Conversation State</div><div id="stateBadge" class="badge warn">GREETING</div></div>
+          <div class="debug-card"><div class="debug-label">Intent</div><div id="intentBadge" class="badge warn">other</div></div>
+          <div class="debug-card"><div class="debug-label">Language</div><div id="languageBadge" class="badge good">tr</div></div>
+          <div class="debug-card"><div class="debug-label">Risk Flags</div><div id="riskFlags" class="json-block">[]</div></div>
+          <div class="debug-card"><div class="debug-label">Escalation</div><div id="escalationBlock" class="json-block">{}</div></div>
+          <div class="debug-card"><div class="debug-label">Entities</div><div id="entitiesBlock" class="json-block">{}</div></div>
+          <div class="debug-card"><div class="debug-label">Next Step</div><div id="nextStepBlock" class="badge good">await_user_intent</div></div>
+          <div class="debug-card"><div class="debug-label">Full Internal JSON</div><div id="fullJson" class="json-block">{}</div></div>
+        </div>
+
+        <div class="trace-wrap">
+          <h4>Decision Trace</h4>
+          <div id="traceList" class="trace-list">Henüz trace yok.</div>
+        </div>
+
+        <div class="trace-wrap">
+          <h4>Backend Events</h4>
+          <div id="backendEvents" class="event-list">Henüz backend olayı yok.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      phone: '',
+      correlationId: '',
+      autoRefreshHandle: null,
+      messages: [],
+    };
+
+    function byId(id){ return document.getElementById(id); }
+
+    function setStatus(text){
+      byId('statusText').textContent = text || 'Hazır';
+    }
+
+    function safeJson(value){
+      return JSON.stringify(value ?? {}, null, 2);
+    }
+
+    function usePrompt(text){
+      byId('messageInput').value = text;
+      byId('messageInput').focus();
+    }
+
+    function insertGreeting(){
+      byId('messageInput').value = 'Merhaba';
+      byId('messageInput').focus();
+    }
+
+    function currentPhone(){
+      return (byId('phoneInput').value || '').trim();
+    }
+
+    function setBadge(id, value, variant){
+      const el = byId(id);
+      el.textContent = value || '-';
+      el.className = 'badge ' + (variant || 'warn');
+    }
+
+    function renderMessages(messages){
+      const items = [];
+      (messages || []).forEach((row) => {
+        const user = (row.user_message || '').trim();
+        const bot = (row.bot_reply || '').trim();
+        if (user){
+          items.push({ role: 'user', text: user, meta: row.date || row.timestamp || row.time || '' });
+        }
+        if (bot){
+          items.push({ role: 'bot', text: bot, meta: row.date || row.timestamp || row.time || row.status || '' });
+        }
+      });
+
+      const html = items.length ? items.map((item) => `
+        <div class="msg ${item.role}">
+          <div class="bubble">${escapeHtml(item.text)}</div>
+          <div class="meta"><span>${item.role}</span><span>${escapeHtml(item.meta || '')}</span></div>
+        </div>
+      `).join('') : `
+        <div class="msg bot">
+          <div class="bubble">Bu telefon için henüz kayıtlı mesaj yok.</div>
+          <div class="meta"><span>system</span></div>
+        </div>
+      `;
+      byId('chatWindow').innerHTML = html;
+      byId('chatWindow').scrollTop = byId('chatWindow').scrollHeight;
+    }
+
+    function renderTrace(list){
+      if (!list || !list.length){
+        byId('traceList').textContent = 'Henüz trace yok.';
+        return;
+      }
+      byId('traceList').innerHTML = list.map((row) => {
+        const main = row.event || row.primary_intent || row.stage || 'trace';
+        return `
+          <div class="trace-item">
+            <div><span class="trace-stage">${escapeHtml(row.stage || 'stage')}</span> · ${escapeHtml(String(main))}</div>
+            <div class="trace-meta">${escapeHtml(safeSummary(row))}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderEvents(targetId, list, emptyText){
+      if (!list || !list.length){
+        byId(targetId).textContent = emptyText;
+        return;
+      }
+      byId(targetId).innerHTML = list.map((row) => `
+        <div class="event-item">${escapeHtml(safeSummary(row))}</div>
+      `).join('');
+    }
+
+    function safeSummary(row){
+      const slim = Object.assign({}, row);
+      delete slim.flow_states;
+      delete slim.full_internal_json;
+      return JSON.stringify(slim);
+    }
+
+    function escapeHtml(text){
+      return String(text || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    async function loadModels(){
+      const res = await fetch('/admin/model');
+      const data = await res.json();
+      const select = byId('modelSelect');
+      select.innerHTML = (data.allowed_models || []).map((model) => `
+        <option value="${escapeHtml(model)}" ${model === data.current_model ? 'selected' : ''}>${escapeHtml(model)}</option>
+      `).join('');
+    }
+
+    async function changeModel(){
+      const model = byId('modelSelect').value;
+      const res = await fetch('/admin/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      const data = await res.json();
+      if (data && data.success){
+        setStatus('Model güncellendi: ' + model);
+        return;
+      }
+      setStatus('Model güncellenemedi: ' + (data.error || 'bilinmeyen hata'));
+    }
+
+    async function refreshSnapshot(){
+      state.phone = currentPhone();
+      if (!state.phone){
+        setStatus('Telefon numarası gerekli.');
+        return;
+      }
+      const url = new URL('/admin/chat-lab/inspect', window.location.origin);
+      url.searchParams.set('phone', state.phone);
+      if (state.correlationId){
+        url.searchParams.set('correlation_id', state.correlationId);
+      }
+      const res = await fetch(url.toString());
+      const data = await res.json();
+      applySnapshot(data);
+      setStatus('Debug yenilendi');
+    }
+
+    function applySnapshot(payload){
+      const debug = (payload && payload.debug) || {};
+      state.correlationId = (payload && payload.correlation_id) || state.correlationId || '';
+      byId('correlationText').textContent = 'correlation: ' + (state.correlationId || '-');
+      renderMessages(((payload && payload.conversation) || {}).messages || []);
+      setBadge('stateBadge', debug.conversation_state || 'GREETING', 'warn');
+      setBadge('intentBadge', debug.intent || 'other', debug.intent && debug.intent !== 'other' ? 'good' : 'warn');
+      setBadge('languageBadge', debug.language || 'en', 'good');
+      byId('riskFlags').textContent = safeJson(debug.risk_flags || []);
+      byId('escalationBlock').textContent = safeJson(debug.escalation || {});
+      byId('entitiesBlock').textContent = safeJson(debug.entities || {});
+      setBadge('nextStepBlock', debug.next_step || 'await_user_intent', 'good');
+      byId('fullJson').textContent = safeJson(debug.full_internal_json || {});
+      renderTrace((payload && payload.traces) || []);
+      renderEvents('backendEvents', (payload && payload.backend_events) || [], 'Henüz backend olayı yok.');
+    }
+
+    async function sendMessage(){
+      const phone = currentPhone();
+      const message = (byId('messageInput').value || '').trim();
+      if (!phone || !message){
+        setStatus('Telefon ve mesaj gerekli.');
+        return;
+      }
+      state.phone = phone;
+      setStatus('Mesaj gönderiliyor...');
+      const res = await fetch('/admin/chat-lab/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false){
+        setStatus('Gönderim hatası: ' + (data.error || 'bilinmeyen hata'));
+        return;
+      }
+      state.correlationId = data.correlation_id || '';
+      byId('messageInput').value = '';
+      applySnapshot(data.snapshot || {});
+      setStatus('Cevap alındı: ' + ((data.chat && data.chat.status) || 'ok'));
+    }
+
+    async function resetConversation(){
+      const phone = currentPhone();
+      if (!phone){
+        setStatus('Reset için telefon gerekli.');
+        return;
+      }
+      state.phone = phone;
+      setStatus('Konuşma sıfırlanıyor...');
+      const res = await fetch('/admin/chat-lab/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      state.correlationId = data.correlation_id || '';
+      applySnapshot(data.snapshot || {});
+      setStatus('Konuşma sıfırlandı');
+    }
+
+    function startAutoRefresh(){
+      if (state.autoRefreshHandle){
+        clearInterval(state.autoRefreshHandle);
+      }
+      state.autoRefreshHandle = window.setInterval(() => {
+        if (!currentPhone()) return;
+        refreshSnapshot().catch(() => {});
+      }, 4000);
+    }
+
+    byId('messageInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey){
+        event.preventDefault();
+        sendMessage().catch(() => {});
+      }
+    });
+
+    byId('modelSelect').addEventListener('change', () => {
+      changeModel().catch(() => {});
+    });
+
+    loadModels()
+      .then(() => refreshSnapshot())
+      .then(() => startAutoRefresh())
+      .catch((error) => setStatus('Panel yükleme hatası: ' + error.message));
+  </script>
+</body>
+</html>
+"""
+
 
 def _normalize_lang(code: str) -> str:
     c = (code or "").strip().lower()
@@ -257,6 +822,37 @@ def _infer_language_lock(messages: list[dict]) -> str:
     return "en"
 
 
+def _inject_chat_lab_link(html: str, *, active: bool = False) -> str:
+    if not html or "/admin/chat-lab" in html:
+        return html
+    if 'class="nav-links"' not in html and 'class="nav"' not in html:
+        return html
+    link_style = (
+        "color: #000; background: #f6c667; text-decoration: none; margin: 0 10px; "
+        "padding: 10px 20px; border: 1px solid #f6c667; border-radius: 5px; "
+        "display: inline-block; margin-bottom: 5px; font-weight: bold;"
+        if active
+        else
+        "color: #f6c667; text-decoration: none; margin: 0 10px; "
+        "padding: 10px 20px; border: 1px solid #f6c667; border-radius: 5px; "
+        "display: inline-block; margin-bottom: 5px;"
+    )
+    link_html = f'<a href="/admin/chat-lab" style="{link_style}">🧪 Chat Lab</a>'
+
+    for nav_class in ("nav-links", "nav"):
+        pattern = rf'(<div class="{nav_class}"[^>]*>)(.*?)(</div>)'
+        replaced, count = re.subn(
+            pattern,
+            lambda m: f"{m.group(1)}{m.group(2)}{link_html}{m.group(3)}",
+            html,
+            count=1,
+            flags=re.S,
+        )
+        if count:
+            return replaced
+    return html
+
+
 def build_admin_misc_router(
     app_ref: Any,
     get_session_fn: Callable[[str], Any],
@@ -282,8 +878,7 @@ def build_admin_misc_router(
 ) -> APIRouter:
     router = APIRouter(tags=["admin-misc"])
 
-    @router.get("/admin", response_class=HTMLResponse)
-    async def admin_panel(request: Request):
+    def _session_redirect_if_needed(request: Request):
         session_token = request.cookies.get("kassandra_session")
         if not session_token:
             return RedirectResponse(url="/admin/login", status_code=302)
@@ -295,7 +890,14 @@ def build_admin_misc_router(
             return RedirectResponse(url="/admin/verify-2fa", status_code=302)
         if user and not user.totp_enabled:
             return RedirectResponse(url="/admin/setup-2fa", status_code=302)
-        return admin_html
+        return None
+
+    @router.get("/admin", response_class=HTMLResponse)
+    async def admin_panel(request: Request):
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(_inject_chat_lab_link(admin_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/root-redirect", response_class=HTMLResponse)
     async def root_redirect():
@@ -303,23 +905,17 @@ def build_admin_misc_router(
 
     @router.get("/admin/reminders-page", response_class=HTMLResponse)
     async def reminders_page(request: Request):
-        session_token = request.cookies.get("kassandra_session")
-        if not session_token:
-            return RedirectResponse(url="/admin/login", status_code=302)
-        session = get_session_fn(session_token)
-        if not session or (get_user_fn(session.username) and get_user_fn(session.username).totp_enabled and not session.is_2fa_verified):
-            return RedirectResponse(url="/admin/login", status_code=302)
-        return reminder_page_html
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(_inject_chat_lab_link(reminder_page_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/reservations-page", response_class=HTMLResponse)
     async def reservations_page(request: Request):
-        session_token = request.cookies.get("kassandra_session")
-        if not session_token:
-            return RedirectResponse(url="/admin/login", status_code=302)
-        session = get_session_fn(session_token)
-        if not session or (get_user_fn(session.username) and get_user_fn(session.username).totp_enabled and not session.is_2fa_verified):
-            return RedirectResponse(url="/admin/login", status_code=302)
-        return reservations_html
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(_inject_chat_lab_link(reservations_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/transfer-reservations-page", response_class=HTMLResponse)
     async def transfer_reservations_page():
@@ -327,27 +923,148 @@ def build_admin_misc_router(
 
     @router.get("/admin/restaurant-plan", response_class=HTMLResponse)
     async def restaurant_plan_page(request: Request):
-        session_token = request.cookies.get("kassandra_session")
-        if not session_token:
-            return RedirectResponse(url="/admin/login", status_code=302)
-        session = get_session_fn(session_token)
-        if not session or (get_user_fn(session.username) and get_user_fn(session.username).totp_enabled and not session.is_2fa_verified):
-            return RedirectResponse(url="/admin/login", status_code=302)
-        return HTMLResponse(restaurant_plan_html, headers={"Content-Type": "text/html; charset=utf-8"})
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(_inject_chat_lab_link(restaurant_plan_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/dashboard", response_class=HTMLResponse)
     async def dashboard_page():
-        return dashboard_html
+        return HTMLResponse(_inject_chat_lab_link(dashboard_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/hotel-runtime-page", response_class=HTMLResponse)
     async def hotel_runtime_page(request: Request):
-        session_token = request.cookies.get("kassandra_session")
-        if not session_token:
-            return RedirectResponse(url="/admin/login", status_code=302)
-        session = get_session_fn(session_token)
-        if not session or (get_user_fn(session.username) and get_user_fn(session.username).totp_enabled and not session.is_2fa_verified):
-            return RedirectResponse(url="/admin/login", status_code=302)
-        return HOTEL_RUNTIME_PAGE_HTML
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(_inject_chat_lab_link(HOTEL_RUNTIME_PAGE_HTML), headers={"Content-Type": "text/html; charset=utf-8"})
+
+    @router.get("/admin/chat-lab", response_class=HTMLResponse)
+    async def chat_lab_page(request: Request):
+        redirect = _session_redirect_if_needed(request)
+        if redirect:
+            return redirect
+        return HTMLResponse(ADMIN_CHAT_LAB_HTML, headers={"Content-Type": "text/html; charset=utf-8"})
+
+    @router.get("/admin/chat-lab/inspect")
+    async def inspect_chat_lab(phone: str, correlation_id: str = ""):
+        clean_phone = re.sub(r"[^\d]", "", phone or "")
+        if not clean_phone:
+            return {"success": False, "error": "Telefon numarası gerekli."}
+        snapshot = build_chat_lab_snapshot(
+            conversations_dir=conversations_dir,
+            phone=clean_phone,
+            correlation_id=(correlation_id or "").strip(),
+        )
+        return {"success": True, **snapshot}
+
+    @router.post("/admin/chat-lab/send")
+    async def send_chat_lab_message(request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "error": "Geçersiz JSON body"}
+
+        phone = re.sub(r"[^\d]", "", str(body.get("phone") or ""))
+        message = str(body.get("message") or "").strip()
+        if not phone:
+            return {"success": False, "error": "Telefon numarası gerekli."}
+        if not message:
+            return {"success": False, "error": "Mesaj boş olamaz."}
+
+        message_id = str(body.get("message_id") or f"admin-lab-{uuid4().hex[:12]}")
+        requested_correlation_id = str(body.get("correlation_id") or f"admin-chat-lab-{uuid4().hex}")
+        chat_payload = {
+            "phone": phone,
+            "message": message,
+            "message_id": message_id,
+        }
+        response_payload: Dict[str, Any] = {}
+        response_status = 500
+        error_text = ""
+
+        try:
+            transport = httpx.ASGITransport(app=app_ref)
+            async with httpx.AsyncClient(transport=transport, base_url="http://admin-chat-lab") as client:
+                chat_resp = await client.post(
+                    "/chat",
+                    json=chat_payload,
+                    headers={CORRELATION_HEADER: requested_correlation_id},
+                )
+            response_status = chat_resp.status_code
+            try:
+                response_payload = chat_resp.json()
+            except Exception:
+                response_payload = {"reply": "", "status": "error"}
+                error_text = (chat_resp.text or "")[:300]
+            effective_correlation_id = chat_resp.headers.get(CORRELATION_HEADER) or requested_correlation_id
+        except Exception as exc:
+            effective_correlation_id = requested_correlation_id
+            error_text = str(exc)
+            response_payload = {"reply": "", "status": "error", "reason_code": "chat_lab_proxy_failed"}
+
+        append_chat_lab_event(
+            {
+                "phone": phone,
+                "correlation_id": effective_correlation_id,
+                "message_id": message_id,
+                "message": message,
+                "reply": response_payload.get("reply") or "",
+                "status": response_payload.get("status") or f"http_{response_status}",
+                "reason_code": response_payload.get("reason_code"),
+                "error": error_text,
+            }
+        )
+        snapshot = build_chat_lab_snapshot(
+            conversations_dir=conversations_dir,
+            phone=phone,
+            correlation_id=effective_correlation_id,
+        )
+        success = response_status == 200 and not error_text
+        return {
+            "success": success,
+            "correlation_id": effective_correlation_id,
+            "chat": response_payload,
+            "snapshot": snapshot,
+            "error": error_text,
+        }
+
+    @router.post("/admin/chat-lab/reset")
+    async def reset_chat_lab(request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "error": "Geçersiz JSON body"}
+
+        phone = re.sub(r"[^\d]", "", str(body.get("phone") or ""))
+        if not phone:
+            return {"success": False, "error": "Telefon numarası gerekli."}
+
+        correlation_id = f"admin-chat-lab-reset-{uuid4().hex[:16]}"
+        purge_result = purge_phone_data(phone, hard_delete_bookings=False)
+        append_chat_lab_event(
+            {
+                "phone": phone,
+                "correlation_id": correlation_id,
+                "message_id": "",
+                "message": "",
+                "reply": "",
+                "status": "reset",
+                "reason_code": "",
+                "purge": purge_result,
+            }
+        )
+        snapshot = build_chat_lab_snapshot(
+            conversations_dir=conversations_dir,
+            phone=phone,
+            correlation_id=correlation_id,
+        )
+        return {
+            "success": True,
+            "correlation_id": correlation_id,
+            "purge": purge_result,
+            "snapshot": snapshot,
+        }
 
     @router.post("/admin/send-message")
     async def send_manual_message(phone: str, message: str):
@@ -435,7 +1152,7 @@ def build_admin_misc_router(
 
     @router.get("/admin/tools", response_class=HTMLResponse)
     async def admin_tools():
-        return admin_tools_html
+        return HTMLResponse(_inject_chat_lab_link(admin_tools_html), headers={"Content-Type": "text/html; charset=utf-8"})
 
     @router.get("/admin/model")
     async def get_current_model():

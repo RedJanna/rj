@@ -4,6 +4,11 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.content.automation_info import AUTOMATION_RUNTIME_RULES, get_runtime_text
+from app.services.hotel_runtime_info_service import (
+    build_cancellation_policy_reply,
+    format_runtime_mmdd,
+    get_hotel_runtime_info,
+)
 
 _OPERATIONAL_LANG_TEXTS: Dict[str, Dict[str, str]] = {
     "rez_id_info": {
@@ -169,6 +174,92 @@ def _extract_latest_user_slot(history: List[Dict[str, Any]], extractor) -> str:
         if value:
             return value
     return ""
+
+
+def _is_pool_bar_hours_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    has_pool = any(k in text for k in ["havuz", "pool"])
+    has_bar = "bar" in text
+    has_hour_intent = any(k in text for k in ["kacta", "kaçta", "saat", "kapan", "close", "closing", "ne zaman"])
+    return has_pool and has_bar and has_hour_intent
+
+
+def _is_restaurant_bar_hours_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    has_restaurant = any(k in text for k in ["restoran", "restaurant"])
+    has_hour_intent = any(k in text for k in ["kacta", "kaçta", "saat", "kapan", "close", "closing", "ne zaman"])
+    has_pool = any(k in text for k in ["havuz", "pool"])
+    return has_restaurant and has_hour_intent and not has_pool
+
+
+def _is_hotel_season_info_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    has_hotel_context = any(k in text for k in ["otel", "hotel", "sezon", "season"])
+    has_open_close_intent = any(
+        k in text
+        for k in [
+            "aciliyor",
+            "açılıyor",
+            "acilis",
+            "açılış",
+            "kapanis",
+            "kapanış",
+            "open",
+            "opening",
+            "close",
+            "closing",
+            "ne zaman",
+            "hangi tarihte",
+        ]
+    )
+    return has_hotel_context and has_open_close_intent
+
+
+def _detect_transfer_airport(msg_ascii: str) -> str:
+    text = (msg_ascii or "").strip()
+    if "antalya" in text:
+        return "antalya"
+    if "dalaman" in text:
+        return "dalaman"
+    return ""
+
+
+def _is_transfer_fee_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    has_transfer_context = any(k in text for k in ["transfer", "havaliman", "airport", "ulasim", "ulaşım"])
+    has_fee_intent = any(k in text for k in ["ucret", "ücret", "fiyat", "price", "cost", "ne kadar", "kac", "kaç"])
+    return has_transfer_context and has_fee_intent
+
+
+def _is_sales_followup_question(msg_ascii: str) -> bool:
+    text = (msg_ascii or "").strip()
+    if not text:
+        return False
+    has_free_cancel = any(
+        k in text for k in ["ucretsiz iptal", "ücretsiz iptal", "free cancellation", "free cancel", "refundable"]
+    )
+    has_sales_context = any(k in text for k in ["satis", "satış", "sales"])
+    has_contact_intent = any(
+        k in text for k in ["iletis", "iletiş", "contact", "reach", "aray", "ara", "ne zaman", "kac gun", "kaç gün"]
+    )
+    return has_free_cancel and has_sales_context and has_contact_intent
+
+
+def _runtime_reply(lang: str, *, tr: str, en: str, ru: str | None = None) -> str:
+    lang_norm = (lang or "tr").strip().lower()
+    if lang_norm == "tr":
+        return tr
+    if lang_norm == "ru" and ru:
+        return ru
+    return en
 
 
 def _is_cancel_policy_question(msg_ascii: str) -> bool:
@@ -378,6 +469,119 @@ def evaluate_operational_reservation_rule(
         return {
             "reply": _lang_text("booking_confirmation_info", lang),
             "status": "operational_booking_confirmation_info",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    runtime_info = get_hotel_runtime_info()
+    if _is_transfer_fee_question(msg_ascii):
+        dalaman_fee = int(runtime_info.get("dalaman_transfer_fee_eur") or 75)
+        antalya_fee = int(runtime_info.get("antalya_transfer_fee_eur") or 140)
+        airport = _detect_transfer_airport(msg_ascii)
+        if airport == "antalya":
+            reply = _runtime_reply(
+                lang,
+                tr=f"Antalya Havalimanı'ndan otelimize tek yön transfer ücretimiz {antalya_fee} EUR.",
+                en=f"Our one-way transfer fee from Antalya Airport to our hotel is {antalya_fee} EUR.",
+                ru=f"Стоимость трансфера в одну сторону из аэропорта Анталья до нашего отеля составляет {antalya_fee} EUR.",
+            )
+        elif airport == "dalaman":
+            reply = _runtime_reply(
+                lang,
+                tr=f"Dalaman Havalimanı'ndan otelimize tek yön transfer ücretimiz {dalaman_fee} EUR.",
+                en=f"Our one-way transfer fee from Dalaman Airport to our hotel is {dalaman_fee} EUR.",
+                ru=f"Стоимость трансфера в одну сторону из аэропорта Даламан до нашего отеля составляет {dalaman_fee} EUR.",
+            )
+        else:
+            reply = _runtime_reply(
+                lang,
+                tr=(
+                    f"Dalaman transfer ücretimiz {dalaman_fee} EUR, Antalya transfer ücretimiz {antalya_fee} EUR. "
+                    "Hangi havalimanı için bilgi istersiniz?"
+                ),
+                en=(
+                    f"Our Dalaman transfer fee is {dalaman_fee} EUR and our Antalya transfer fee is {antalya_fee} EUR. "
+                    "Which airport would you like information for?"
+                ),
+                ru=(
+                    f"Стоимость трансфера из Даламана составляет {dalaman_fee} EUR, "
+                    f"из Антальи — {antalya_fee} EUR. Для какого аэропорта нужна информация?"
+                ),
+            )
+        return {
+            "reply": reply,
+            "status": "operational_transfer_fee_info",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    if _is_pool_bar_hours_question(msg_ascii):
+        pool_close = str(runtime_info.get("pool_bar_closing_time") or "22:00")
+        reply = _runtime_reply(
+            lang,
+            tr=f"Havuz bar kapanış saatimiz {pool_close}.",
+            en=f"Our pool bar closing time is {pool_close}.",
+            ru=f"Бассейн-бар закрывается в {pool_close}.",
+        )
+        return {
+            "reply": reply,
+            "status": "operational_pool_bar_hours",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    if _is_restaurant_bar_hours_question(msg_ascii):
+        restaurant_close = str(runtime_info.get("restaurant_bar_closing_time") or "22:00")
+        reply = _runtime_reply(
+            lang,
+            tr=f"Restoran bar kapanış saatimiz {restaurant_close}.",
+            en=f"Our restaurant bar closing time is {restaurant_close}.",
+            ru=f"Ресторан-бар закрывается в {restaurant_close}.",
+        )
+        return {
+            "reply": reply,
+            "status": "operational_restaurant_bar_hours",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    if _is_hotel_season_info_question(msg_ascii):
+        opening_tr = format_runtime_mmdd(str(runtime_info.get("hotel_opening_mmdd") or "04-01"), "tr")
+        closing_tr = format_runtime_mmdd(str(runtime_info.get("hotel_closing_mmdd") or "11-30"), "tr")
+        opening_en = format_runtime_mmdd(str(runtime_info.get("hotel_opening_mmdd") or "04-01"), "en")
+        closing_en = format_runtime_mmdd(str(runtime_info.get("hotel_closing_mmdd") or "11-30"), "en")
+        reply = _runtime_reply(
+            lang,
+            tr=f"Otelimiz {opening_tr}'da açılıyor, kapanış tarihi {closing_tr}.",
+            en=f"Our hotel opens on {opening_en}, and the closing date is {closing_en}.",
+            ru=f"Наш отель открывается {opening_tr}, а дата закрытия — {closing_tr}.",
+        )
+        return {
+            "reply": reply,
+            "status": "operational_hotel_season_info",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    if _is_sales_followup_question(msg_ascii):
+        days = int(runtime_info.get("free_cancel_sales_followup_days_before_checkin") or 5)
+        reply = _runtime_reply(
+            lang,
+            tr=f"Ücretsiz iptal rezervasyonlarında satış birimimiz girişten {days} gün önce sizinle iletişime geçer.",
+            en=f"For free-cancellation reservations, our sales team contacts guests {days} days before check-in.",
+            ru=f"По бронированиям с бесплатной отменой наш отдел продаж связывается с гостем за {days} дней до заезда.",
+        )
+        return {
+            "reply": reply,
+            "status": "operational_sales_followup_info",
+            "notify_admin_handoff": False,
+            "activate_human_takeover": False,
+        }
+
+    if _is_cancel_policy_question(msg_ascii):
+        return {
+            "reply": build_cancellation_policy_reply(lang, runtime_info),
+            "status": "operational_cancellation_policy_info",
             "notify_admin_handoff": False,
             "activate_human_takeover": False,
         }

@@ -6,6 +6,7 @@ import time as time_module
 import inspect
 import httpx
 import unicodedata
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Any, Dict, Optional
 
@@ -48,7 +49,9 @@ from app.services.slot_contract_service import (
 )
 from app.services.structured_log_service import log_event
 from app.services.booking_flow_service import get_payment_context
+from app.services.elektraweb_booking_service import _extract_all_dates
 from app.services.handoff_critical_registry import KNOWN_AUTO_INTENTS
+from app.services.hotel_runtime_info_service import format_runtime_mmdd, season_bounds_for_year
 from app.services.transfer_reservation_service import get_transfer_booking_flow
 from app.handlers.transfer_start_handler import try_start_transfer_booking_flow
 
@@ -1005,6 +1008,32 @@ def _looks_like_restaurant_date_guest_followup(message: str) -> bool:
     low = _normalize_for_keyword_match(message)
     if not low:
         return False
+    if any(
+        marker in low
+        for marker in (
+            "yetişkin",
+            "yetiskin",
+            "adult",
+            "adults",
+            "çocuk",
+            "cocuk",
+            "child",
+            "children",
+            "oda",
+            "room",
+            "konaklama",
+            "gece",
+            "night",
+            "check-in",
+            "check in",
+            "check-out",
+            "check out",
+            "giris",
+            "çıkış",
+            "cikis",
+        )
+    ):
+        return False
     # "15 haziran 2 kisi", "12/07 4 kisi" gibi restoran follow-up payload'lari.
     has_date_token = bool(
         re.search(r"\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b", low)
@@ -1028,6 +1057,66 @@ def _looks_like_restaurant_date_guest_followup(message: str) -> bool:
 def _should_send_first_message_welcome(message: str) -> bool:
     # Operasyon karari: ilk mesaj icerigi ne olursa olsun daima karsilama mesaji gonder.
     return True
+
+
+def _format_iso_date_for_lang(iso_date: str, lang: str) -> str:
+    month_names_tr = {
+        1: "Ocak",
+        2: "Şubat",
+        3: "Mart",
+        4: "Nisan",
+        5: "Mayıs",
+        6: "Haziran",
+        7: "Temmuz",
+        8: "Ağustos",
+        9: "Eylül",
+        10: "Ekim",
+        11: "Kasım",
+        12: "Aralık",
+    }
+    try:
+        parsed = datetime.strptime(iso_date, "%Y-%m-%d")
+    except Exception:
+        return iso_date
+    if (lang or "").strip().lower() == "en":
+        return parsed.strftime("%B %d %Y")
+    return f"{parsed.day} {month_names_tr.get(parsed.month, 'Nisan')} {parsed.year}"
+
+
+def _get_price_season_block_reply(lang: str, from_date: str, to_date: str) -> str:
+    season_start, season_end = season_bounds_for_year(datetime.strptime(from_date, "%Y-%m-%d").year)
+    season_str = f"{format_runtime_mmdd(season_start.strftime('%m-%d'), lang)} - {format_runtime_mmdd(season_end.strftime('%m-%d'), lang)}"
+    request_str = f"{_format_iso_date_for_lang(from_date, lang)} - {_format_iso_date_for_lang(to_date, lang)}"
+    if (lang or "").strip().lower() == "en":
+        return (
+            f"Our hotel operates between {season_str}. "
+            f"Your requested dates ({request_str}) are outside our season. "
+            f"If you share dates within the season, I can check availability and price right away."
+        )
+    return (
+        f"Otelimiz {season_str} tarihleri arasında hizmet vermektedir. "
+        f"Paylaştığınız tarihler ({request_str}) sezon dışındadır. "
+        f"Sezon içinden tarih paylaşırsanız hemen müsaitlik ve fiyat kontrol edebilirim."
+    )
+
+
+def _get_early_out_of_season_reply(message: str, history: list, lang: str) -> Optional[str]:
+    merged_text = _merge_slot_context_from_history(message, history) if history else (message or "")
+    dates = _extract_all_dates(merged_text)
+    if len(dates) < 2:
+        return None
+    try:
+        from_date = datetime.strptime(dates[0], "%Y-%m-%d").date()
+        to_date = datetime.strptime(dates[1], "%Y-%m-%d").date()
+    except Exception:
+        return None
+    if from_date.year != to_date.year:
+        return _get_price_season_block_reply(lang, dates[0], dates[1])
+    season_start, season_end = season_bounds_for_year(from_date.year)
+    allowed_checkout = season_end + timedelta(days=1)
+    if from_date >= season_start and to_date <= allowed_checkout:
+        return None
+    return _get_price_season_block_reply(lang, dates[0], dates[1])
 
 
 def _price_engine_unavailable_reply(lang: str) -> str:
@@ -1620,6 +1709,29 @@ def build_chat_router(**deps):
                 merged_missing = merged_coverage.get("missing_required_slots", []) or []
                 if len(merged_missing) < len(missing_now):
                     slot_coverage = merged_coverage
+            early_season_reply = _get_early_out_of_season_reply(user_message, history, initial_lang)
+            if early_season_reply:
+                deps["add_to_history_fn"](phone, "user", user_message)
+                deps["add_to_history_fn"](phone, "assistant", early_season_reply)
+                deps["save_message_fn"](phone, user_message, early_season_reply)
+                deps["record_metric_fn"](
+                    "season_blocked",
+                    category="price_precheck",
+                    response_time=time_module.time() - start_time,
+                )
+                trace_event(
+                    {
+                        "stage": "season_guard",
+                        "enabled": True,
+                        "event": "pre_slot_clarify_block",
+                        "primary_intent": primary_intent,
+                    }
+                )
+                return resp(
+                    reply=early_season_reply,
+                    status="season_blocked",
+                    reason_code="season_out_of_range",
+                )
         trace_event(
             {
                 "stage": "intent_routing",

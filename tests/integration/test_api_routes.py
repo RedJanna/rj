@@ -18,6 +18,7 @@ import json
 import uuid
 import importlib
 from pathlib import Path
+from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, AsyncMock
 
 # Proje kökünü ekle
@@ -552,6 +553,84 @@ class TestChatEndpoint:
         reply = (response.json().get("reply") or "").lower()
         # Eski davranışta restoran formuna takılı kalabiliyordu; onu engellediğimizi kontrol et
         assert "kaç kişi, tarih, saat ve isim" not in reply
+
+    @pytest.mark.integration
+    def test_chat_expired_stale_restaurant_state_does_not_hijack_hotel_price_followup(self, client, clean_conversation):
+        phone = "905551111013"
+        clean_conversation(phone)
+
+        from app.services.conversation_store import (
+            add_to_history,
+            get_conversation_file,
+            last_activity,
+            recovered_active_phones,
+        )
+        from app.services.restaurant_reservation_flow_service import ReservationState, update_reservation_flow
+        from app.services.routing_state_service import set_active_flow, set_domain_lock
+
+        update_reservation_flow(
+            phone,
+            ReservationState.ASK_TIME.value,
+            {"guest_count": 2, "date": "2026-04-20", "lang": "tr"},
+        )
+        set_active_flow(phone, "restaurant", reason="stale_restaurant_state_test")
+        set_domain_lock(phone, "restaurant", reason="stale_restaurant_state_test")
+        add_to_history(
+            phone,
+            "assistant",
+            "Restoran rezervasyonu için adım adım ilerleyeceğiz. İlk adım: Lütfen kişi sayısını paylaşın.",
+        )
+        last_activity[phone] = datetime.now()
+        recovered_active_phones.add(phone)
+
+        expired_iso = (datetime.now() - timedelta(minutes=45)).isoformat()
+        get_conversation_file(phone).write_text(
+            json.dumps(
+                {
+                    "phone": phone,
+                    "messages": [
+                        {
+                            "timestamp": expired_iso,
+                            "user_message": "Eski restoran mesajı",
+                            "bot_reply": "Eski restoran cevabı",
+                        }
+                    ],
+                    "created_at": expired_iso,
+                    "updated_at": expired_iso,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        r1 = client.post("/chat", json={
+            "phone": phone,
+            "message": "Bana 21 nisan ile 23 nisan arasında fiyat bilgisi verir misin",
+            "message_id": _mid("msg-stale-restaurant-1"),
+        })
+        assert r1.status_code == 200
+        assert r1.json().get("status") == "first_message"
+
+        r2 = client.post("/chat", json={
+            "phone": phone,
+            "message": "Bana 21 nisan ile 23 nisan arasında fiyat bilgisi verir misin",
+            "message_id": _mid("msg-stale-restaurant-2"),
+        })
+        assert r2.status_code == 200
+        assert r2.json().get("status") == "clarify_required"
+
+        r3 = client.post("/chat", json={
+            "phone": phone,
+            "message": "21 Nisan ile 23 Nisan arasında 2 yetişkin",
+            "message_id": _mid("msg-stale-restaurant-3"),
+        })
+        assert r3.status_code == 200
+        data = r3.json()
+        reply = (data.get("reply") or "").lower()
+
+        assert data.get("status") != "reservation_flow_started"
+        assert "hangi saati tercih edersiniz" not in reply
+        assert "restoran rezervasyonunuz için yardımcı olurum" not in reply
 
     @pytest.mark.integration
     def test_chat_router_v2_ambiguity_prompt(self, client, clean_conversation):

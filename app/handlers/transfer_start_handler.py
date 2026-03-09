@@ -7,6 +7,7 @@ from app.services.reservation_change_interpreter import (
     extract_slot_updates,
     is_change_request,
 )
+from app.services.hotel_runtime_info_service import get_hotel_runtime_info
 from app.services.transfer_reservation_service import (
     clear_transfer_booking_flow,
     create_transfer_reservation,
@@ -29,6 +30,16 @@ _TRANSFER_FOLLOWUP_MARKERS = (
     "ucus numaranizi",
     "uçuş numaranızı",
 )
+
+
+def _runtime_transfer_price_text(route: str | None = None) -> str:
+    info = get_hotel_runtime_info()
+    normalized_route = (route or "").lower()
+    if "antalya" in normalized_route:
+        fee = int(info.get("antalya_transfer_fee_eur") or 140)
+    else:
+        fee = int(info.get("dalaman_transfer_fee_eur") or 75)
+    return f"{fee} EUR"
 
 def _build_step_prompt(state: str, lang: str) -> str:
     if state == "ask_date":
@@ -279,7 +290,7 @@ async def try_start_transfer_booking_flow(
                 "guest_text": data.get("guest_text", ""),
                 "luggage_text": data.get("luggage_text", ""),
                 "baby_seat": data.get("baby_seat", ""),
-                "price_text": data.get("price_text", "75 EUR"),
+                "price_text": data.get("price_text", _runtime_transfer_price_text(data.get("transfer_route"))),
                 "raw_summary": data.get("raw_summary", ""),
             }
             reservation = create_transfer_reservation(

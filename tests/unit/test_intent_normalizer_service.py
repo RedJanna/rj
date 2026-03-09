@@ -72,6 +72,10 @@ def test_booking_payment_followup_detects_turkish_deposit_question():
     ) is True
 
 
+def test_booking_payment_followup_does_not_treat_menu_selection_as_payment():
+    assert looks_like_booking_payment_followup("2") is False
+
+
 def test_force_primary_intent_keeps_restaurant_when_dinner_availability_is_asked():
     intent = force_primary_intent_from_explicit_message(
         "Akşam yemeği için müsaitlik var mı?",
@@ -79,3 +83,21 @@ def test_force_primary_intent_keeps_restaurant_when_dinner_availability_is_asked
         looks_like_price_slot_payload_fn=lambda _m: False,
     )
     assert intent == "RESTAURANT_BOOKING_CREATE"
+
+
+def test_force_primary_intent_routes_wifi_question_to_local_faq():
+    intent = force_primary_intent_from_explicit_message(
+        "WiFi var mı?",
+        "PRICE_QUERY",
+        looks_like_price_slot_payload_fn=lambda _m: False,
+    )
+    assert intent == "LOCAL_FAQ_INFO"
+
+
+def test_force_primary_intent_routes_transfer_fee_question_to_transfer_info():
+    intent = force_primary_intent_from_explicit_message(
+        "Antalya transfer ücreti ne kadar?",
+        "PRICE_QUERY",
+        looks_like_price_slot_payload_fn=lambda _m: False,
+    )
+    assert intent == "TRANSFER_INFO"

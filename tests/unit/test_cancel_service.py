@@ -9,6 +9,7 @@ from app.services.cancel_service import _is_cancel_intent_v2
     [
         ("Can you share refundable and non-refundable options with cancellation rules?", False),
         ("İptal/iade koşulları nedir?", False),
+        ("İptal politikası nedir?", False),
         ("Non-refundable ve refundable farkı nedir?", False),
         ("Cancel my reservation", True),
         ("Rezervasyonumu iptal etmek istiyorum", True),

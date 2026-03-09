@@ -19,6 +19,50 @@
     "deluxe",
     "superior"
   ],
-  "updated_at": "2026-02-28T23:44:33.885434",
-  "updated_by": "system"
+  "currency_enabled": {
+    "EUR": true,
+    "USD": true,
+    "TRY": true,
+    "GBP": true
+  },
+  "language_enabled": {
+    "en": true,
+    "tr": true,
+    "ru": true,
+    "de": true,
+    "ar": true,
+    "es": true,
+    "fr": true,
+    "zh": true,
+    "hi": true,
+    "pt": true
+  },
+  "updated_at": "2026-03-08T17:30:49.045585",
+  "updated_by": "system",
+  "hotel_runtime_info": {
+    "dalaman_transfer_fee_eur": 75,
+    "antalya_transfer_fee_eur": 140,
+    "hotel_opening_mmdd": "04-20",
+    "hotel_closing_mmdd": "11-10",
+    "free_cancellation_days_before_checkin": 5,
+    "free_cancel_sales_followup_days_before_checkin": 5,
+    "restaurant_bar_closing_time": "22:00",
+    "pool_bar_closing_time": "16:00",
+    "message_delay_seconds": 0,
+    "admin_phone": "905304498453",
+    "chef_phone": "905012969548",
+    "welcome_message_tr": "Merhaba,\n\nKassandra Ölüdeniz'e hoş geldiniz. 🌊\nSize özel bir konaklama deneyimi hazırlamak için buradayım.\n\nSize nasıl yardımcı olabilirim?\n1. Rezervasyon / Oda bilgisi\n2. Transfer & Ulasim\n3. Restoran & kahvaltı\n4. Özel istekler (surpriz, kutlama, vb.)\n\nSeciminizi numara ile belirtebilir veya doğrudan sorunuzu yazabilirsiniz 😊",
+    "welcome_message_i18n": {
+      "tr": "Merhaba,\n\nKassandra Ölüdeniz'e hoş geldiniz. 🌊\nSize özel bir konaklama deneyimi hazırlamak için buradayım.\n\nSize nasıl yardımcı olabilirim?\n1. Rezervasyon / Oda bilgisi\n2. Transfer & Ulasim\n3. Restoran & kahvaltı\n4. Özel istekler (surpriz, kutlama, vb.)\n\nSeciminizi numara ile belirtebilir veya doğrudan sorunuzu yazabilirsiniz 😊",
+      "en": "Hello! 👋\n\nWelcome to Kassandra Ölüdeniz. 🌊\nI am here to help you with a special accommodation experience.\n\nHow can I assist you today?\n1. Reservation / Room information\n2. Transfer & Transportation\n3. Restaurant & Breakfast\n4. Special requests (surprise, celebration, etc.)\n\nYou can type a number or ask your question directly 😊",
+      "ru": "Здравствуйте! 👋\n\nДобро пожаловать в Kassandra Oludeniz. 🌊\nЯ здесь, чтобы помочь вам организовать незабываемый отдых.\n\nЧем могу помочь?\n1. Бронирование / Информация о номерах\n2. Трансфер и транспорт\n3. Ресторан и завтрак\n4. Особые пожелания (сюрприз, праздник и т.д.)\n\nВы можете выбрать номер или задать вопрос напрямую 😊",
+      "de": "Hallo! 👋\n\nWillkommen im Kassandra Oludeniz. 🌊\nIch bin hier, um Ihnen bei einem besonderen Aufenthalt zu helfen.\n\nWie kann ich Ihnen heute helfen?\n1. Reservierung / Zimmerinformationen\n2. Transfer & Transport\n3. Restaurant & Frühstück\n4. Sonderwünsche (Überraschung, Feier usw.)\n\nSie können eine Nummer eingeben oder Ihre Frage direkt schreiben 😊",
+      "ar": "مرحبا! 👋\n\nمرحبا بك في Kassandra Oludeniz. 🌊\nأنا هنا لمساعدتك في تجربة إقامة مميزة.\n\nكيف يمكنني مساعدتك اليوم؟\n1. الحجز / معلومات الغرف\n2. النقل والمواصلات\n3. المطعم والإفطار\n4. الطلبات الخاصة (مفاجأة، احتفال، إلخ)\n\nيمكنك كتابة رقم الخيار أو إرسال سؤالك مباشرة 😊",
+      "es": "Hola! 👋\n\nBienvenido a Kassandra Oludeniz. 🌊\nEstoy aqui para ayudarte con una experiencia de alojamiento especial.\n\nComo puedo ayudarte hoy?\n1. Reserva / Informacion de habitaciones\n2. Traslado y transporte\n3. Restaurante y desayuno\n4. Solicitudes especiales (sorpresa, celebracion, etc.)\n\nPuedes escribir un numero o hacer tu pregunta directamente 😊",
+      "fr": "Bonjour! 👋\n\nBienvenue a Kassandra Oludeniz. 🌊\nJe suis la pour vous aider a organiser un sejour exceptionnel.\n\nComment puis-je vous aider aujourd'hui ?\n1. Reservation / Informations sur les chambres\n2. Transfert et transport\n3. Restaurant et petit-dejeuner\n4. Demandes speciales (surprise, celebration, etc.)\n\nVous pouvez taper un numero ou poser votre question directement 😊",
+      "zh": "您好！👋\n\n欢迎来到 Kassandra Oludeniz。🌊\n我在这里为您提供特别的住宿协助。\n\n今天我可以如何帮助您？\n1. 预订 / 房型信息\n2. 接送与交通\n3. 餐厅与早餐\n4. 特别需求（惊喜、庆祝等）\n\n您可以输入数字，或直接发送您的问题 😊",
+      "hi": "नमस्ते! 👋\n\nKassandra Oludeniz में आपका स्वागत है। 🌊\nमैं आपकी विशेष ठहरने की योजना में मदद करने के लिए यहां हूं।\n\nआज मैं आपकी कैसे मदद कर सकता/सकती हूं?\n1. बुकिंग / कमरे की जानकारी\n2. ट्रांसफर और परिवहन\n3. रेस्टोरेंट और नाश्ता\n4. विशेष अनुरोध (सरप्राइज़, सेलिब्रेशन आदि)\n\nआप नंबर टाइप कर सकते हैं या अपना प्रश्न सीधे लिख सकते हैं 😊",
+      "pt": "Ola! 👋\n\nBem-vindo ao Kassandra Oludeniz. 🌊\nEstou aqui para ajudar voce com uma experiencia de hospedagem especial.\n\nComo posso ajudar voce hoje?\n1. Reserva / Informacoes sobre quartos\n2. Transfer e transporte\n3. Restaurante e cafe da manha\n4. Pedidos especiais (surpresa, celebracao etc.)\n\nVoce pode digitar um numero ou fazer sua pergunta diretamente 😊"
+    }
+  }
 }

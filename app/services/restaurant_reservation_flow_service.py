@@ -21,6 +21,7 @@ from typing import Any, Tuple, Optional, List, Dict
 from enum import Enum
 
 from app.flows.flow_contract import FlowContext, FlowResult
+from app.services.hotel_runtime_info_service import format_runtime_mmdd, season_bounds_for_year
 from app.services.reservation_change_interpreter import extract_slot_updates, is_change_request
 from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
@@ -929,28 +930,19 @@ def is_within_season(date_str: str, lang: str = "tr") -> Tuple[bool, str]:
     """Tarih sezon içinde mi kontrol et."""
     try:
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        month = date_obj.month
-        day = date_obj.day
-        
-        season_start = (RESTAURANT_SETTINGS["season_start_month"], RESTAURANT_SETTINGS["season_start_day"])
-        season_end = (RESTAURANT_SETTINGS["season_end_month"], RESTAURANT_SETTINGS["season_end_day"])
-        
-        if (month, day) < season_start:
+        selected_date = date_obj.date()
+        season_start, season_end = season_bounds_for_year(date_obj.year)
+        if selected_date < season_start or selected_date > season_end:
             if lang == "en":
                 return False, (
-                    "Sorry, our restaurant is open only from April 10 to November 10. Please tell me another date and time, and I can help you."
+                    f"Sorry, our restaurant is open only from "
+                    f"{format_runtime_mmdd(season_start.strftime('%m-%d'), 'en')} to "
+                    f"{format_runtime_mmdd(season_end.strftime('%m-%d'), 'en')}. "
+                    "Please tell me another date and time, and I can help you."
                 )
             return False, (
-                "Üzgünüz, restoranımız 10 Nisan - 10 Kasım tarihleri arasında hizmet vermektedir."
-            )
-        
-        if (month, day) > season_end:
-            if lang == "en":
-                return False, (
-                    "Sorry, our restaurant is open only from April 10 to November 10. Please tell me another date and time, and I can help you."
-                )
-            return False, (
-                "Üzgünüz, restoranımız 10 Nisan - 10 Kasım tarihleri arasında hizmet vermektedir."
+                f"Üzgünüz, restoranımız {format_runtime_mmdd(season_start.strftime('%m-%d'), 'tr')} - "
+                f"{format_runtime_mmdd(season_end.strftime('%m-%d'), 'tr')} tarihleri arasında hizmet vermektedir."
             )
         
         return True, ""

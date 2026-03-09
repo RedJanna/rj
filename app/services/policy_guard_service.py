@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional
 
+from app.services.hotel_runtime_info_service import build_cancellation_policy_reply
+
 
 TR_CANCELLATION_POLICY_REPLY = (
     "İptal/iade koşulları tarife göre değişir:\n"
@@ -294,7 +296,7 @@ def evaluate_policy_guard(message: str, lang: str = "tr") -> Dict[str, Any]:
         lang_norm = "en"
 
     if _looks_like_cancellation_policy_question(low_msg, raw_msg):
-        reply = LANG_REPLIES.get(lang_norm, EN_CANCELLATION_POLICY_REPLY)
+        reply = build_cancellation_policy_reply(lang_norm)
         return {
             "handled": True,
             "status": "policy_guard_cancellation_policy",

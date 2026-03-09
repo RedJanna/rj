@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from app.services.hotel_runtime_info_service import get_hotel_runtime_info
 from app.services.state_store_service import JsonStateRepository, resolve_data_file
 
 
@@ -193,20 +194,26 @@ def create_transfer_reservation(
             return item
 
     new_id = int(store.get("last_id", 0)) + 1
+    route_text = details.get("transfer_route", "Dalaman Havalimani -> Kassandra Oludeniz")
+    runtime_info = get_hotel_runtime_info()
+    if "antalya" in str(route_text or "").lower():
+        default_price_text = f"{int(runtime_info.get('antalya_transfer_fee_eur') or 140)} EUR"
+    else:
+        default_price_text = f"{int(runtime_info.get('dalaman_transfer_fee_eur') or 75)} EUR"
     reservation = {
         "id": new_id,
         "type": "transfer",
         "status": "pending",
         "customer_phone": re.sub(r"[^\d]", "", customer_phone or ""),
         "customer_name": details.get("customer_name", ""),
-        "transfer_route": details.get("transfer_route", "Dalaman Havalimani -> Kassandra Oludeniz"),
+        "transfer_route": route_text,
         "transfer_date": details.get("transfer_date", ""),
         "transfer_time": details.get("transfer_time", ""),
         "flight_no": details.get("flight_no", ""),
         "guest_text": details.get("guest_text", ""),
         "luggage_text": details.get("luggage_text", ""),
         "baby_seat": details.get("baby_seat", ""),
-        "price_text": details.get("price_text", "75 EUR"),
+        "price_text": details.get("price_text", default_price_text),
         "raw_summary": details.get("raw_summary", ""),
         "source": source,
         "dedupe_key": key,

@@ -153,3 +153,52 @@ async def test_ask_name_does_not_treat_change_message_as_name(monkeypatch):
     assert "ad soyad" in result["reply"].lower()
     assert "guest_first_name" not in data
     assert saved_states == []
+
+@pytest.mark.unit
+def test_booking_cancel_detector_does_not_treat_checkout_date_as_cancel():
+    assert h._is_cancel("Çıkış 5 Nisan") is False
+
+
+@pytest.mark.unit
+def test_booking_cancel_detector_does_not_treat_cancel_policy_question_as_cancel():
+    assert h._is_cancel("İptal politikası nedir?") is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_confirm_does_not_treat_normal_room_sentence_as_negative_reply(monkeypatch):
+    cleared = {"called": False}
+
+    monkeypatch.setattr(h, "clear_booking_flow", lambda _phone: cleared.update({"called": True}))
+
+    result = await h._handle_confirm(
+        phone="905304498453",
+        message="normal oda istiyorum",
+        data={},
+        lang="tr",
+    )
+
+    assert result is not None
+    assert result["status"] == "booking_flow"
+    assert "Lütfen 'Evet' ile onaylayın" in result["reply"]
+    assert cleared["called"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_confirm_still_accepts_extended_negative_reply(monkeypatch):
+    cleared = {"called": False}
+
+    monkeypatch.setattr(h, "clear_booking_flow", lambda _phone: cleared.update({"called": True}))
+
+    result = await h._handle_confirm(
+        phone="905304498453",
+        message="hayır teşekkürler",
+        data={},
+        lang="tr",
+    )
+
+    assert result is not None
+    assert result["status"] == "booking_cancelled"
+    assert cleared["called"] is True
+
